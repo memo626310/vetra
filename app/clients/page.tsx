@@ -75,11 +75,11 @@ export default function ClientsPage() {
           </div>
 
           <button
-            className="rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
-            onClick={() => alert("إضافة عميل جديد - هنفعلها في الخطوة القادمة")}
-          >
-            + عميل جديد
-          </button>
+  onClick={() => (window.location.href = "/clients/new")}
+  className="rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+>
+  + عميل جديد
+</button>
         </div>
 
         {/* Search */}

@@ -153,9 +153,7 @@ export default function ClientPage() {
         <div className="mx-auto max-w-6xl rounded-3xl bg-white p-10 text-center shadow-sm">
           <div className="mb-4 text-5xl">❌</div>
 
-          <h1 className="text-2xl font-bold">
-            العميل غير موجود
-          </h1>
+          <h1 className="text-2xl font-bold">العميل غير موجود</h1>
 
           <Link
             href="/clients"
@@ -174,7 +172,6 @@ export default function ClientPage() {
       className="min-h-screen bg-[#f7f9fc] px-5 py-8 text-slate-900"
     >
       <div className="mx-auto max-w-6xl">
-
         {/* Back */}
         <Link
           href="/clients"
@@ -186,15 +183,12 @@ export default function ClientPage() {
         {/* Client Header */}
         <section className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-
             <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-slate-100 text-4xl">
               👤
             </div>
 
             <div>
-              <h1 className="text-3xl font-bold">
-                {client.name}
-              </h1>
+              <h1 className="text-3xl font-bold">{client.name}</h1>
 
               <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-500">
                 {client.phone && (
@@ -203,20 +197,11 @@ export default function ClientPage() {
                   </span>
                 )}
 
-                {client.email && (
-                  <span>
-                    ✉️ {client.email}
-                  </span>
-                )}
+                {client.email && <span>✉️ {client.email}</span>}
 
-                {client.address && (
-                  <span>
-                    📍 {client.address}
-                  </span>
-                )}
+                {client.address && <span>📍 {client.address}</span>}
               </div>
             </div>
-
           </div>
 
           {client.notes && (
@@ -228,12 +213,9 @@ export default function ClientPage() {
 
         {/* Pets */}
         <section className="mb-6">
-
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold">
-                الحيوانات
-              </h2>
+              <h2 className="text-2xl font-bold">الحيوانات</h2>
 
               <p className="mt-1 text-sm text-slate-500">
                 الحيوانات المسجلة باسم العميل
@@ -247,13 +229,9 @@ export default function ClientPage() {
 
           {pets.length === 0 ? (
             <div className="rounded-3xl bg-white p-8 text-center shadow-sm">
-              <div className="mb-3 text-5xl">
-                🐾
-              </div>
+              <div className="mb-3 text-5xl">🐾</div>
 
-              <h3 className="text-lg font-bold">
-                مفيش حيوانات مسجلة
-              </h3>
+              <h3 className="text-lg font-bold">مفيش حيوانات مسجلة</h3>
 
               <p className="mt-2 text-sm text-slate-500">
                 أضف أول حيوان للعميل من النموذج بالأسفل.
@@ -268,13 +246,12 @@ export default function ClientPage() {
                   className="group rounded-3xl bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
                 >
                   <div className="flex items-center gap-4">
-
                     <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-3xl transition group-hover:scale-105">
                       {pet.species.toLowerCase() === "dog"
                         ? "🐶"
                         : pet.species.toLowerCase() === "cat"
-                        ? "🐱"
-                        : "🐾"}
+                          ? "🐱"
+                          : "🐾"}
                     </div>
 
                     <div className="min-w-0">
@@ -287,7 +264,6 @@ export default function ClientPage() {
                         {pet.breed ? ` • ${pet.breed}` : ""}
                       </p>
                     </div>
-
                   </div>
 
                   <div className="mt-4 border-t border-slate-100 pt-4 text-sm font-semibold text-slate-500 transition group-hover:text-slate-900">
@@ -297,16 +273,12 @@ export default function ClientPage() {
               ))}
             </div>
           )}
-
         </section>
 
         {/* Add Pet */}
         <section className="rounded-3xl bg-white p-6 shadow-sm">
-
           <div className="mb-6">
-            <h2 className="text-2xl font-bold">
-              إضافة حيوان
-            </h2>
+            <h2 className="text-2xl font-bold">إضافة حيوان</h2>
 
             <p className="mt-1 text-sm text-slate-500">
               أضف حيوان جديد إلى ملف العميل
@@ -317,7 +289,6 @@ export default function ClientPage() {
             onSubmit={addPet}
             className="grid gap-4 sm:grid-cols-2"
           >
-
             {/* Name */}
             <div>
               <label className="mb-2 block text-sm font-semibold">
@@ -445,21 +416,15 @@ export default function ClientPage() {
                 disabled={savingPet}
                 className="rounded-2xl bg-slate-900 px-6 py-3 font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {savingPet
-                  ? "جاري الإضافة..."
-                  : "إضافة الحيوان +"}
+                {savingPet ? "جاري الإضافة..." : "إضافة الحيوان +"}
               </button>
 
               {message && (
-                <p className="mt-3 text-sm text-slate-600">
-                  {message}
-                </p>
+                <p className="mt-3 text-sm text-slate-600">{message}</p>
               )}
             </div>
-
           </form>
         </section>
-
       </div>
     </main>
   );

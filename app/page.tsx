@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 type Language = "ar" | "en";
 
@@ -36,6 +37,8 @@ const translations = {
     open: "فتح",
     language: "English",
     notifications: "الإشعارات",
+    signOut: "تسجيل الخروج",
+    profile: "الملف الشخصي",
 
     encouragement: [
       "صباح جديد، وحالات جديدة تقدر تساعدها. 🐾",
@@ -78,6 +81,8 @@ const translations = {
     open: "Open",
     language: "عربي",
     notifications: "Notifications",
+    signOut: "Sign out",
+    profile: "Profile",
 
     encouragement: [
       "A new day, new cases, new lives to help. 🐾",
@@ -137,6 +142,7 @@ export default function Home() {
   const [darkMode, setDarkMode] = useState(true);
   const [language, setLanguage] = useState<Language>("ar");
   const [ready, setReady] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
@@ -203,6 +209,14 @@ export default function Home() {
     }
   };
 
+  const handleLogout = async () => {
+    setLoggingOut(true);
+
+    await supabase.auth.signOut();
+
+    window.location.href = "/login";
+  };
+
   const navItems = [
     ["🏠", t.nav.home],
     ["👥", t.nav.clients],
@@ -264,6 +278,7 @@ export default function Home() {
             {navItems.map(([icon, title], index) => {
               const isHome = index === 0;
               const isClients = index === 1;
+              const isPets = index === 2;
 
               return (
                 <button
@@ -271,6 +286,10 @@ export default function Home() {
                   onClick={() => {
                     if (isClients) {
                       goTo("/clients");
+                    }
+
+                    if (isPets) {
+                      goTo("/pets");
                     }
                   }}
                   className={`group w-full rounded-2xl px-5 py-4 text-base font-medium transition-all duration-300 hover:translate-x-1 ${
@@ -447,27 +466,53 @@ export default function Home() {
               {/* Profile */}
 
               <div
-                className={`hidden rounded-2xl border px-5 py-3 transition-all duration-300 hover:-translate-y-0.5 md:block ${
+                className={`hidden items-center gap-3 rounded-2xl border px-4 py-2 transition-all duration-300 hover:-translate-y-0.5 md:flex ${
                   darkMode
                     ? "border-white/[0.06] bg-[#181B21]"
                     : "border-slate-100 bg-white"
                 }`}
               >
-                <p className="text-sm font-bold">
-                  {t.doctor}
-                </p>
+                <button
+                  onClick={() => goTo("/profile")}
+                  className={`text-right transition-all duration-200 hover:opacity-80 ${
+                    isArabic
+                      ? "text-right"
+                      : "text-left"
+                  }`}
+                  title={t.profile}
+                >
+                  <p className="text-sm font-bold">
+                    {t.doctor}
+                  </p>
 
-                <p
-                  className={`mt-1 text-xs ${
+                  <p
+                    className={`mt-1 text-xs ${
+                      darkMode
+                        ? "text-slate-500"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {isArabic
+                      ? "الطبيب"
+                      : "Doctor"}
+                  </p>
+                </button>
+
+                {/* Logout */}
+
+                <button
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  title={t.signOut}
+                  aria-label={t.signOut}
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl text-lg transition-all duration-300 hover:-translate-y-0.5 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${
                     darkMode
-                      ? "text-slate-500"
-                      : "text-slate-400"
+                      ? "bg-white/[0.05] text-slate-300 hover:bg-red-500/10 hover:text-red-400"
+                      : "bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-600"
                   }`}
                 >
-                  {isArabic
-                    ? "الطبيب"
-                    : "Doctor"}
-                </p>
+                  {loggingOut ? "…" : "↪"}
+                </button>
               </div>
             </div>
           </header>
@@ -477,8 +522,7 @@ export default function Home() {
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
 
             {t.cards.map((card, index) => {
-              const [title, subtitle, icon] =
-                card;
+              const [title, subtitle, icon] = card;
 
               const colors =
                 cardColors[index];
@@ -490,24 +534,17 @@ export default function Home() {
                 <button
                   key={title}
                   onClick={() => {
-                    /*
-                      أول كارت:
-                      زيارة جديدة
-                    */
                     if (index === 0) {
                       goTo("/visits/new");
                     }
 
-                    /*
-                      ثاني كارت:
-                      العملاء
-                    */
                     if (index === 1) {
                       goTo("/clients");
                     }
+
                     if (index === 2) {
                       goTo("/pets");
-                      }
+                    }
                   }}
                   className={`group relative min-h-[220px] overflow-hidden rounded-[32px] p-7 transition-all duration-300 ease-out hover:-translate-y-2 hover:scale-[1.01] active:scale-[0.98] ${
                     isArabic
