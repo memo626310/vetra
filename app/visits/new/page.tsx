@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Language = "en" | "ar";
@@ -585,11 +584,10 @@ function VitalCard({
 }
 
 export default function NewVisitPage() {
-  const searchParams = useSearchParams();
-  const petFromUrl = searchParams.get("pet");
-
   const [language, setLanguage] = useState<Language>("en");
   const [darkMode, setDarkMode] = useState(false);
+
+  const [petFromUrl, setPetFromUrl] = useState<string | null>(null);
 
   const [clients, setClients] = useState<Client[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
@@ -641,12 +639,17 @@ export default function NewVisitPage() {
     }
 
     setDarkMode(savedDarkMode);
+
+    const params = new URLSearchParams(window.location.search);
+    setPetFromUrl(params.get("pet"));
   }, []);
 
   useEffect(() => {
     window.localStorage.setItem("vetra-language", language);
+
     document.documentElement.lang = language;
-    document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
+    document.documentElement.dir =
+      language === "ar" ? "rtl" : "ltr";
   }, [language]);
 
   useEffect(() => {
@@ -917,16 +920,19 @@ export default function NewVisitPage() {
 
   const latestTemperature =
     vitalData.temperature[0]?.value ?? null;
+
   const previousTemperature =
     vitalData.temperature[1]?.value ?? null;
 
   const latestHeartRate =
     vitalData.heartRate[0]?.value ?? null;
+
   const previousHeartRate =
     vitalData.heartRate[1]?.value ?? null;
 
   const latestRespiratoryRate =
     vitalData.respiratoryRate[0]?.value ?? null;
+
   const previousRespiratoryRate =
     vitalData.respiratoryRate[1]?.value ?? null;
 
