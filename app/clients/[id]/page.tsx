@@ -42,6 +42,7 @@ export default function ClientPage() {
   const [petNotes, setPetNotes] = useState("");
 
   const [savingPet, setSavingPet] = useState(false);
+  const [deletingClient, setDeletingClient] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -110,6 +111,7 @@ export default function ClientPage() {
       .single();
 
     if (error) {
+      console.error(error);
       setMessage("حصل خطأ أثناء إضافة الحيوان.");
       setSavingPet(false);
       return;
@@ -129,6 +131,35 @@ export default function ClientPage() {
 
     setMessage("تم إضافة الحيوان بنجاح ✓");
     setSavingPet(false);
+  }
+
+  async function deleteClient() {
+    if (!client) return;
+
+    const confirmed = window.confirm(
+      `هل أنت متأكد من حذف العميل "${client.name}"؟\n\nسيتم حذف الحيوانات والزيارات المرتبطة بهذا العميل أيضًا.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingClient(true);
+    setMessage("");
+
+    const { error } = await supabase
+      .from("clients")
+      .delete()
+      .eq("id", client.id);
+
+    if (error) {
+      console.error(error);
+      setMessage("حصل خطأ أثناء حذف العميل.");
+      setDeletingClient(false);
+      return;
+    }
+
+    window.location.href = "/clients";
   }
 
   if (loading) {
@@ -209,6 +240,18 @@ export default function ClientPage() {
               <strong>ملاحظات:</strong> {client.notes}
             </div>
           )}
+
+          {/* Delete Client */}
+          <div className="mt-6 flex justify-end border-t border-slate-100 pt-5">
+            <button
+              type="button"
+              onClick={deleteClient}
+              disabled={deletingClient}
+              className="rounded-2xl bg-red-50 px-5 py-3 text-sm font-bold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {deletingClient ? "جاري الحذف..." : "🗑️ حذف العميل"}
+            </button>
+          </div>
         </section>
 
         {/* Pets */}

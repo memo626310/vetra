@@ -15,6 +15,7 @@ type Pet = {
   color: string | null;
   microchip: string | null;
   notes: string | null;
+  is_deceased: boolean;
 };
 
 type Client = {
@@ -42,6 +43,9 @@ export default function PetPage() {
   const [client, setClient] = useState<Client | null>(null);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [deletingPet, setDeletingPet] = useState(false);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     async function loadPet() {
@@ -53,7 +57,6 @@ export default function PetPage() {
         return;
       }
 
-      // Get pet
       const { data: petData, error: petError } = await supabase
         .from("pets")
         .select("*")
@@ -67,7 +70,6 @@ export default function PetPage() {
 
       setPet(petData);
 
-      // Get owner
       const { data: clientData } = await supabase
         .from("clients")
         .select("id, name, phone, email")
@@ -78,7 +80,6 @@ export default function PetPage() {
         setClient(clientData);
       }
 
-      // Get medical history
       const { data: visitsData } = await supabase
         .from("visits")
         .select("*")
@@ -159,6 +160,82 @@ export default function PetPage() {
     });
   }
 
+  async function toggleDeceasedStatus() {
+    if (!pet) return;
+
+    setMessage("");
+
+    const newStatus = !pet.is_deceased;
+
+    const confirmed = window.confirm(
+      newStatus
+        ? `هل أنت متأكد من اعتبار الحيوان "${pet.name}" متوفى؟\n\nلن يتم حذف الملف الطبي أو الزيارات السابقة، ولكن لن يمكن تسجيل زيارات جديدة له.`
+        : `هل تريد إعادة تفعيل الحيوان "${pet.name}"؟\n\nسيصبح من الممكن تسجيل زيارات جديدة له مرة أخرى.`
+    );
+
+    if (!confirmed) return;
+
+    setUpdatingStatus(true);
+
+    const { error } = await supabase
+      .from("pets")
+      .update({
+        is_deceased: newStatus,
+      })
+      .eq("id", pet.id);
+
+    if (error) {
+      console.error(error);
+      setMessage("حصل خطأ أثناء تحديث حالة الحيوان.");
+      setUpdatingStatus(false);
+      return;
+    }
+
+    setPet({
+      ...pet,
+      is_deceased: newStatus,
+    });
+
+    setMessage(
+      newStatus
+        ? "تم تسجيل الحيوان كمتوفى."
+        : "تم إعادة تفعيل الحيوان."
+    );
+
+    setUpdatingStatus(false);
+  }
+
+  async function deletePet() {
+    if (!pet) return;
+
+    const confirmed = window.confirm(
+      `هل أنت متأكد من حذف الحيوان "${pet.name}"؟\n\nسيتم حذف الملف الطبي وجميع الزيارات المرتبطة بهذا الحيوان أيضًا.\n\nهذا الإجراء نهائي.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingPet(true);
+    setMessage("");
+
+    const { error } = await supabase
+      .from("pets")
+      .delete()
+      .eq("id", pet.id);
+
+    if (error) {
+      console.error(error);
+      setMessage("حصل خطأ أثناء حذف الحيوان.");
+      setDeletingPet(false);
+      return;
+    }
+
+    if (client?.id) {
+      window.location.href = `/clients/${client.id}`;
+    } else {
+      window.location.href = "/pets";
+    }
+  }
+
   if (loading) {
     return (
       <main
@@ -213,46 +290,113 @@ export default function PetPage() {
 
         {/* Pet Header */}
         <section className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-6">
 
-            <div className="flex items-center gap-5">
+            <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
 
-              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl bg-slate-100 text-6xl">
-                {getSpeciesIcon(pet.species)}
-              </div>
+              <div className="flex items-center gap-5">
 
-              <div>
-                <h1 className="text-3xl font-bold">
-                  {pet.name}
-                </h1>
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl bg-slate-100 text-6xl">
+                  {getSpeciesIcon(pet.species)}
+                </div>
 
-                <p className="mt-2 text-slate-500">
-                  {getSpeciesName(pet.species)}
-                  {pet.breed ? ` • ${pet.breed}` : ""}
-                </p>
+                <div>
+                  <div className="flex flex-wrap items-center gap-3">
 
-                {client && (
-                  <p className="mt-2 text-sm text-slate-500">
-                    المالك:{" "}
-                    <Link
-                      href={`/clients/${client.id}`}
-                      className="font-semibold text-slate-800 hover:underline"
-                    >
-                      {client.name}
-                    </Link>
+                    <h1 className="text-3xl font-bold">
+                      {pet.name}
+                    </h1>
+
+                    {pet.is_deceased && (
+                      <span className="rounded-full bg-slate-200 px-3 py-1 text-sm font-bold text-slate-700">
+                        ⚫ متوفى
+                      </span>
+                    )}
+
+                  </div>
+
+                  <p className="mt-2 text-slate-500">
+                    {getSpeciesName(pet.species)}
+                    {pet.breed ? ` • ${pet.breed}` : ""}
                   </p>
-                )}
+
+                  {client && (
+                    <p className="mt-2 text-sm text-slate-500">
+                      المالك:{" "}
+                      <Link
+                        href={`/clients/${client.id}`}
+                        className="font-semibold text-slate-800 hover:underline"
+                      >
+                        {client.name}
+                      </Link>
+                    </p>
+                  )}
+
+                </div>
+
               </div>
 
             </div>
 
-            {/* New Visit */}
-            <Link
-              href={`/visits/new?pet=${pet.id}`}
-              className="rounded-2xl bg-slate-900 px-6 py-4 text-center font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
-            >
-              🩺 زيارة جديدة
-            </Link>
+            {/* Status + Actions */}
+            <div className="flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+
+              <div>
+                {pet.is_deceased ? (
+                  <p className="text-sm text-slate-500">
+                    هذا الحيوان مسجل كمتوفى، ويمكنك الاطلاع على ملفه وتاريخه الطبي بالكامل.
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    الملف نشط ويمكن تسجيل زيارات جديدة.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+
+                {!pet.is_deceased && (
+                  <Link
+                    href={`/visits/new?pet=${pet.id}`}
+                    className="rounded-2xl bg-slate-900 px-5 py-3 text-center font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+                  >
+                    🩺 زيارة جديدة
+                  </Link>
+                )}
+
+                <button
+                  onClick={toggleDeceasedStatus}
+                  disabled={updatingStatus}
+                  className={
+                    pet.is_deceased
+                      ? "rounded-2xl bg-emerald-50 px-5 py-3 font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
+                      : "rounded-2xl bg-amber-50 px-5 py-3 font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+                  }
+                >
+                  {updatingStatus
+                    ? "جاري التحديث..."
+                    : pet.is_deceased
+                    ? "🔄 إعادة تفعيل الحيوان"
+                    : "⚫ اعتبار الحيوان متوفى"}
+                </button>
+
+                <button
+                  onClick={deletePet}
+                  disabled={deletingPet}
+                  className="rounded-2xl bg-red-50 px-5 py-3 font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+                >
+                  {deletingPet ? "جاري الحذف..." : "🗑️ حذف الحيوان"}
+                </button>
+
+              </div>
+
+            </div>
+
+            {message && (
+              <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
+                {message}
+              </div>
+            )}
 
           </div>
         </section>
@@ -408,12 +552,20 @@ export default function PetPage() {
                 أول زيارة للحيوان هتظهر هنا.
               </p>
 
-              <Link
-                href={`/visits/new?pet=${pet.id}`}
-                className="mt-5 inline-block rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
-              >
-                تسجيل أول زيارة
-              </Link>
+              {!pet.is_deceased && (
+                <Link
+                  href={`/visits/new?pet=${pet.id}`}
+                  className="mt-5 inline-block rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
+                >
+                  تسجيل أول زيارة
+                </Link>
+              )}
+
+              {pet.is_deceased && (
+                <p className="mt-4 text-sm font-semibold text-slate-500">
+                  ⚫ الحيوان متوفى، لذلك لا يمكن تسجيل زيارة جديدة.
+                </p>
+              )}
 
             </div>
           ) : (

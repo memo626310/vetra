@@ -24,6 +24,7 @@ type Pet = {
   color: string | null;
   microchip: string | null;
   notes: string | null;
+  is_deceased: boolean;
 };
 
 type Visit = {
@@ -138,6 +139,8 @@ const translations = {
     saveError: "Could not save the visit.",
     loadError: "Could not load patient data.",
     selectPetFirst: "Please select a pet first.",
+    deceasedPet: "This pet is marked as deceased and cannot have new visits.",
+    deceasedBadge: "Deceased",
     requiredFields: "Please select both a client and a pet.",
 
     cat: "Cat",
@@ -238,6 +241,8 @@ const translations = {
     saveError: "تعذر حفظ الزيارة.",
     loadError: "تعذر تحميل بيانات الحيوان.",
     selectPetFirst: "يرجى اختيار حيوان أولًا.",
+    deceasedPet: "هذا الحيوان مسجل كمتوفى ولا يمكن تسجيل زيارة جديدة له.",
+    deceasedBadge: "متوفى",
     requiredFields: "يرجى اختيار العميل والحيوان.",
 
     cat: "قط",
@@ -735,6 +740,17 @@ export default function NewVisitPage() {
       return;
     }
 
+    if (data.is_deceased) {
+      setPetDetails(data as PetDetails);
+      setSelectedPetId(data.id);
+      setSelectedClientId(data.client_id);
+      await loadVisits(data.id);
+      setMessage(t.deceasedPet);
+      setStarted(false);
+      setLoadingDetails(false);
+      return;
+    }
+
     setPetDetails(data as PetDetails);
     setSelectedPetId(data.id);
     setSelectedClientId(data.client_id);
@@ -762,6 +778,24 @@ export default function NewVisitPage() {
 
     if (!selectedClientId || !selectedPetId) {
       setMessage(t.requiredFields);
+      return;
+    }
+
+    const { data: selectedPet, error: selectedPetError } = await supabase
+      .from("pets")
+      .select("*")
+      .eq("id", selectedPetId)
+      .single();
+
+    if (selectedPetError || !selectedPet) {
+      setMessage(t.loadError);
+      return;
+    }
+
+    if (selectedPet.is_deceased) {
+      setMessage(t.deceasedPet);
+      setPetDetails(selectedPet as PetDetails);
+      setStarted(false);
       return;
     }
 
@@ -800,6 +834,23 @@ export default function NewVisitPage() {
 
     if (!selectedPetId || !selectedClientId) {
       setMessage(t.requiredFields);
+      return;
+    }
+
+    const { data: currentPet, error: currentPetError } = await supabase
+      .from("pets")
+      .select("is_deceased")
+      .eq("id", selectedPetId)
+      .single();
+
+    if (currentPetError || !currentPet) {
+      setMessage(t.loadError);
+      return;
+    }
+
+    if (currentPet.is_deceased) {
+      setMessage(t.deceasedPet);
+      setStarted(false);
       return;
     }
 
