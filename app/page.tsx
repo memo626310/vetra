@@ -1,0 +1,596 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type Language = "ar" | "en";
+
+const translations = {
+  ar: {
+    welcome: "مرحبًا بك",
+    doctor: "د. محمد",
+    sidebarSubtitle: "إدارة العيادة",
+
+    nav: {
+      home: "الرئيسية",
+      clients: "العملاء",
+      pets: "الحيوانات",
+      appointments: "المواعيد",
+      vaccines: "التطعيمات",
+      inventory: "المخزون",
+      finance: "المالية",
+      reports: "التقارير",
+      settings: "الإعدادات",
+    },
+
+    cards: [
+      ["زيارة جديدة", "ابدأ كشف جديد", "🩺"],
+      ["العملاء", "أصحاب الحيوانات", "👥"],
+      ["الحيوانات", "ملفات الحيوانات", "🐾"],
+      ["المواعيد", "مواعيد اليوم والمتابعة", "📅"],
+      ["التطعيمات", "القادمة والمتأخرة", "💉"],
+      ["المخزون", "الأدوية والمنتجات", "📦"],
+      ["المالية", "الدخل والمصروفات", "💰"],
+      ["التقارير", "ملخص العيادة", "📊"],
+    ],
+
+    open: "فتح",
+    language: "English",
+    notifications: "الإشعارات",
+
+    encouragement: [
+      "صباح جديد، وحالات جديدة تقدر تساعدها. 🐾",
+      "كل حالة بتفرق، كمّل اللي بدأته. 💙",
+      "أنت بتعمل فرق حقيقي كل يوم. 🐾",
+      "اهتم بكل حالة، والنتيجة هتفرق. ❤️",
+      "خطوة صغيرة منك ممكن تغيّر حياة كاملة. 🐾",
+      "شغلك النهارده ممكن يخلي حيوان أحسن بكرة. 💙",
+    ],
+  },
+
+  en: {
+    welcome: "Welcome",
+    doctor: "Dr. Mohamed",
+    sidebarSubtitle: "Clinic Management",
+
+    nav: {
+      home: "Home",
+      clients: "Clients",
+      pets: "Pets",
+      appointments: "Appointments",
+      vaccines: "Vaccines",
+      inventory: "Inventory",
+      finance: "Finance",
+      reports: "Reports",
+      settings: "Settings",
+    },
+
+    cards: [
+      ["New Visit", "Start a new visit", "🩺"],
+      ["Clients", "Pet owners", "👥"],
+      ["Pets", "Pet records", "🐾"],
+      ["Appointments", "Today's appointments", "📅"],
+      ["Vaccines", "Due and overdue", "💉"],
+      ["Inventory", "Medicines and products", "📦"],
+      ["Finance", "Income and expenses", "💰"],
+      ["Reports", "Clinic summary", "📊"],
+    ],
+
+    open: "Open",
+    language: "عربي",
+    notifications: "Notifications",
+
+    encouragement: [
+      "A new day, new cases, new lives to help. 🐾",
+      "Every case matters. Keep going. 💙",
+      "You make a real difference every day. 🐾",
+      "Take care of every case. It all makes a difference. ❤️",
+      "A small step from you can change a whole life. 🐾",
+      "Your work today can help a pet feel better tomorrow. 💙",
+    ],
+  },
+};
+
+const cardColors = [
+  {
+    light: "bg-purple-50",
+    dark: "bg-purple-500/10",
+    icon: "text-purple-600",
+  },
+  {
+    light: "bg-blue-50",
+    dark: "bg-blue-500/10",
+    icon: "text-blue-600",
+  },
+  {
+    light: "bg-emerald-50",
+    dark: "bg-emerald-500/10",
+    icon: "text-emerald-600",
+  },
+  {
+    light: "bg-orange-50",
+    dark: "bg-orange-500/10",
+    icon: "text-orange-600",
+  },
+  {
+    light: "bg-pink-50",
+    dark: "bg-pink-500/10",
+    icon: "text-pink-600",
+  },
+  {
+    light: "bg-yellow-50",
+    dark: "bg-yellow-500/10",
+    icon: "text-yellow-600",
+  },
+  {
+    light: "bg-green-50",
+    dark: "bg-green-500/10",
+    icon: "text-green-600",
+  },
+  {
+    light: "bg-indigo-50",
+    dark: "bg-indigo-500/10",
+    icon: "text-indigo-600",
+  },
+];
+
+export default function Home() {
+  const [darkMode, setDarkMode] = useState(true);
+  const [language, setLanguage] = useState<Language>("ar");
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("vetra-theme");
+    const savedLanguage = localStorage.getItem("vetra-language");
+
+    if (savedTheme === "light") {
+      setDarkMode(false);
+    }
+
+    if (savedLanguage === "en") {
+      setLanguage("en");
+    }
+
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+
+    localStorage.setItem(
+      "vetra-theme",
+      darkMode ? "dark" : "light"
+    );
+
+    localStorage.setItem(
+      "vetra-language",
+      language
+    );
+  }, [darkMode, language, ready]);
+
+  const t = translations[language];
+  const isArabic = language === "ar";
+
+  const todayMessage = useMemo(() => {
+    const today = new Date();
+
+    const dayNumber = Math.floor(
+      Date.UTC(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate()
+      ) / 86400000
+    );
+
+    const index =
+      dayNumber % t.encouragement.length;
+
+    return t.encouragement[index];
+  }, [language]);
+
+  const formattedDate = new Date().toLocaleDateString(
+    language === "ar" ? "ar-EG" : "en-US",
+    {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }
+  );
+
+  const goTo = (href: string) => {
+    if (href !== "#") {
+      window.location.href = href;
+    }
+  };
+
+  const navItems = [
+    ["🏠", t.nav.home],
+    ["👥", t.nav.clients],
+    ["🐾", t.nav.pets],
+    ["📅", t.nav.appointments],
+    ["💉", t.nav.vaccines],
+    ["📦", t.nav.inventory],
+    ["💰", t.nav.finance],
+    ["📊", t.nav.reports],
+  ];
+
+  return (
+    <main
+      dir={isArabic ? "rtl" : "ltr"}
+      className={`min-h-screen transition-colors duration-500 ${
+        darkMode
+          ? "bg-[#0F1115] text-white"
+          : "bg-[#F7F8FA] text-slate-800"
+      }`}
+    >
+      <div className="flex min-h-screen">
+
+        {/* ================= SIDEBAR ================= */}
+
+        <aside
+          className={`hidden w-72 shrink-0 border-l px-7 py-8 transition-all duration-500 lg:block ${
+            darkMode
+              ? "border-white/[0.06] bg-[#13161B]"
+              : "border-slate-100 bg-white"
+          }`}
+        >
+          {/* Logo */}
+
+          <div className="mb-12">
+            <h1
+              className={`text-4xl font-black tracking-tight transition-all duration-300 hover:tracking-wider ${
+                darkMode
+                  ? "text-white"
+                  : "text-blue-900"
+              }`}
+            >
+              VETRA
+            </h1>
+
+            <p
+              className={`mt-2 text-sm font-medium ${
+                darkMode
+                  ? "text-slate-500"
+                  : "text-slate-400"
+              }`}
+            >
+              {t.sidebarSubtitle}
+            </p>
+          </div>
+
+          {/* Navigation */}
+
+          <nav className="space-y-2">
+            {navItems.map(([icon, title], index) => {
+              const isHome = index === 0;
+              const isClients = index === 1;
+
+              return (
+                <button
+                  key={title}
+                  onClick={() => {
+                    if (isClients) {
+                      goTo("/clients");
+                    }
+                  }}
+                  className={`group w-full rounded-2xl px-5 py-4 text-base font-medium transition-all duration-300 hover:translate-x-1 ${
+                    isArabic
+                      ? "text-right"
+                      : "text-left"
+                  } ${
+                    isHome
+                      ? darkMode
+                        ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15"
+                        : "bg-blue-50 text-blue-800 hover:bg-blue-100"
+                      : darkMode
+                        ? "text-slate-400 hover:bg-white/[0.04] hover:text-white"
+                        : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                  }`}
+                >
+                  <span className="inline-block transition-transform duration-300 group-hover:scale-110">
+                    {icon}
+                  </span>
+
+                  <span
+                    className={
+                      isArabic
+                        ? "mr-3"
+                        : "ml-3"
+                    }
+                  >
+                    {title}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Settings */}
+
+          <div
+            className={`mt-10 border-t pt-6 ${
+              darkMode
+                ? "border-white/[0.06]"
+                : "border-slate-100"
+            }`}
+          >
+            <button
+              className={`group w-full rounded-2xl px-5 py-4 text-base font-medium transition-all duration-300 hover:translate-x-1 ${
+                darkMode
+                  ? "text-slate-500 hover:bg-white/[0.04] hover:text-white"
+                  : "text-slate-400 hover:bg-slate-50 hover:text-slate-700"
+              } ${
+                isArabic
+                  ? "text-right"
+                  : "text-left"
+              }`}
+            >
+              <span className="inline-block transition-transform duration-300 group-hover:rotate-45">
+                ⚙️
+              </span>
+
+              <span
+                className={
+                  isArabic
+                    ? "mr-3"
+                    : "ml-3"
+                }
+              >
+                {t.nav.settings}
+              </span>
+            </button>
+          </div>
+        </aside>
+
+        {/* ================= MAIN ================= */}
+
+        <section className="flex-1 p-5 transition-colors duration-500 sm:p-8 lg:p-12">
+
+          {/* ================= HEADER ================= */}
+
+          <header className="mb-10 flex items-start justify-between gap-4">
+
+            <div className="min-w-0">
+
+              <p
+                className={`mb-3 text-sm font-medium transition-colors duration-500 sm:text-base ${
+                  darkMode
+                    ? "text-slate-500"
+                    : "text-slate-400"
+                }`}
+              >
+                {formattedDate}
+              </p>
+
+              <h2 className="text-2xl font-black tracking-tight sm:text-4xl">
+                {t.welcome}، {t.doctor}{" "}
+
+                <span className="inline-block transition-transform duration-300 hover:rotate-12">
+                  👋
+                </span>
+              </h2>
+
+              <p
+                className={`mt-3 max-w-2xl text-sm font-medium leading-7 transition-all duration-500 sm:text-base ${
+                  darkMode
+                    ? "text-slate-400"
+                    : "text-slate-500"
+                }`}
+              >
+                {todayMessage}
+              </p>
+
+            </div>
+
+            {/* ================= ACTIONS ================= */}
+
+            <div className="flex shrink-0 items-center gap-2">
+
+              {/* Language */}
+
+              <button
+                onClick={() =>
+                  setLanguage(
+                    isArabic ? "en" : "ar"
+                  )
+                }
+                className={`flex h-12 items-center gap-2 rounded-2xl border px-3 text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 active:scale-95 sm:px-4 ${
+                  darkMode
+                    ? "border-white/[0.06] bg-[#181B21] hover:bg-[#1D2128]"
+                    : "border-slate-100 bg-white hover:bg-slate-50"
+                }`}
+              >
+                <span className="transition-transform duration-500 hover:rotate-180">
+                  🌐
+                </span>
+
+                <span>
+                  {t.language}
+                </span>
+              </button>
+
+              {/* Theme */}
+
+              <button
+                onClick={() =>
+                  setDarkMode(!darkMode)
+                }
+                className={`flex h-12 w-12 items-center justify-center rounded-2xl border text-xl transition-all duration-500 hover:-translate-y-0.5 active:scale-90 ${
+                  darkMode
+                    ? "border-white/[0.06] bg-[#181B21] hover:bg-[#1D2128]"
+                    : "border-slate-100 bg-white hover:bg-slate-50"
+                }`}
+                aria-label="Change theme"
+              >
+                <span className="inline-block transition-transform duration-500 hover:rotate-45">
+                  {darkMode
+                    ? "☀️"
+                    : "🌙"}
+                </span>
+              </button>
+
+              {/* Notifications */}
+
+              <button
+                className={`hidden h-12 w-12 items-center justify-center rounded-2xl border text-xl transition-all duration-300 hover:-translate-y-0.5 active:scale-90 sm:flex ${
+                  darkMode
+                    ? "border-white/[0.06] bg-[#181B21] hover:bg-[#1D2128]"
+                    : "border-slate-100 bg-white hover:bg-slate-50"
+                }`}
+                aria-label={t.notifications}
+              >
+                <span className="inline-block transition-transform duration-300 hover:rotate-12">
+                  🔔
+                </span>
+              </button>
+
+              {/* Profile */}
+
+              <div
+                className={`hidden rounded-2xl border px-5 py-3 transition-all duration-300 hover:-translate-y-0.5 md:block ${
+                  darkMode
+                    ? "border-white/[0.06] bg-[#181B21]"
+                    : "border-slate-100 bg-white"
+                }`}
+              >
+                <p className="text-sm font-bold">
+                  {t.doctor}
+                </p>
+
+                <p
+                  className={`mt-1 text-xs ${
+                    darkMode
+                      ? "text-slate-500"
+                      : "text-slate-400"
+                  }`}
+                >
+                  {isArabic
+                    ? "الطبيب"
+                    : "Doctor"}
+                </p>
+              </div>
+            </div>
+          </header>
+
+          {/* ================= CARDS ================= */}
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+
+            {t.cards.map((card, index) => {
+              const [title, subtitle, icon] =
+                card;
+
+              const colors =
+                cardColors[index];
+
+              const featured =
+                index === 0;
+
+              return (
+                <button
+                  key={title}
+                  onClick={() => {
+                    /*
+                      أول كارت:
+                      زيارة جديدة
+                    */
+                    if (index === 0) {
+                      goTo("/visits/new");
+                    }
+
+                    /*
+                      ثاني كارت:
+                      العملاء
+                    */
+                    if (index === 1) {
+                      goTo("/clients");
+                    }
+                    if (index === 2) {
+                      goTo("/pets");
+                      }
+                  }}
+                  className={`group relative min-h-[220px] overflow-hidden rounded-[32px] p-7 transition-all duration-300 ease-out hover:-translate-y-2 hover:scale-[1.01] active:scale-[0.98] ${
+                    isArabic
+                      ? "text-right"
+                      : "text-left"
+                  } ${
+                    featured
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20 hover:bg-blue-500 hover:shadow-xl hover:shadow-blue-900/30"
+                      : darkMode
+                        ? "border border-white/[0.06] bg-[#181B21] text-white shadow-sm hover:border-white/[0.10] hover:bg-[#1C2026] hover:shadow-xl"
+                        : "border border-slate-100 bg-white text-slate-800 shadow-sm hover:border-slate-200 hover:shadow-xl"
+                  }`}
+                >
+
+                  {/* Glow */}
+
+                  <div
+                    className={`pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full blur-3xl transition-all duration-700 group-hover:scale-150 ${
+                      featured
+                        ? "bg-white/10"
+                        : darkMode
+                          ? "bg-blue-500/[0.04]"
+                          : "bg-blue-500/[0.05]"
+                    }`}
+                  />
+
+                  {/* Icon */}
+
+                  <div
+                    className={`relative mb-7 flex h-16 w-16 items-center justify-center rounded-3xl text-3xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 ${
+                      featured
+                        ? "bg-white/15"
+                        : `${darkMode ? colors.dark : colors.light} ${colors.icon}`
+                    }`}
+                  >
+                    <span className="transition-transform duration-500 group-hover:scale-110">
+                      {icon}
+                    </span>
+                  </div>
+
+                  {/* Title */}
+
+                  <h3 className="relative text-2xl font-black tracking-tight transition-transform duration-300 group-hover:translate-x-1">
+                    {title}
+                  </h3>
+
+                  {/* Subtitle */}
+
+                  <p
+                    className={`relative mt-3 text-base font-medium leading-7 transition-colors duration-300 ${
+                      featured
+                        ? "text-blue-100"
+                        : darkMode
+                          ? "text-slate-500"
+                          : "text-slate-400"
+                    }`}
+                  >
+                    {subtitle}
+                  </p>
+
+                  {/* Open */}
+
+                  <div
+                    className={`relative mt-6 text-sm font-bold transition-all duration-300 ${
+                      featured
+                        ? "text-white"
+                        : "translate-y-1 text-blue-500 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
+                    }`}
+                  >
+                    {t.open}{" "}
+                    {isArabic
+                      ? "←"
+                      : "→"}
+                  </div>
+
+                </button>
+              );
+            })}
+
+          </div>
+
+        </section>
+      </div>
+    </main>
+  );
+}

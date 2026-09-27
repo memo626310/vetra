@@ -1,0 +1,2475 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+
+type Language = "en" | "ar";
+
+type Client = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email?: string | null;
+};
+
+type Pet = {
+  id: string;
+  client_id: string;
+  name: string;
+  species: string;
+  breed: string | null;
+  gender: string | null;
+  birth_date: string | null;
+  color: string | null;
+  microchip: string | null;
+  notes: string | null;
+};
+
+type Visit = {
+  id: string;
+  client_id: string;
+  pet_id: string;
+  visit_date: string;
+  reason: string | null;
+  examination: string | null;
+  diagnosis: string | null;
+  treatment: string | null;
+  weight: number | null;
+  temperature: number | null;
+  heart_rate: number | null;
+  respiratory_rate: number | null;
+  notes: string | null;
+};
+
+type PetDetails = Pet & {
+  client: Client | null;
+};
+
+const translations = {
+  en: {
+    title: "New Visit",
+    subtitle: "Start a new medical examination",
+    dashboard: "Dashboard",
+    language: "العربية",
+    dark: "Dark mode",
+    light: "Light mode",
+
+    selectClient: "Select Client",
+    selectClientHint: "Choose the pet owner first",
+    searchClient: "Search clients...",
+    noClients: "No clients found",
+
+    selectPet: "Select Pet",
+    selectPetHint: "Choose the animal for this visit",
+    searchPet: "Search pets...",
+    noPets: "No pets found",
+
+    addClient: "Add Client",
+    addPet: "Add Pet",
+
+    selectedClient: "Selected Client",
+    selectedPet: "Selected Pet",
+
+    startExam: "Start Examination",
+    changeSelection: "Change selection",
+
+    patientSummary: "Patient Summary",
+    owner: "Owner",
+    breed: "Breed",
+    gender: "Gender",
+    birthDate: "Birth date",
+    color: "Color",
+    microchip: "Microchip",
+    importantNotes: "Important Notes",
+    noNotes: "No important notes recorded.",
+    previousVisits: "Previous Visits",
+
+    lastVisit: "Last Visit",
+    noPreviousVisits: "No previous visits",
+
+    lastDiagnosis: "Last Diagnosis",
+    noDiagnosis: "No previous diagnosis",
+
+    lastTreatment: "Last Treatment",
+    noTreatment: "No previous treatment",
+
+    visitCount: "Previous Visits",
+
+    trends: "Patient Trends",
+    weight: "Weight",
+    temperature: "Temperature",
+    heartRate: "Heart Rate",
+    respiratoryRate: "Respiratory Rate",
+    latest: "Latest",
+    previous: "Previous",
+    noData: "No data",
+    kg: "kg",
+    celsius: "°C",
+    bpm: "bpm",
+    rpm: "rpm",
+
+    examination: "Current Examination",
+    reason: "Reason for Visit",
+    reasonPlaceholder: "Why is the patient here today?",
+    examinationNotes: "Examination",
+    examinationPlaceholder: "Clinical examination findings...",
+    diagnosis: "Diagnosis",
+    diagnosisPlaceholder: "Diagnosis...",
+    treatment: "Treatment",
+    treatmentPlaceholder: "Treatment and medications...",
+    visitNotes: "Visit Notes",
+    visitNotesPlaceholder: "Additional notes for this visit...",
+
+    saveVisit: "Save Visit",
+    saving: "Saving...",
+    cancel: "Cancel",
+
+    visitHistory: "Visit History",
+    viewExamination: "View Examination",
+    noHistory: "No previous examinations.",
+
+    visitDetails: "Visit Details",
+    close: "Close",
+    date: "Date",
+    time: "Time",
+
+    visitSaved: "Visit saved successfully.",
+    saveError: "Could not save the visit.",
+    loadError: "Could not load patient data.",
+    selectPetFirst: "Please select a pet first.",
+    requiredFields: "Please select both a client and a pet.",
+
+    cat: "Cat",
+    dog: "Dog",
+    other: "Other",
+    male: "Male",
+    female: "Female",
+  },
+
+  ar: {
+    title: "زيارة جديدة",
+    subtitle: "ابدأ كشفًا طبيًا جديدًا",
+    dashboard: "الرئيسية",
+    language: "English",
+    dark: "الوضع الداكن",
+    light: "الوضع الفاتح",
+
+    selectClient: "اختيار العميل",
+    selectClientHint: "اختر صاحب الحيوان أولًا",
+    searchClient: "البحث عن عميل...",
+    noClients: "لا يوجد عملاء",
+
+    selectPet: "اختيار الحيوان",
+    selectPetHint: "اختر الحيوان الخاص بهذه الزيارة",
+    searchPet: "البحث عن حيوان...",
+    noPets: "لا توجد حيوانات",
+
+    addClient: "إضافة عميل",
+    addPet: "إضافة حيوان",
+
+    selectedClient: "العميل المختار",
+    selectedPet: "الحيوان المختار",
+
+    startExam: "ابدأ الكشف",
+    changeSelection: "تغيير الاختيار",
+
+    patientSummary: "ملخص حالة الحيوان",
+    owner: "المالك",
+    breed: "السلالة",
+    gender: "النوع",
+    birthDate: "تاريخ الميلاد",
+    color: "اللون",
+    microchip: "الميكروشيب",
+    importantNotes: "ملاحظات مهمة",
+    noNotes: "لا توجد ملاحظات مهمة مسجلة.",
+    previousVisits: "الزيارات السابقة",
+
+    lastVisit: "آخر زيارة",
+    noPreviousVisits: "لا توجد زيارات سابقة",
+
+    lastDiagnosis: "آخر تشخيص",
+    noDiagnosis: "لا يوجد تشخيص سابق",
+
+    lastTreatment: "آخر علاج",
+    noTreatment: "لا يوجد علاج سابق",
+
+    visitCount: "الزيارات السابقة",
+
+    trends: "متابعة المؤشرات",
+    weight: "الوزن",
+    temperature: "الحرارة",
+    heartRate: "نبض القلب",
+    respiratoryRate: "معدل التنفس",
+    latest: "الأحدث",
+    previous: "السابق",
+    noData: "لا توجد بيانات",
+    kg: "كجم",
+    celsius: "°C",
+    bpm: "نبضة/د",
+    rpm: "نفس/د",
+
+    examination: "الكشف الحالي",
+    reason: "سبب الزيارة",
+    reasonPlaceholder: "ما سبب حضور الحيوان اليوم؟",
+    examinationNotes: "الفحص",
+    examinationPlaceholder: "نتائج الفحص الإكلينيكي...",
+    diagnosis: "التشخيص",
+    diagnosisPlaceholder: "التشخيص...",
+    treatment: "العلاج",
+    treatmentPlaceholder: "العلاج والأدوية...",
+    visitNotes: "ملاحظات الزيارة",
+    visitNotesPlaceholder: "ملاحظات إضافية عن الزيارة...",
+
+    saveVisit: "حفظ الزيارة",
+    saving: "جاري الحفظ...",
+    cancel: "إلغاء",
+
+    visitHistory: "سجل الزيارات",
+    viewExamination: "عرض الكشف",
+    noHistory: "لا توجد كشوفات سابقة.",
+
+    visitDetails: "تفاصيل الكشف",
+    close: "إغلاق",
+    date: "التاريخ",
+    time: "الوقت",
+
+    visitSaved: "تم حفظ الزيارة بنجاح.",
+    saveError: "تعذر حفظ الزيارة.",
+    loadError: "تعذر تحميل بيانات الحيوان.",
+    selectPetFirst: "يرجى اختيار حيوان أولًا.",
+    requiredFields: "يرجى اختيار العميل والحيوان.",
+
+    cat: "قط",
+    dog: "كلب",
+    other: "أخرى",
+    male: "ذكر",
+    female: "أنثى",
+  },
+};
+
+function speciesLabel(species: string, t: typeof translations.en) {
+  const value = species?.toLowerCase();
+
+  if (value === "cat") return t.cat;
+  if (value === "dog") return t.dog;
+
+  return t.other;
+}
+
+function genderLabel(gender: string | null, t: typeof translations.en) {
+  if (!gender) return "—";
+
+  const value = gender.toLowerCase();
+
+  if (value === "male") return t.male;
+  if (value === "female") return t.female;
+
+  return gender;
+}
+
+function formatDate(date: string | null, language: Language) {
+  if (!date) return "—";
+
+  return new Intl.DateTimeFormat(language === "ar" ? "ar-EG" : "en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(date));
+}
+
+function formatTime(date: string, language: Language) {
+  return new Intl.DateTimeFormat(language === "ar" ? "ar-EG" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(date));
+}
+
+function calculateAge(
+  birthDate: string | null,
+  language: Language
+): string {
+  if (!birthDate) return "—";
+
+  const birth = new Date(birthDate);
+  const today = new Date();
+
+  let years = today.getFullYear() - birth.getFullYear();
+  let months = today.getMonth() - birth.getMonth();
+
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+
+  if (years > 0) {
+    return language === "ar"
+      ? `${years} سنة`
+      : `${years} ${years === 1 ? "year" : "years"}`;
+  }
+
+  return language === "ar"
+    ? `${months} شهر`
+    : `${months} ${months === 1 ? "month" : "months"}`;
+}
+
+function getDelta(
+  latest: number | null,
+  previous: number | null
+): string | null {
+  if (latest === null || previous === null) return null;
+
+  const delta = latest - previous;
+
+  if (delta === 0) return "0";
+
+  return delta > 0 ? `+${delta}` : `${delta}`;
+}
+
+function MiniGraph({
+  values,
+  color,
+  onPointClick,
+  unit,
+  darkMode,
+}: {
+  values: {
+    value: number;
+    visit: Visit;
+  }[];
+  color: string;
+  onPointClick: (visit: Visit) => void;
+  unit: string;
+  darkMode: boolean;
+}) {
+  if (values.length === 0) {
+    return (
+      <div
+        className={`flex h-28 items-center justify-center rounded-xl ${
+          darkMode ? "bg-slate-800/60" : "bg-slate-50"
+        }`}
+      >
+        <span
+          className={`text-xs ${
+            darkMode ? "text-slate-500" : "text-slate-400"
+          }`}
+        >
+          No data
+        </span>
+      </div>
+    );
+  }
+
+  const ordered = [...values].reverse();
+
+  const numericValues = ordered.map((item) => item.value);
+
+  const min = Math.min(...numericValues);
+  const max = Math.max(...numericValues);
+
+  const range = max - min || 1;
+
+  const width = 300;
+  const height = 105;
+  const paddingX = 14;
+  const paddingY = 16;
+
+  const points = ordered.map((item, index) => {
+    const x =
+      ordered.length === 1
+        ? width / 2
+        : paddingX +
+          (index / (ordered.length - 1)) * (width - paddingX * 2);
+
+    const normalized = (item.value - min) / range;
+
+    const y =
+      height -
+      paddingY -
+      normalized * (height - paddingY * 2);
+
+    return {
+      x,
+      y,
+      item,
+    };
+  });
+
+  const path = points
+    .map((point, index) =>
+      index === 0
+        ? `M ${point.x} ${point.y}`
+        : `L ${point.x} ${point.y}`
+    )
+    .join(" ");
+
+  return (
+    <div className="relative h-28 w-full overflow-hidden rounded-xl">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-full w-full"
+        preserveAspectRatio="none"
+      >
+        <line
+          x1="0"
+          y1="25"
+          x2={width}
+          y2="25"
+          stroke={darkMode ? "#334155" : "#e2e8f0"}
+          strokeWidth="1"
+        />
+
+        <line
+          x1="0"
+          y1="53"
+          x2={width}
+          y2="53"
+          stroke={darkMode ? "#334155" : "#e2e8f0"}
+          strokeWidth="1"
+        />
+
+        <line
+          x1="0"
+          y1="81"
+          x2={width}
+          y2="81"
+          stroke={darkMode ? "#334155" : "#e2e8f0"}
+          strokeWidth="1"
+        />
+
+        <path
+          d={path}
+          fill="none"
+          stroke={color}
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {points.map((point) => (
+          <g key={point.item.visit.id}>
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r="7"
+              fill={darkMode ? "#0f172a" : "#ffffff"}
+              stroke={color}
+              strokeWidth="3"
+              className="cursor-pointer transition-all duration-200 hover:scale-125"
+              onClick={() => onPointClick(point.item.visit)}
+            />
+
+            <title>
+              {point.item.value} {unit} —{" "}
+              {formatDate(point.item.visit.visit_date, "en")}
+            </title>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function VitalCard({
+  title,
+  icon,
+  latest,
+  previous,
+  unit,
+  color,
+  values,
+  onPointClick,
+  darkMode,
+}: {
+  title: string;
+  icon: string;
+  latest: number | null;
+  previous: number | null;
+  unit: string;
+  color: string;
+  values: {
+    value: number;
+    visit: Visit;
+  }[];
+  onPointClick: (visit: Visit) => void;
+  darkMode: boolean;
+}) {
+  const delta = getDelta(latest, previous);
+
+  return (
+    <div
+      className={`group rounded-2xl border p-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
+        darkMode
+          ? "border-slate-800 bg-slate-900 hover:border-slate-700"
+          : "border-slate-200 bg-white hover:border-slate-300"
+      }`}
+    >
+      <div className="mb-3 flex items-start justify-between">
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="text-lg">{icon}</span>
+
+            <h3
+              className={`text-sm font-semibold ${
+                darkMode ? "text-slate-200" : "text-slate-700"
+              }`}
+            >
+              {title}
+            </h3>
+          </div>
+
+          <div className="flex items-baseline gap-1">
+            <span
+              className={`text-xl font-bold ${
+                darkMode ? "text-white" : "text-slate-900"
+              }`}
+            >
+              {latest !== null ? latest : "—"}
+            </span>
+
+            {latest !== null && (
+              <span
+                className={`text-xs ${
+                  darkMode ? "text-slate-500" : "text-slate-400"
+                }`}
+              >
+                {unit}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {delta !== null && (
+          <span
+            className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
+              Number(delta) > 0
+                ? darkMode
+                  ? "bg-emerald-950 text-emerald-400"
+                  : "bg-emerald-50 text-emerald-600"
+                : Number(delta) < 0
+                ? darkMode
+                  ? "bg-rose-950 text-rose-400"
+                  : "bg-rose-50 text-rose-600"
+                : darkMode
+                ? "bg-slate-800 text-slate-400"
+                : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            {delta}
+          </span>
+        )}
+      </div>
+
+      <MiniGraph
+        values={values}
+        color={color}
+        onPointClick={onPointClick}
+        unit={unit}
+        darkMode={darkMode}
+      />
+
+      <div
+        className={`mt-2 flex justify-between text-[10px] ${
+          darkMode ? "text-slate-500" : "text-slate-400"
+        }`}
+      >
+        <span>
+          {previous !== null ? `Prev: ${previous}` : "No previous"}
+        </span>
+
+        <span>{values.length} readings</span>
+      </div>
+    </div>
+  );
+}
+
+export default function NewVisitPage() {
+  const searchParams = useSearchParams();
+  const petFromUrl = searchParams.get("pet");
+
+  const [language, setLanguage] = useState<Language>("en");
+  const [darkMode, setDarkMode] = useState(false);
+
+  const [clients, setClients] = useState<Client[]>([]);
+  const [pets, setPets] = useState<Pet[]>([]);
+
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [selectedPetId, setSelectedPetId] = useState("");
+
+  const [clientSearch, setClientSearch] = useState("");
+  const [petSearch, setPetSearch] = useState("");
+
+  const [petDetails, setPetDetails] = useState<PetDetails | null>(null);
+  const [visits, setVisits] = useState<Visit[]>([]);
+
+  const [loadingClients, setLoadingClients] = useState(true);
+  const [loadingPets, setLoadingPets] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
+  const [started, setStarted] = useState(false);
+
+  const [reason, setReason] = useState("");
+  const [examination, setExamination] = useState("");
+  const [diagnosis, setDiagnosis] = useState("");
+  const [treatment, setTreatment] = useState("");
+  const [visitNotes, setVisitNotes] = useState("");
+
+  const [weight, setWeight] = useState("");
+  const [temperature, setTemperature] = useState("");
+  const [heartRate, setHeartRate] = useState("");
+  const [respiratoryRate, setRespiratoryRate] = useState("");
+
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const [selectedOldVisit, setSelectedOldVisit] =
+    useState<Visit | null>(null);
+
+  const t = translations[language];
+
+  useEffect(() => {
+    const savedLanguage = window.localStorage.getItem(
+      "vetra-language"
+    ) as Language | null;
+
+    const savedDarkMode =
+      window.localStorage.getItem("vetra-dark-mode") === "true";
+
+    if (savedLanguage === "en" || savedLanguage === "ar") {
+      setLanguage(savedLanguage);
+    }
+
+    setDarkMode(savedDarkMode);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("vetra-language", language);
+    document.documentElement.lang = language;
+    document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
+  }, [language]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "vetra-dark-mode",
+      darkMode ? "true" : "false"
+    );
+
+    document.documentElement.classList.toggle("dark", darkMode);
+  }, [darkMode]);
+
+  useEffect(() => {
+    loadClients();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedClientId) {
+      setPets([]);
+      setSelectedPetId("");
+      return;
+    }
+
+    loadPets(selectedClientId);
+  }, [selectedClientId]);
+
+  useEffect(() => {
+    if (!petFromUrl) return;
+
+    loadPetFromUrl(petFromUrl);
+  }, [petFromUrl]);
+
+  async function loadClients() {
+    setLoadingClients(true);
+
+    const { data, error } = await supabase
+      .from("clients")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!error) {
+      setClients(data || []);
+    }
+
+    setLoadingClients(false);
+  }
+
+  async function loadPets(clientId: string) {
+    setLoadingPets(true);
+
+    const { data, error } = await supabase
+      .from("pets")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false });
+
+    if (!error) {
+      setPets(data || []);
+    }
+
+    setLoadingPets(false);
+  }
+
+  async function loadPetFromUrl(petId: string) {
+    setLoadingDetails(true);
+
+    const { data, error } = await supabase
+      .from("pets")
+      .select(`
+        *,
+        client:clients (
+          id,
+          name,
+          phone,
+          email
+        )
+      `)
+      .eq("id", petId)
+      .single();
+
+    if (error || !data) {
+      setMessage(t.loadError);
+      setLoadingDetails(false);
+      return;
+    }
+
+    setPetDetails(data as PetDetails);
+    setSelectedPetId(data.id);
+    setSelectedClientId(data.client_id);
+
+    await loadVisits(data.id);
+
+    setStarted(true);
+    setLoadingDetails(false);
+  }
+
+  async function loadVisits(petId: string) {
+    const { data, error } = await supabase
+      .from("visits")
+      .select("*")
+      .eq("pet_id", petId)
+      .order("visit_date", { ascending: false });
+
+    if (!error) {
+      setVisits(data || []);
+    }
+  }
+
+  async function startExamination() {
+    setMessage("");
+
+    if (!selectedClientId || !selectedPetId) {
+      setMessage(t.requiredFields);
+      return;
+    }
+
+    setLoadingDetails(true);
+
+    const { data, error } = await supabase
+      .from("pets")
+      .select(`
+        *,
+        client:clients (
+          id,
+          name,
+          phone,
+          email
+        )
+      `)
+      .eq("id", selectedPetId)
+      .single();
+
+    if (error || !data) {
+      setMessage(t.loadError);
+      setLoadingDetails(false);
+      return;
+    }
+
+    setPetDetails(data as PetDetails);
+
+    await loadVisits(selectedPetId);
+
+    setStarted(true);
+    setLoadingDetails(false);
+  }
+
+  async function saveVisit() {
+    setMessage("");
+
+    if (!selectedPetId || !selectedClientId) {
+      setMessage(t.requiredFields);
+      return;
+    }
+
+    setSaving(true);
+
+    const { error } = await supabase.from("visits").insert({
+      client_id: selectedClientId,
+      pet_id: selectedPetId,
+      reason: reason || null,
+      examination: examination || null,
+      diagnosis: diagnosis || null,
+      treatment: treatment || null,
+      weight: weight ? Number(weight) : null,
+      temperature: temperature ? Number(temperature) : null,
+      heart_rate: heartRate ? Number(heartRate) : null,
+      respiratory_rate: respiratoryRate
+        ? Number(respiratoryRate)
+        : null,
+      notes: visitNotes || null,
+    });
+
+    if (error) {
+      setMessage(t.saveError);
+      setSaving(false);
+      return;
+    }
+
+    setMessage(t.visitSaved);
+
+    setReason("");
+    setExamination("");
+    setDiagnosis("");
+    setTreatment("");
+    setVisitNotes("");
+
+    setWeight("");
+    setTemperature("");
+    setHeartRate("");
+    setRespiratoryRate("");
+
+    await loadVisits(selectedPetId);
+
+    setSaving(false);
+  }
+
+  function resetSelection() {
+    setStarted(false);
+    setPetDetails(null);
+    setVisits([]);
+    setSelectedPetId("");
+    setMessage("");
+  }
+
+  const filteredClients = useMemo(() => {
+    const query = clientSearch.trim().toLowerCase();
+
+    if (!query) return clients;
+
+    return clients.filter(
+      (client) =>
+        client.name?.toLowerCase().includes(query) ||
+        client.phone?.toLowerCase().includes(query) ||
+        client.email?.toLowerCase().includes(query)
+    );
+  }, [clients, clientSearch]);
+
+  const filteredPets = useMemo(() => {
+    const query = petSearch.trim().toLowerCase();
+
+    if (!query) return pets;
+
+    return pets.filter(
+      (pet) =>
+        pet.name?.toLowerCase().includes(query) ||
+        pet.species?.toLowerCase().includes(query) ||
+        pet.breed?.toLowerCase().includes(query) ||
+        pet.microchip?.toLowerCase().includes(query)
+    );
+  }, [pets, petSearch]);
+
+  const latestVisit = visits[0] || null;
+
+  const vitalData = useMemo(
+    () => ({
+      weight: visits
+        .filter((visit) => visit.weight !== null)
+        .map((visit) => ({
+          value: Number(visit.weight),
+          visit,
+        })),
+
+      temperature: visits
+        .filter((visit) => visit.temperature !== null)
+        .map((visit) => ({
+          value: Number(visit.temperature),
+          visit,
+        })),
+
+      heartRate: visits
+        .filter((visit) => visit.heart_rate !== null)
+        .map((visit) => ({
+          value: Number(visit.heart_rate),
+          visit,
+        })),
+
+      respiratoryRate: visits
+        .filter((visit) => visit.respiratory_rate !== null)
+        .map((visit) => ({
+          value: Number(visit.respiratory_rate),
+          visit,
+        })),
+    }),
+    [visits]
+  );
+
+  const latestWeight = vitalData.weight[0]?.value ?? null;
+  const previousWeight = vitalData.weight[1]?.value ?? null;
+
+  const latestTemperature =
+    vitalData.temperature[0]?.value ?? null;
+  const previousTemperature =
+    vitalData.temperature[1]?.value ?? null;
+
+  const latestHeartRate =
+    vitalData.heartRate[0]?.value ?? null;
+  const previousHeartRate =
+    vitalData.heartRate[1]?.value ?? null;
+
+  const latestRespiratoryRate =
+    vitalData.respiratoryRate[0]?.value ?? null;
+  const previousRespiratoryRate =
+    vitalData.respiratoryRate[1]?.value ?? null;
+
+  const pageClasses = darkMode
+    ? "min-h-screen bg-slate-950 text-slate-100"
+    : "min-h-screen bg-slate-50 text-slate-900";
+
+  return (
+    <main
+      dir={language === "ar" ? "rtl" : "ltr"}
+      className={pageClasses}
+    >
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        {/* HEADER */}
+        <header
+          className={`mb-8 flex flex-col gap-4 rounded-3xl border p-5 shadow-sm transition-colors duration-300 sm:flex-row sm:items-center sm:justify-between ${
+            darkMode
+              ? "border-slate-800 bg-slate-900"
+              : "border-slate-200 bg-white"
+          }`}
+        >
+          <div>
+            <div className="mb-2 flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-xl text-white shadow-lg shadow-blue-600/20">
+                🩺
+              </div>
+
+              <div>
+                <h1
+                  className={`text-2xl font-bold tracking-tight ${
+                    darkMode ? "text-white" : "text-slate-900"
+                  }`}
+                >
+                  {t.title}
+                </h1>
+
+                <p
+                  className={`text-sm ${
+                    darkMode ? "text-slate-400" : "text-slate-500"
+                  }`}
+                >
+                  {t.subtitle}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Link
+              href="/"
+              className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                darkMode
+                  ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              🏠 {t.dashboard}
+            </Link>
+
+            <button
+              type="button"
+              onClick={() =>
+                setLanguage(language === "en" ? "ar" : "en")
+              }
+              className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                darkMode
+                  ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              🌐 {t.language}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDarkMode(!darkMode)}
+              aria-label={darkMode ? t.light : t.dark}
+              className={`flex h-11 w-11 items-center justify-center rounded-xl border text-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                darkMode
+                  ? "border-slate-700 bg-slate-800 hover:bg-slate-700"
+                  : "border-slate-200 bg-white hover:bg-slate-50"
+              }`}
+            >
+              {darkMode ? "☀️" : "🌙"}
+            </button>
+          </div>
+        </header>
+
+        {/* MESSAGE */}
+        {message && (
+          <div
+            className={`mb-6 rounded-2xl border px-4 py-3 text-sm font-medium transition-all duration-300 ${
+              message.includes("success") || message.includes("تم")
+                ? darkMode
+                  ? "border-emerald-900 bg-emerald-950/50 text-emerald-300"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : darkMode
+                ? "border-rose-900 bg-rose-950/50 text-rose-300"
+                : "border-rose-200 bg-rose-50 text-rose-700"
+            }`}
+          >
+            {message}
+          </div>
+        )}
+
+        {/* SELECTION */}
+        {!started && (
+          <section className="grid gap-6 lg:grid-cols-2">
+            {/* CLIENT */}
+            <div
+              className={`rounded-3xl border p-6 shadow-sm transition-all duration-300 ${
+                darkMode
+                  ? "border-slate-800 bg-slate-900"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <h2
+                    className={`text-lg font-bold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    👤 {t.selectClient}
+                  </h2>
+
+                  <p
+                    className={`mt-1 text-sm ${
+                      darkMode ? "text-slate-400" : "text-slate-500"
+                    }`}
+                  >
+                    {t.selectClientHint}
+                  </p>
+                </div>
+
+                <Link
+                  href="/clients/new"
+                  className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg"
+                >
+                  + {t.addClient}
+                </Link>
+              </div>
+
+              <input
+                value={clientSearch}
+                onChange={(e) => setClientSearch(e.target.value)}
+                placeholder={t.searchClient}
+                className={`mb-4 w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                  darkMode
+                    ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                    : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                }`}
+              />
+
+              <div className="max-h-80 space-y-2 overflow-y-auto">
+                {loadingClients ? (
+                  <div
+                    className={`rounded-xl p-4 text-center text-sm ${
+                      darkMode
+                        ? "bg-slate-800 text-slate-400"
+                        : "bg-slate-50 text-slate-500"
+                    }`}
+                  >
+                    Loading...
+                  </div>
+                ) : filteredClients.length === 0 ? (
+                  <div
+                    className={`rounded-xl p-4 text-center text-sm ${
+                      darkMode
+                        ? "bg-slate-800 text-slate-400"
+                        : "bg-slate-50 text-slate-500"
+                    }`}
+                  >
+                    {t.noClients}
+                  </div>
+                ) : (
+                  filteredClients.map((client) => {
+                    const active =
+                      selectedClientId === client.id;
+
+                    return (
+                      <button
+                        key={client.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedClientId(client.id);
+                          setSelectedPetId("");
+                          setPetSearch("");
+                        }}
+                        className={`w-full rounded-2xl border p-4 text-start transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                          active
+                            ? "border-blue-500 bg-blue-50 shadow-md dark:border-blue-500 dark:bg-blue-950/40"
+                            : darkMode
+                            ? "border-slate-800 bg-slate-950 hover:border-slate-700"
+                            : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div
+                              className={`font-semibold ${
+                                darkMode
+                                  ? "text-white"
+                                  : "text-slate-900"
+                              }`}
+                            >
+                              {client.name}
+                            </div>
+
+                            {client.phone && (
+                              <div
+                                className={`mt-1 text-xs ${
+                                  darkMode
+                                    ? "text-slate-500"
+                                    : "text-slate-500"
+                                }`}
+                              >
+                                {client.phone}
+                              </div>
+                            )}
+                          </div>
+
+                          {active && (
+                            <span className="rounded-full bg-blue-600 px-2.5 py-1 text-[10px] font-bold text-white">
+                              ✓
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* PET */}
+            <div
+              className={`rounded-3xl border p-6 shadow-sm transition-all duration-300 ${
+                darkMode
+                  ? "border-slate-800 bg-slate-900"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <h2
+                    className={`text-lg font-bold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    🐾 {t.selectPet}
+                  </h2>
+
+                  <p
+                    className={`mt-1 text-sm ${
+                      darkMode ? "text-slate-400" : "text-slate-500"
+                    }`}
+                  >
+                    {t.selectPetHint}
+                  </p>
+                </div>
+
+                <Link
+                  href={
+                    selectedClientId
+                      ? `/clients/${selectedClientId}`
+                      : "/clients"
+                  }
+                  className={`rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                    darkMode
+                      ? "bg-slate-800 text-slate-200 hover:bg-slate-700"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  + {t.addPet}
+                </Link>
+              </div>
+
+              <input
+                value={petSearch}
+                onChange={(e) => setPetSearch(e.target.value)}
+                disabled={!selectedClientId}
+                placeholder={t.searchPet}
+                className={`mb-4 w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  darkMode
+                    ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                    : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                }`}
+              />
+
+              <div className="max-h-80 space-y-2 overflow-y-auto">
+                {!selectedClientId ? (
+                  <div
+                    className={`rounded-xl p-5 text-center text-sm ${
+                      darkMode
+                        ? "bg-slate-800 text-slate-500"
+                        : "bg-slate-50 text-slate-400"
+                    }`}
+                  >
+                    {t.selectClientHint}
+                  </div>
+                ) : loadingPets ? (
+                  <div
+                    className={`rounded-xl p-4 text-center text-sm ${
+                      darkMode
+                        ? "bg-slate-800 text-slate-400"
+                        : "bg-slate-50 text-slate-500"
+                    }`}
+                  >
+                    Loading...
+                  </div>
+                ) : filteredPets.length === 0 ? (
+                  <div
+                    className={`rounded-xl p-4 text-center text-sm ${
+                      darkMode
+                        ? "bg-slate-800 text-slate-400"
+                        : "bg-slate-50 text-slate-500"
+                    }`}
+                  >
+                    {t.noPets}
+                  </div>
+                ) : (
+                  filteredPets.map((pet) => {
+                    const active = selectedPetId === pet.id;
+
+                    return (
+                      <button
+                        key={pet.id}
+                        type="button"
+                        onClick={() => setSelectedPetId(pet.id)}
+                        className={`w-full rounded-2xl border p-4 text-start transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                          active
+                            ? "border-emerald-500 bg-emerald-50 shadow-md dark:border-emerald-500 dark:bg-emerald-950/40"
+                            : darkMode
+                            ? "border-slate-800 bg-slate-950 hover:border-slate-700"
+                            : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-xl">
+                              {pet.species?.toLowerCase() === "cat"
+                                ? "🐱"
+                                : pet.species?.toLowerCase() ===
+                                  "dog"
+                                ? "🐶"
+                                : "🐾"}
+                            </div>
+
+                            <div>
+                              <div
+                                className={`font-semibold ${
+                                  darkMode
+                                    ? "text-white"
+                                    : "text-slate-900"
+                                }`}
+                              >
+                                {pet.name}
+                              </div>
+
+                              <div
+                                className={`mt-1 text-xs ${
+                                  darkMode
+                                    ? "text-slate-500"
+                                    : "text-slate-500"
+                                }`}
+                              >
+                                {speciesLabel(pet.species, t)}
+                                {pet.breed
+                                  ? ` • ${pet.breed}`
+                                  : ""}
+                              </div>
+                            </div>
+                          </div>
+
+                          {active && (
+                            <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white">
+                              ✓
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* START BUTTON */}
+        {!started && (
+          <div className="mt-6 flex justify-center">
+            <button
+              type="button"
+              onClick={startExamination}
+              disabled={!selectedClientId || !selectedPetId || loadingDetails}
+              className="rounded-2xl bg-slate-900 px-8 py-4 text-sm font-bold text-white shadow-lg shadow-slate-900/20 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40 dark:bg-blue-600 dark:shadow-blue-600/20"
+            >
+              {loadingDetails
+                ? "Loading..."
+                : `🩺 ${t.startExam}`}
+            </button>
+          </div>
+        )}
+
+        {/* EXAMINATION */}
+        {started && petDetails && (
+          <div className="space-y-6">
+            {/* PATIENT HEADER */}
+            <section
+              className={`overflow-hidden rounded-3xl border shadow-sm transition-all duration-300 ${
+                darkMode
+                  ? "border-slate-800 bg-slate-900"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <div className="flex flex-col gap-5 p-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-3xl text-white shadow-lg shadow-blue-500/20">
+                    {petDetails.species?.toLowerCase() === "cat"
+                      ? "🐱"
+                      : petDetails.species?.toLowerCase() ===
+                        "dog"
+                      ? "🐶"
+                      : "🐾"}
+                  </div>
+
+                  <div>
+                    <div
+                      className={`mb-1 text-2xl font-bold ${
+                        darkMode ? "text-white" : "text-slate-900"
+                      }`}
+                    >
+                      {petDetails.name}
+                    </div>
+
+                    <div
+                      className={`text-sm ${
+                        darkMode
+                          ? "text-slate-400"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {speciesLabel(petDetails.species, t)}
+                      {petDetails.breed
+                        ? ` • ${petDetails.breed}`
+                        : ""}
+                      {petDetails.gender
+                        ? ` • ${genderLabel(
+                            petDetails.gender,
+                            t
+                          )}`
+                        : ""}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={resetSelection}
+                  className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                    darkMode
+                      ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  ← {t.changeSelection}
+                </button>
+              </div>
+            </section>
+
+            {/* PATIENT SUMMARY */}
+            <section>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2
+                    className={`text-xl font-bold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {t.patientSummary}
+                  </h2>
+
+                  <p
+                    className={`mt-1 text-sm ${
+                      darkMode
+                        ? "text-slate-500"
+                        : "text-slate-500"
+                    }`}
+                  >
+                    {t.previousVisits}: {visits.length}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div
+                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                    darkMode
+                      ? "border-slate-800 bg-slate-900"
+                      : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="mb-3 text-xl">👤</div>
+
+                  <div
+                    className={`text-xs ${
+                      darkMode
+                        ? "text-slate-500"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {t.owner}
+                  </div>
+
+                  <div
+                    className={`mt-1 font-semibold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {petDetails.client?.name || "—"}
+                  </div>
+
+                  {petDetails.client?.phone && (
+                    <div
+                      className={`mt-1 text-xs ${
+                        darkMode
+                          ? "text-slate-500"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {petDetails.client.phone}
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                    darkMode
+                      ? "border-slate-800 bg-slate-900"
+                      : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="mb-3 text-xl">🐾</div>
+
+                  <div
+                    className={`text-xs ${
+                      darkMode
+                        ? "text-slate-500"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {t.breed}
+                  </div>
+
+                  <div
+                    className={`mt-1 font-semibold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {petDetails.breed || "—"}
+                  </div>
+                </div>
+
+                <div
+                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                    darkMode
+                      ? "border-slate-800 bg-slate-900"
+                      : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="mb-3 text-xl">🎂</div>
+
+                  <div
+                    className={`text-xs ${
+                      darkMode
+                        ? "text-slate-500"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {t.birthDate}
+                  </div>
+
+                  <div
+                    className={`mt-1 font-semibold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {petDetails.birth_date
+                      ? calculateAge(
+                          petDetails.birth_date,
+                          language
+                        )
+                      : "—"}
+                  </div>
+
+                  {petDetails.birth_date && (
+                    <div
+                      className={`mt-1 text-xs ${
+                        darkMode
+                          ? "text-slate-500"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {formatDate(
+                        petDetails.birth_date,
+                        language
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                    darkMode
+                      ? "border-slate-800 bg-slate-900"
+                      : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="mb-3 text-xl">🆔</div>
+
+                  <div
+                    className={`text-xs ${
+                      darkMode
+                        ? "text-slate-500"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {t.microchip}
+                  </div>
+
+                  <div
+                    className={`mt-1 break-all font-semibold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {petDetails.microchip || "—"}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* IMPORTANT NOTES */}
+            <section
+              className={`rounded-2xl border p-5 transition-all duration-300 ${
+                darkMode
+                  ? "border-amber-900/50 bg-amber-950/20"
+                  : "border-amber-200 bg-amber-50"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="text-xl">⚠️</div>
+
+                <div>
+                  <h3
+                    className={`font-bold ${
+                      darkMode
+                        ? "text-amber-300"
+                        : "text-amber-900"
+                    }`}
+                  >
+                    {t.importantNotes}
+                  </h3>
+
+                  <p
+                    className={`mt-1 whitespace-pre-wrap text-sm ${
+                      darkMode
+                        ? "text-amber-200/70"
+                        : "text-amber-800/80"
+                    }`}
+                  >
+                    {petDetails.notes || t.noNotes}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            {/* LAST VISIT SUMMARY */}
+            <section className="grid gap-4 lg:grid-cols-3">
+              <div
+                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  darkMode
+                    ? "border-slate-800 bg-slate-900"
+                    : "border-slate-200 bg-white"
+                }`}
+              >
+                <div className="mb-3 flex items-center gap-2">
+                  <span>📅</span>
+
+                  <h3
+                    className={`font-bold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {t.lastVisit}
+                  </h3>
+                </div>
+
+                <div
+                  className={`text-sm ${
+                    darkMode
+                      ? "text-slate-400"
+                      : "text-slate-600"
+                  }`}
+                >
+                  {latestVisit
+                    ? formatDate(
+                        latestVisit.visit_date,
+                        language
+                      )
+                    : t.noPreviousVisits}
+                </div>
+              </div>
+
+              <div
+                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  darkMode
+                    ? "border-slate-800 bg-slate-900"
+                    : "border-slate-200 bg-white"
+                }`}
+              >
+                <div className="mb-3 flex items-center gap-2">
+                  <span>🩺</span>
+
+                  <h3
+                    className={`font-bold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {t.lastDiagnosis}
+                  </h3>
+                </div>
+
+                <div
+                  className={`line-clamp-3 text-sm ${
+                    darkMode
+                      ? "text-slate-400"
+                      : "text-slate-600"
+                  }`}
+                >
+                  {latestVisit?.diagnosis ||
+                    t.noDiagnosis}
+                </div>
+              </div>
+
+              <div
+                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  darkMode
+                    ? "border-slate-800 bg-slate-900"
+                    : "border-slate-200 bg-white"
+                }`}
+              >
+                <div className="mb-3 flex items-center gap-2">
+                  <span>💊</span>
+
+                  <h3
+                    className={`font-bold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {t.lastTreatment}
+                  </h3>
+                </div>
+
+                <div
+                  className={`line-clamp-3 text-sm ${
+                    darkMode
+                      ? "text-slate-400"
+                      : "text-slate-600"
+                  }`}
+                >
+                  {latestVisit?.treatment ||
+                    t.noTreatment}
+                </div>
+              </div>
+            </section>
+
+            {/* VITAL GRAPHS */}
+            <section>
+              <div className="mb-4">
+                <h2
+                  className={`text-xl font-bold ${
+                    darkMode ? "text-white" : "text-slate-900"
+                  }`}
+                >
+                  📈 {t.trends}
+                </h2>
+
+                <p
+                  className={`mt-1 text-sm ${
+                    darkMode
+                      ? "text-slate-500"
+                      : "text-slate-500"
+                  }`}
+                >
+                  Click any point to open that examination.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <VitalCard
+                  title={t.weight}
+                  icon="⚖️"
+                  latest={latestWeight}
+                  previous={previousWeight}
+                  unit={t.kg}
+                  color="#3b82f6"
+                  values={vitalData.weight}
+                  onPointClick={setSelectedOldVisit}
+                  darkMode={darkMode}
+                />
+
+                <VitalCard
+                  title={t.temperature}
+                  icon="🌡️"
+                  latest={latestTemperature}
+                  previous={previousTemperature}
+                  unit={t.celsius}
+                  color="#f97316"
+                  values={vitalData.temperature}
+                  onPointClick={setSelectedOldVisit}
+                  darkMode={darkMode}
+                />
+
+                <VitalCard
+                  title={t.heartRate}
+                  icon="❤️"
+                  latest={latestHeartRate}
+                  previous={previousHeartRate}
+                  unit={t.bpm}
+                  color="#ef4444"
+                  values={vitalData.heartRate}
+                  onPointClick={setSelectedOldVisit}
+                  darkMode={darkMode}
+                />
+
+                <VitalCard
+                  title={t.respiratoryRate}
+                  icon="🫁"
+                  latest={latestRespiratoryRate}
+                  previous={previousRespiratoryRate}
+                  unit={t.rpm}
+                  color="#8b5cf6"
+                  values={vitalData.respiratoryRate}
+                  onPointClick={setSelectedOldVisit}
+                  darkMode={darkMode}
+                />
+              </div>
+            </section>
+
+            {/* CURRENT EXAM */}
+            <section
+              className={`rounded-3xl border p-6 shadow-sm transition-colors duration-300 ${
+                darkMode
+                  ? "border-slate-800 bg-slate-900"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <div className="mb-6">
+                <h2
+                  className={`text-xl font-bold ${
+                    darkMode ? "text-white" : "text-slate-900"
+                  }`}
+                >
+                  🩺 {t.examination}
+                </h2>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                <div className="lg:col-span-2">
+                  <label
+                    className={`mb-2 block text-sm font-semibold ${
+                      darkMode
+                        ? "text-slate-300"
+                        : "text-slate-700"
+                    }`}
+                  >
+                    {t.reason}
+                  </label>
+
+                  <input
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder={t.reasonPlaceholder}
+                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className={`mb-2 block text-sm font-semibold ${
+                      darkMode
+                        ? "text-slate-300"
+                        : "text-slate-700"
+                    }`}
+                  >
+                    {t.weight}
+                  </label>
+
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={weight}
+                    onChange={(e) => setWeight(e.target.value)}
+                    placeholder="0.00"
+                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className={`mb-2 block text-sm font-semibold ${
+                      darkMode
+                        ? "text-slate-300"
+                        : "text-slate-700"
+                    }`}
+                  >
+                    {t.temperature}
+                  </label>
+
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={temperature}
+                    onChange={(e) =>
+                      setTemperature(e.target.value)
+                    }
+                    placeholder="38.5"
+                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className={`mb-2 block text-sm font-semibold ${
+                      darkMode
+                        ? "text-slate-300"
+                        : "text-slate-700"
+                    }`}
+                  >
+                    {t.heartRate}
+                  </label>
+
+                  <input
+                    type="number"
+                    value={heartRate}
+                    onChange={(e) =>
+                      setHeartRate(e.target.value)
+                    }
+                    placeholder="120"
+                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className={`mb-2 block text-sm font-semibold ${
+                      darkMode
+                        ? "text-slate-300"
+                        : "text-slate-700"
+                    }`}
+                  >
+                    {t.respiratoryRate}
+                  </label>
+
+                  <input
+                    type="number"
+                    value={respiratoryRate}
+                    onChange={(e) =>
+                      setRespiratoryRate(e.target.value)
+                    }
+                    placeholder="30"
+                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                    }`}
+                  />
+                </div>
+
+                <div className="lg:col-span-2">
+                  <label
+                    className={`mb-2 block text-sm font-semibold ${
+                      darkMode
+                        ? "text-slate-300"
+                        : "text-slate-700"
+                    }`}
+                  >
+                    {t.examinationNotes}
+                  </label>
+
+                  <textarea
+                    rows={5}
+                    value={examination}
+                    onChange={(e) =>
+                      setExamination(e.target.value)
+                    }
+                    placeholder={t.examinationPlaceholder}
+                    className={`w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className={`mb-2 block text-sm font-semibold ${
+                      darkMode
+                        ? "text-slate-300"
+                        : "text-slate-700"
+                    }`}
+                  >
+                    {t.diagnosis}
+                  </label>
+
+                  <textarea
+                    rows={4}
+                    value={diagnosis}
+                    onChange={(e) =>
+                      setDiagnosis(e.target.value)
+                    }
+                    placeholder={t.diagnosisPlaceholder}
+                    className={`w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className={`mb-2 block text-sm font-semibold ${
+                      darkMode
+                        ? "text-slate-300"
+                        : "text-slate-700"
+                    }`}
+                  >
+                    {t.treatment}
+                  </label>
+
+                  <textarea
+                    rows={4}
+                    value={treatment}
+                    onChange={(e) =>
+                      setTreatment(e.target.value)
+                    }
+                    placeholder={t.treatmentPlaceholder}
+                    className={`w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                    }`}
+                  />
+                </div>
+
+                <div className="lg:col-span-2">
+                  <label
+                    className={`mb-2 block text-sm font-semibold ${
+                      darkMode
+                        ? "text-slate-300"
+                        : "text-slate-700"
+                    }`}
+                  >
+                    {t.visitNotes}
+                  </label>
+
+                  <textarea
+                    rows={3}
+                    value={visitNotes}
+                    onChange={(e) =>
+                      setVisitNotes(e.target.value)
+                    }
+                    placeholder={t.visitNotesPlaceholder}
+                    className={`w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={saveVisit}
+                  disabled={saving}
+                  className="rounded-2xl bg-blue-600 px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all duration-300 hover:-translate-y-1 hover:bg-blue-700 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {saving ? t.saving : `✓ ${t.saveVisit}`}
+                </button>
+              </div>
+            </section>
+
+            {/* VISIT HISTORY */}
+            <section>
+              <div className="mb-4">
+                <h2
+                  className={`text-xl font-bold ${
+                    darkMode ? "text-white" : "text-slate-900"
+                  }`}
+                >
+                  📋 {t.visitHistory}
+                </h2>
+              </div>
+
+              {visits.length === 0 ? (
+                <div
+                  className={`rounded-2xl border p-8 text-center ${
+                    darkMode
+                      ? "border-slate-800 bg-slate-900 text-slate-500"
+                      : "border-slate-200 bg-white text-slate-400"
+                  }`}
+                >
+                  {t.noHistory}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {visits.map((visit, index) => (
+                    <div
+                      key={visit.id}
+                      className={`group rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
+                        darkMode
+                          ? "border-slate-800 bg-slate-900 hover:border-slate-700"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-4">
+                          <div
+                            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl font-bold ${
+                              index === 0
+                                ? "bg-blue-600 text-white"
+                                : darkMode
+                                ? "bg-slate-800 text-slate-400"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {index === 0 ? "★" : index + 1}
+                          </div>
+
+                          <div>
+                            <div
+                              className={`font-semibold ${
+                                darkMode
+                                  ? "text-white"
+                                  : "text-slate-900"
+                              }`}
+                            >
+                              {formatDate(
+                                visit.visit_date,
+                                language
+                              )}
+                            </div>
+
+                            <div
+                              className={`mt-1 text-xs ${
+                                darkMode
+                                  ? "text-slate-500"
+                                  : "text-slate-500"
+                              }`}
+                            >
+                              {formatTime(
+                                visit.visit_date,
+                                language
+                              )}
+                            </div>
+
+                            {visit.reason && (
+                              <div
+                                className={`mt-3 text-sm ${
+                                  darkMode
+                                    ? "text-slate-300"
+                                    : "text-slate-600"
+                                }`}
+                              >
+                                {visit.reason}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {visit.weight !== null && (
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                                darkMode
+                                  ? "bg-blue-950 text-blue-300"
+                                  : "bg-blue-50 text-blue-700"
+                              }`}
+                            >
+                              ⚖️ {visit.weight} {t.kg}
+                            </span>
+                          )}
+
+                          {visit.temperature !== null && (
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                                darkMode
+                                  ? "bg-orange-950 text-orange-300"
+                                  : "bg-orange-50 text-orange-700"
+                              }`}
+                            >
+                              🌡️ {visit.temperature}
+                              {t.celsius}
+                            </span>
+                          )}
+
+                          {visit.heart_rate !== null && (
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                                darkMode
+                                  ? "bg-rose-950 text-rose-300"
+                                  : "bg-rose-50 text-rose-700"
+                              }`}
+                            >
+                              ❤️ {visit.heart_rate} {t.bpm}
+                            </span>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedOldVisit(visit)
+                            }
+                            className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md"
+                          >
+                            {t.viewExamination}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
+        {/* OLD VISIT MODAL */}
+        {selectedOldVisit && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+            onClick={() => setSelectedOldVisit(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={`max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border p-6 shadow-2xl ${
+                darkMode
+                  ? "border-slate-800 bg-slate-900"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div>
+                  <h2
+                    className={`text-xl font-bold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    🩺 {t.visitDetails}
+                  </h2>
+
+                  <p
+                    className={`mt-1 text-sm ${
+                      darkMode
+                        ? "text-slate-500"
+                        : "text-slate-500"
+                    }`}
+                  >
+                    {formatDate(
+                      selectedOldVisit.visit_date,
+                      language
+                    )}{" "}
+                    •{" "}
+                    {formatTime(
+                      selectedOldVisit.visit_date,
+                      language
+                    )}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedOldVisit(null)}
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 hover:scale-105 ${
+                    darkMode
+                      ? "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div
+                  className={`rounded-2xl p-4 ${
+                    darkMode
+                      ? "bg-slate-800/70"
+                      : "bg-slate-50"
+                  }`}
+                >
+                  <div className="mb-1 text-xs text-slate-500">
+                    {t.reason}
+                  </div>
+
+                  <div
+                    className={`whitespace-pre-wrap text-sm font-medium ${
+                      darkMode
+                        ? "text-slate-200"
+                        : "text-slate-800"
+                    }`}
+                  >
+                    {selectedOldVisit.reason || "—"}
+                  </div>
+                </div>
+
+                <div
+                  className={`rounded-2xl p-4 ${
+                    darkMode
+                      ? "bg-slate-800/70"
+                      : "bg-slate-50"
+                  }`}
+                >
+                  <div className="mb-1 text-xs text-slate-500">
+                    {t.weight}
+                  </div>
+
+                  <div
+                    className={`text-sm font-medium ${
+                      darkMode
+                        ? "text-slate-200"
+                        : "text-slate-800"
+                    }`}
+                  >
+                    {selectedOldVisit.weight !== null
+                      ? `${selectedOldVisit.weight} ${t.kg}`
+                      : "—"}
+                  </div>
+                </div>
+
+                <div
+                  className={`rounded-2xl p-4 ${
+                    darkMode
+                      ? "bg-slate-800/70"
+                      : "bg-slate-50"
+                  }`}
+                >
+                  <div className="mb-1 text-xs text-slate-500">
+                    {t.temperature}
+                  </div>
+
+                  <div
+                    className={`text-sm font-medium ${
+                      darkMode
+                        ? "text-slate-200"
+                        : "text-slate-800"
+                    }`}
+                  >
+                    {selectedOldVisit.temperature !== null
+                      ? `${selectedOldVisit.temperature}${t.celsius}`
+                      : "—"}
+                  </div>
+                </div>
+
+                <div
+                  className={`rounded-2xl p-4 ${
+                    darkMode
+                      ? "bg-slate-800/70"
+                      : "bg-slate-50"
+                  }`}
+                >
+                  <div className="mb-1 text-xs text-slate-500">
+                    {t.heartRate}
+                  </div>
+
+                  <div
+                    className={`text-sm font-medium ${
+                      darkMode
+                        ? "text-slate-200"
+                        : "text-slate-800"
+                    }`}
+                  >
+                    {selectedOldVisit.heart_rate !== null
+                      ? `${selectedOldVisit.heart_rate} ${t.bpm}`
+                      : "—"}
+                  </div>
+                </div>
+
+                <div
+                  className={`rounded-2xl p-4 ${
+                    darkMode
+                      ? "bg-slate-800/70"
+                      : "bg-slate-50"
+                  }`}
+                >
+                  <div className="mb-1 text-xs text-slate-500">
+                    {t.respiratoryRate}
+                  </div>
+
+                  <div
+                    className={`text-sm font-medium ${
+                      darkMode
+                        ? "text-slate-200"
+                        : "text-slate-800"
+                    }`}
+                  >
+                    {selectedOldVisit.respiratory_rate !==
+                    null
+                      ? `${selectedOldVisit.respiratory_rate} ${t.rpm}`
+                      : "—"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-4">
+                <div>
+                  <div
+                    className={`mb-2 text-sm font-bold ${
+                      darkMode
+                        ? "text-slate-200"
+                        : "text-slate-800"
+                    }`}
+                  >
+                    {t.examinationNotes}
+                  </div>
+
+                  <div
+                    className={`whitespace-pre-wrap rounded-2xl p-4 text-sm leading-7 ${
+                      darkMode
+                        ? "bg-slate-800/70 text-slate-300"
+                        : "bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    {selectedOldVisit.examination || "—"}
+                  </div>
+                </div>
+
+                <div>
+                  <div
+                    className={`mb-2 text-sm font-bold ${
+                      darkMode
+                        ? "text-slate-200"
+                        : "text-slate-800"
+                    }`}
+                  >
+                    {t.diagnosis}
+                  </div>
+
+                  <div
+                    className={`whitespace-pre-wrap rounded-2xl p-4 text-sm leading-7 ${
+                      darkMode
+                        ? "bg-slate-800/70 text-slate-300"
+                        : "bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    {selectedOldVisit.diagnosis || "—"}
+                  </div>
+                </div>
+
+                <div>
+                  <div
+                    className={`mb-2 text-sm font-bold ${
+                      darkMode
+                        ? "text-slate-200"
+                        : "text-slate-800"
+                    }`}
+                  >
+                    {t.treatment}
+                  </div>
+
+                  <div
+                    className={`whitespace-pre-wrap rounded-2xl p-4 text-sm leading-7 ${
+                      darkMode
+                        ? "bg-slate-800/70 text-slate-300"
+                        : "bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    {selectedOldVisit.treatment || "—"}
+                  </div>
+                </div>
+
+                <div>
+                  <div
+                    className={`mb-2 text-sm font-bold ${
+                      darkMode
+                        ? "text-slate-200"
+                        : "text-slate-800"
+                    }`}
+                  >
+                    {t.visitNotes}
+                  </div>
+
+                  <div
+                    className={`whitespace-pre-wrap rounded-2xl p-4 text-sm leading-7 ${
+                      darkMode
+                        ? "bg-slate-800/70 text-slate-300"
+                        : "bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    {selectedOldVisit.notes || "—"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSelectedOldVisit(null)}
+                  className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                    darkMode
+                      ? "bg-slate-800 text-slate-200 hover:bg-slate-700"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  {t.close}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
