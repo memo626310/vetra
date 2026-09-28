@@ -238,6 +238,18 @@ export default function ProductsPage() {
     useState("");
 
 
+  const [showInlineCategory, setShowInlineCategory] =
+
+
+    useState(false);
+
+
+  const [inlineCategoryName, setInlineCategoryName] =
+
+
+    useState("");
+
+
 
 
 
