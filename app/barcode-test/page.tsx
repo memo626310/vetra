@@ -82,8 +82,18 @@ function BarcodeScanner({
     let stopped = false;
     let animationFrame = 0;
     let lastDetectTime = 0;
-    let controls: { stop: () => void } | null = null;
+    let nativeDetector: {
+      detect: (
+        source: CanvasImageSource
+      ) => Promise<Array<{ rawValue?: string }>>;
+    } | null = null;
     let stream: MediaStream | null = null;
+    let controls: { stop: () => void } | null = null;
+    let zxingBusy = false;
+
+    const sourceCanvas = document.createElement("canvas");
+    const enhancedCanvas = document.createElement("canvas");
+    const workCanvas = document.createElement("canvas");
 
     const stopCamera = () => {
       stopped = true;
@@ -130,33 +140,28 @@ function BarcodeScanner({
             max: number;
             step?: number;
           };
+          torch?: boolean;
         };
 
         const advanced: MediaTrackConstraintSet[] = [];
 
         if (capabilities.focusMode?.includes("continuous")) {
-          advanced.push({
-            focusMode: "continuous",
-          } as MediaTrackConstraintSet);
+          advanced.push({ focusMode: "continuous" } as MediaTrackConstraintSet);
         }
 
-        /*
-         * Zoom بسيط فقط لو الكاميرا بتدعمه.
-         * الهدف إن الباركود الصغير يفضل مقروء من مسافة طبيعية،
-         * من غير ما نقص الـ field of view بشكل مبالغ فيه.
-         */
+        // Mild optical/digital camera zoom only. Too much zoom can make
+        // small/soft barcodes harder to decode.
         if (capabilities.zoom) {
           const minZoom = capabilities.zoom.min;
           const maxZoom = capabilities.zoom.max;
+          const step = capabilities.zoom.step || 0.1;
           const targetZoom = Math.min(
             maxZoom,
-            Math.max(minZoom, minZoom + 0.5)
+            Math.max(minZoom, minZoom + Math.max(step, 0.5))
           );
 
           if (targetZoom > minZoom) {
-            advanced.push({
-              zoom: targetZoom,
-            } as MediaTrackConstraintSet);
+            advanced.push({ zoom: targetZoom } as MediaTrackConstraintSet);
           }
         }
 
@@ -164,7 +169,7 @@ function BarcodeScanner({
           await track.applyConstraints({ advanced });
         }
       } catch {
-        // Focus/zoom controls are optional and unsupported on some devices.
+        // Camera capabilities differ by device/browser.
       }
     };
 
@@ -174,18 +179,12 @@ function BarcodeScanner({
           formats?: string[];
         }) => {
           detect: (
-            source: HTMLVideoElement
-          ) => Promise<
-            Array<{
-              rawValue?: string;
-            }>
-          >;
+            source: CanvasImageSource
+          ) => Promise<Array<{ rawValue?: string }>>;
         };
       };
 
-      if (!browserWindow.BarcodeDetector) {
-        return null;
-      }
+      if (!browserWindow.BarcodeDetector) return null;
 
       try {
         return new browserWindow.BarcodeDetector({
@@ -205,12 +204,236 @@ function BarcodeScanner({
       }
     };
 
-    async function startNativeScanner() {
-      const detector = getNativeBarcodeDetector();
+    const getVideoDimensions = (video: HTMLVideoElement) => {
+      const width = video.videoWidth || 1920;
+      const height = video.videoHeight || 1080;
+      return { width, height };
+    };
 
-      if (!detector || !navigator.mediaDevices?.getUserMedia) {
-        return false;
+    const drawBarcodeRegion = (
+      video: HTMLVideoElement,
+      scale = 2
+    ) => {
+      const { width, height } = getVideoDimensions(video);
+
+      // Large central ROI. It is intentionally generous so the user does not
+      // have to place the barcode perfectly inside the guide.
+      const cropWidth = Math.floor(width * 0.82);
+      const cropHeight = Math.floor(height * 0.62);
+      const sx = Math.floor((width - cropWidth) / 2);
+      const sy = Math.floor((height - cropHeight) / 2);
+
+      const targetWidth = Math.min(1800, Math.max(1000, Math.floor(cropWidth * scale)));
+      const targetHeight = Math.min(1200, Math.max(600, Math.floor(cropHeight * scale)));
+
+      sourceCanvas.width = targetWidth;
+      sourceCanvas.height = targetHeight;
+
+      const sourceContext = sourceCanvas.getContext("2d", {
+        willReadFrequently: true,
+      });
+
+      if (!sourceContext) return null;
+
+      sourceContext.imageSmoothingEnabled = true;
+      sourceContext.imageSmoothingQuality = "high";
+      sourceContext.drawImage(
+        video,
+        sx,
+        sy,
+        cropWidth,
+        cropHeight,
+        0,
+        0,
+        targetWidth,
+        targetHeight
+      );
+
+      return sourceCanvas;
+    };
+
+    const makeEnhancedCanvas = (
+      input: HTMLCanvasElement,
+      mode: "contrast" | "threshold" | "sharpen"
+    ) => {
+      const width = input.width;
+      const height = input.height;
+
+      enhancedCanvas.width = width;
+      enhancedCanvas.height = height;
+
+      const inputContext = input.getContext("2d", {
+        willReadFrequently: true,
+      });
+      const outputContext = enhancedCanvas.getContext("2d", {
+        willReadFrequently: true,
+      });
+
+      if (!inputContext || !outputContext) return null;
+
+      const image = inputContext.getImageData(0, 0, width, height);
+      const src = image.data;
+      const out = new Uint8ClampedArray(src.length);
+
+      if (mode === "sharpen") {
+        const copy = new Uint8ClampedArray(src);
+
+        for (let y = 1; y < height - 1; y += 1) {
+          for (let x = 1; x < width - 1; x += 1) {
+            const i = (y * width + x) * 4;
+            const left = i - 4;
+            const right = i + 4;
+            const top = i - width * 4;
+            const bottom = i + width * 4;
+
+            for (let channel = 0; channel < 3; channel += 1) {
+              const value =
+                copy[i + channel] * 5 -
+                copy[left + channel] -
+                copy[right + channel] -
+                copy[top + channel] -
+                copy[bottom + channel];
+
+              out[i + channel] = Math.max(0, Math.min(255, value));
+            }
+
+            out[i + 3] = 255;
+          }
+        }
+      } else {
+        for (let i = 0; i < src.length; i += 4) {
+          const r = src[i];
+          const g = src[i + 1];
+          const b = src[i + 2];
+
+          // Perceived luminance.
+          let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+          if (mode === "contrast") {
+            // Stronger separation between bars and the background.
+            gray = (gray - 128) * 1.75 + 128;
+            gray = Math.max(0, Math.min(255, gray));
+          } else {
+            // A deliberately simple local-ish threshold. ZXing still gets
+            // several variants, so we don't depend on one threshold value.
+            gray = gray > 150 ? 255 : 0;
+          }
+
+          out[i] = gray;
+          out[i + 1] = gray;
+          out[i + 2] = gray;
+          out[i + 3] = 255;
+        }
       }
+
+      const output = new ImageData(out, width, height);
+      outputContext.putImageData(output, 0, 0);
+      return enhancedCanvas;
+    };
+
+    const makeTighterCrop = (input: HTMLCanvasElement) => {
+      const width = input.width;
+      const height = input.height;
+      const cropWidth = Math.floor(width * 0.88);
+      const cropHeight = Math.floor(height * 0.72);
+      const sx = Math.floor((width - cropWidth) / 2);
+      const sy = Math.floor((height - cropHeight) / 2);
+
+      workCanvas.width = Math.min(1800, Math.max(1100, cropWidth));
+      workCanvas.height = Math.min(1200, Math.max(700, cropHeight));
+
+      const context = workCanvas.getContext("2d", {
+        willReadFrequently: true,
+      });
+
+      if (!context) return null;
+
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
+      context.drawImage(
+        input,
+        sx,
+        sy,
+        cropWidth,
+        cropHeight,
+        0,
+        0,
+        workCanvas.width,
+        workCanvas.height
+      );
+
+      return workCanvas;
+    };
+
+    const tryNativeOnCanvases = async (
+      canvases: HTMLCanvasElement[]
+    ) => {
+      if (!nativeDetector) return "";
+
+      for (const canvas of canvases) {
+        if (stopped) return "";
+
+        try {
+          const results = await nativeDetector.detect(canvas);
+          const value = results
+            .map((item) => item.rawValue?.trim() || "")
+            .find(Boolean);
+
+          if (value) return value;
+        } catch {
+          // Try the next processed frame.
+        }
+      }
+
+      return "";
+    };
+
+    const tryZxingOnCanvases = async (
+      reader: BrowserMultiFormatReader,
+      canvases: HTMLCanvasElement[]
+    ) => {
+      for (const canvas of canvases) {
+        if (stopped) return "";
+
+        try {
+          const result = reader.decodeFromCanvas(canvas);
+          const value = result.getText().trim();
+          if (value) return value;
+        } catch {
+          // Expected when a frame does not contain a decodable barcode.
+        }
+      }
+
+      return "";
+    };
+
+    const buildProcessingVariants = (video: HTMLVideoElement) => {
+      const base = drawBarcodeRegion(video, 2);
+      if (!base) return [];
+
+      const tighter = makeTighterCrop(base);
+      const contrast = makeEnhancedCanvas(base, "contrast");
+      const sharpen = makeEnhancedCanvas(base, "sharpen");
+      const threshold = makeEnhancedCanvas(base, "threshold");
+
+      return [
+        tighter,
+        base,
+        contrast,
+        sharpen,
+        threshold,
+      ].filter(Boolean) as HTMLCanvasElement[];
+    };
+
+    const finishScan = (value: string) => {
+      if (!value || stopped) return;
+      stopped = true;
+      onScanRef.current(value);
+      stopCamera();
+    };
+
+    async function startSmartScanner() {
+      if (!navigator.mediaDevices?.getUserMedia) return false;
 
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -223,68 +446,75 @@ function BarcodeScanner({
           },
         });
 
-        if (stopped || !videoRef.current) {
+        const video = videoRef.current;
+
+        if (stopped || !video) {
           stopCamera();
           return true;
         }
 
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        video.srcObject = stream;
+        await video.play();
         await applyCameraEnhancements(stream);
+
+        nativeDetector = getNativeBarcodeDetector();
+
+        const reader = new BrowserMultiFormatReader(undefined, {
+          delayBetweenScanAttempts: 40,
+          delayBetweenScanSuccess: 200,
+          tryPlayVideoTimeout: 5000,
+        });
+
+        readerRef.current = reader;
 
         const detectLoop = async (timestamp: number) => {
           if (stopped || !videoRef.current) return;
 
           animationFrame = requestAnimationFrame(detectLoop);
 
-          if (timestamp - lastDetectTime < 45) return;
+          if (timestamp - lastDetectTime < 110) return;
+          if (zxingBusy) return;
+
           lastDetectTime = timestamp;
 
-          if (
-            videoRef.current.readyState <
-            HTMLMediaElement.HAVE_CURRENT_DATA
-          ) {
-            return;
-          }
+          if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+
+          zxingBusy = true;
 
           try {
-            const results = await detector.detect(
-              videoRef.current
-            );
+            const canvases = buildProcessingVariants(video);
+            if (!canvases.length) return;
 
-            if (stopped) return;
+            // Native detector gets the fast path on browsers that support it.
+            const nativeValue = await tryNativeOnCanvases(canvases);
+            if (nativeValue) {
+              finishScan(nativeValue);
+              return;
+            }
 
-            const value = results
-              .map((item) => item.rawValue?.trim() || "")
-              .find(Boolean);
-
-            if (!value) return;
-
-            stopped = true;
-            onScanRef.current(value);
-            stopCamera();
-          } catch {
-            // Keep scanning. Detection can fail on individual frames.
+            // ZXing then gets several high-resolution/preprocessed variants.
+            const zxingValue = await tryZxingOnCanvases(reader, canvases);
+            if (zxingValue) {
+              finishScan(zxingValue);
+              return;
+            }
+          } finally {
+            zxingBusy = false;
           }
         };
 
         animationFrame = requestAnimationFrame(detectLoop);
         return true;
       } catch (error) {
-        console.warn(
-          "Native barcode scanner unavailable:",
-          error
-        );
-
+        console.warn("Smart barcode scanner unavailable:", error);
         stopCamera();
         return false;
       }
     }
 
-    async function startZxingFallback() {
+    async function startFallbackScanner() {
       try {
         const video = videoRef.current;
-
         if (!video || stopped) return;
 
         const reader = new BrowserMultiFormatReader(undefined, {
@@ -295,36 +525,28 @@ function BarcodeScanner({
 
         readerRef.current = reader;
 
-        const constraints: MediaStreamConstraints = {
-          audio: false,
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30, max: 60 },
-          },
-        };
-
         controls = await reader.decodeFromConstraints(
-          constraints,
+          {
+            audio: false,
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              frameRate: { ideal: 30, max: 60 },
+            },
+          },
           video,
-          async (result) => {
+          (result) => {
             if (!result || stopped) return;
 
             const value = result.getText().trim();
-
-            if (!value) return;
-
-            stopped = true;
-            onScanRef.current(value);
-            stopCamera();
+            if (value) finishScan(value);
           }
         );
 
         if (stopped) return;
 
         const currentStream = video.srcObject as MediaStream | null;
-
         if (currentStream) {
           stream = currentStream;
           await applyCameraEnhancements(currentStream);
@@ -337,13 +559,9 @@ function BarcodeScanner({
     }
 
     async function startScanner() {
-      const nativeStarted = await startNativeScanner();
-
+      const started = await startSmartScanner();
       if (stopped) return;
-
-      if (!nativeStarted) {
-        await startZxingFallback();
-      }
+      if (!started) await startFallbackScanner();
     }
 
     void startScanner();
@@ -355,16 +573,15 @@ function BarcodeScanner({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4">
       <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
           <div>
             <div className="font-bold text-gray-900 dark:text-white">
-              Scan Barcode
+              Scan Barcode V3
             </div>
-
             <div className="text-xs text-gray-500">
-              وجّه الكاميرا للباركود — مش لازم تقرّبه جدًا
+              تحسين تلقائي للباركود الصغير والـ low contrast
             </div>
           </div>
 
@@ -381,29 +598,27 @@ function BarcodeScanner({
         <div className="relative bg-black">
           <video
             ref={videoRef}
-            className="h-80 w-full object-cover"
+            className="h-[70vh] max-h-[520px] min-h-[320px] w-full object-cover"
             autoPlay
             muted
             playsInline
           />
 
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="relative h-32 w-80">
-              <div className="absolute left-0 top-0 h-8 w-8 border-l-4 border-t-4 border-blue-500" />
-              <div className="absolute right-0 top-0 h-8 w-8 border-r-4 border-t-4 border-blue-500" />
-              <div className="absolute bottom-0 left-0 h-8 w-8 border-b-4 border-l-4 border-blue-500" />
-              <div className="absolute bottom-0 right-0 h-8 w-8 border-b-4 border-r-4 border-blue-500" />
-              <div className="absolute left-2 right-2 top-1/2 h-0.5 bg-blue-500" />
+            <div className="relative h-36 w-[88%] max-w-[420px]">
+              <div className="absolute left-0 top-0 h-9 w-9 border-l-4 border-t-4 border-blue-500" />
+              <div className="absolute right-0 top-0 h-9 w-9 border-r-4 border-t-4 border-blue-500" />
+              <div className="absolute bottom-0 left-0 h-9 w-9 border-b-4 border-l-4 border-blue-500" />
+              <div className="absolute bottom-0 right-0 h-9 w-9 border-b-4 border-r-4 border-blue-500" />
+              <div className="absolute left-2 right-2 top-1/2 h-0.5 bg-blue-500/90 shadow-[0_0_8px_rgba(59,130,246,0.9)]" />
             </div>
           </div>
         </div>
 
         <div className="px-4 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-          حرّك الموبايل بهدوء — الـ autofocus والـ scanner هيحاولوا يلقطوا
-          الباركود حتى لو بعيد نسبيًا.
+          خليك على مسافة طبيعية وثبّت الموبايل ثانية واحدة. الـ V3 بيكبّر المنطقة ويجرّب أكثر من معالجة للصورة تلقائيًا.
         </div>
       </div>
     </div>
   );
 }
-
