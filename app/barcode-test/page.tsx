@@ -4,256 +4,181 @@ import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 
 export default function BarcodeTestPage() {
+  const [barcode, setBarcode] = useState("");
+  const [scannerOpen, setScannerOpen] = useState(false);
+
+  return (
+    <main className="min-h-screen bg-gray-50 p-6 dark:bg-gray-950">
+      <div className="mx-auto max-w-2xl">
+        <div className="rounded-2xl bg-white p-6 shadow-sm dark:bg-gray-900">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Barcode Scanner Test
+          </h1>
+
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            جرّب قراءة الباركود بالكاميرا أو اكتبه يدويًا.
+          </p>
+
+          <div className="mt-6 flex gap-3">
+            <input
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              placeholder="اكتب الباركود يدويًا"
+              className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 outline-none focus:border-blue-500 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+            />
+
+            <button
+              type="button"
+              onClick={() => setScannerOpen(true)}
+              className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"
+            >
+              📷 Scan
+            </button>
+          </div>
+
+          <div className="mt-6 rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30">
+            <div className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+              Result
+            </div>
+            <div className="mt-1 break-all text-xl font-bold text-gray-900 dark:text-white">
+              {barcode || "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {scannerOpen && (
+        <BarcodeScanner
+          onScan={(value) => {
+            setBarcode(value);
+            setScannerOpen(false);
+          }}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
+    </main>
+  );
+}
+
+function BarcodeScanner({
+  onScan,
+  onClose,
+}: {
+  onScan: (barcode: string) => void;
+  onClose: () => void;
+}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
 
-  const [scanning, setScanning] = useState(false);
-  const [barcode, setBarcode] = useState("");
-  const [error, setError] = useState("");
-  const [manualCode, setManualCode] = useState("");
-
-  async function startScanner() {
-    setError("");
-    setBarcode("");
-    setScanning(true);
-
-    try {
-      const reader = new BrowserMultiFormatReader();
-      readerRef.current = reader;
-
-      const devices =
-        await BrowserMultiFormatReader.listVideoInputDevices();
-
-      if (!devices.length) {
-        throw new Error("No camera found");
-      }
-
-      const selectedDevice = devices[devices.length - 1];
-
-      await reader.decodeFromVideoDevice(
-        selectedDevice.deviceId,
-        videoRef.current!,
-        (result) => {
-          if (result) {
-            const value = result.getText();
-
-            setBarcode(value);
-            setScanning(false);
-
-            reader.reset();
-          }
-        }
-      );
-    } catch (err) {
-      console.error(err);
-      setScanning(false);
-      setError(
-        "مش قادر أفتح الكاميرا. تأكد إنك سمحت للموقع باستخدام الكاميرا."
-      );
-    }
-  }
-
-  function stopScanner() {
-    try {
-      readerRef.current?.reset();
-    } catch {}
-
-    setScanning(false);
-  }
-
-  function useManualCode() {
-    const value = manualCode.trim();
-
-    if (!value) return;
-
-    setBarcode(value);
-    setManualCode("");
-  }
-
   useEffect(() => {
-    return () => {
-      try {
-        readerRef.current?.reset();
-      } catch {}
+    const reader = new BrowserMultiFormatReader();
+    readerRef.current = reader;
+
+    let stopped = false;
+
+    const stopCamera = () => {
+      stopped = true;
+
+      const video = videoRef.current;
+
+      if (video?.srcObject) {
+        const stream = video.srcObject as MediaStream;
+        stream.getTracks().forEach((track) => track.stop());
+        video.srcObject = null;
+      }
     };
-  }, []);
+
+    async function startScanner() {
+      try {
+        const devices =
+          await BrowserMultiFormatReader.listVideoInputDevices();
+
+        if (!devices.length) {
+          alert("لم يتم العثور على كاميرا");
+          onClose();
+          return;
+        }
+
+        const deviceId = devices[devices.length - 1]?.deviceId;
+
+        if (!videoRef.current || stopped) return;
+
+        reader.decodeFromVideoDevice(
+          deviceId,
+          videoRef.current,
+          (result) => {
+            if (!result || stopped) return;
+
+            const value = result.getText().trim();
+            if (!value) return;
+
+            stopped = true;
+            onScan(value);
+            stopCamera();
+          }
+        );
+      } catch (error) {
+        console.error("Barcode scanner error:", error);
+        alert("تعذر تشغيل الكاميرا. تأكد من السماح للموقع باستخدام الكاميرا.");
+        onClose();
+      }
+    }
+
+    startScanner();
+
+    return () => {
+      stopCamera();
+      readerRef.current = null;
+    };
+  }, [onScan, onClose]);
 
   return (
-    <main
-      dir="rtl"
-      className="min-h-screen bg-[#F7F8FA] px-5 py-10 text-slate-900"
-    >
-      <div className="mx-auto max-w-xl">
-
-        {/* HEADER */}
-
-        <div className="mb-8">
-          <a
-            href="/"
-            className="text-sm font-bold text-slate-400 hover:text-blue-600"
-          >
-            ← الرئيسية
-          </a>
-
-          <h1 className="mt-5 text-3xl font-black">
-            تجربة قارئ الباركود
-          </h1>
-
-          <p className="mt-2 text-slate-500">
-            تجربة الكاميرا وقراءة الباركود قبل دمجه مع المخزون
-          </p>
-        </div>
-
-        {/* SCANNER */}
-
-        <section className="overflow-hidden rounded-[28px] bg-white shadow-sm">
-
-          <div className="relative aspect-square bg-black">
-
-            <video
-              ref={videoRef}
-              className="h-full w-full object-cover"
-              muted
-              playsInline
-            />
-
-            {!scanning && !barcode && (
-              <div className="absolute inset-0 flex items-center justify-center p-8 text-center">
-                <div>
-                  <div className="mb-4 text-6xl">📷</div>
-
-                  <p className="font-bold text-white">
-                    اضغط فتح الكاميرا
-                  </p>
-
-                  <p className="mt-2 text-sm text-white/60">
-                    ووجّه الكاميرا ناحية الباركود
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {scanning && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="h-40 w-72 rounded-2xl border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
-              </div>
-            )}
-
-          </div>
-
-          {/* CONTROLS */}
-
-          <div className="p-6">
-
-            {!scanning ? (
-              <button
-                onClick={startScanner}
-                className="w-full rounded-2xl bg-slate-900 px-6 py-4 font-black text-white transition hover:bg-slate-800"
-              >
-                📷 فتح الكاميرا
-              </button>
-            ) : (
-              <button
-                onClick={stopScanner}
-                className="w-full rounded-2xl bg-red-600 px-6 py-4 font-black text-white transition hover:bg-red-700"
-              >
-                إيقاف الكاميرا
-              </button>
-            )}
-
-            {/* ERROR */}
-
-            {error && (
-              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-center font-bold text-red-600">
-                {error}
-              </div>
-            )}
-
-            {/* RESULT */}
-
-            {barcode && (
-              <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-
-                <p className="text-sm font-bold text-emerald-600">
-                  تم قراءة الباركود ✓
-                </p>
-
-                <div
-                  dir="ltr"
-                  className="mt-2 break-all text-center text-2xl font-black text-emerald-900"
-                >
-                  {barcode}
-                </div>
-
-                <button
-                  onClick={() => {
-                    setBarcode("");
-                    startScanner();
-                  }}
-                  className="mt-4 w-full rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white"
-                >
-                  قراءة باركود آخر
-                </button>
-
-              </div>
-            )}
-
-            {/* MANUAL */}
-
-            <div className="mt-8 border-t border-slate-100 pt-6">
-
-              <p className="mb-3 text-sm font-bold text-slate-600">
-                أو أدخل الباركود يدويًا
-              </p>
-
-              <div className="flex gap-2">
-
-                <input
-                  dir="ltr"
-                  value={manualCode}
-                  onChange={(e) =>
-                    setManualCode(e.target.value)
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      useManualCode();
-                    }
-                  }}
-                  placeholder="Barcode"
-                  className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-500"
-                />
-
-                <button
-                  onClick={useManualCode}
-                  className="rounded-xl bg-blue-600 px-5 py-3 font-bold text-white"
-                >
-                  إضافة
-                </button>
-
-              </div>
-
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+          <div>
+            <div className="font-bold text-gray-900 dark:text-white">
+              Scan Barcode
             </div>
-
+            <div className="text-xs text-gray-500">
+              وجّه الكاميرا ناحية الباركود
+            </div>
           </div>
 
-        </section>
-
-        {/* INFO */}
-
-        <div className="mt-5 rounded-2xl bg-white p-5 text-sm text-slate-500 shadow-sm">
-
-          <p className="font-bold text-slate-700">
-            🧪 Prototype
-          </p>
-
-          <p className="mt-2">
-            الرقم المقروء حاليًا لا يتم حفظه في قاعدة البيانات.
-            دي مجرد تجربة للـ Barcode Scanner.
-          </p>
-
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-3 py-2 text-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+            aria-label="Close scanner"
+          >
+            ✕
+          </button>
         </div>
 
+        <div className="relative bg-black">
+          <video
+            ref={videoRef}
+            className="h-80 w-full object-cover"
+            autoPlay
+            muted
+            playsInline
+          />
+
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="relative h-32 w-80">
+              <div className="absolute left-0 top-0 h-8 w-8 border-l-4 border-t-4 border-blue-500" />
+              <div className="absolute right-0 top-0 h-8 w-8 border-r-4 border-t-4 border-blue-500" />
+              <div className="absolute bottom-0 left-0 h-8 w-8 border-b-4 border-l-4 border-blue-500" />
+              <div className="absolute bottom-0 right-0 h-8 w-8 border-b-4 border-r-4 border-blue-500" />
+              <div className="absolute left-2 right-2 top-1/2 h-0.5 bg-blue-500" />
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+          بمجرد قراءة الباركود، الكاميرا هتقف تلقائيًا.
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
