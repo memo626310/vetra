@@ -71,13 +71,25 @@ function BarcodeScanner({
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
 
   useEffect(() => {
-    const reader = new BrowserMultiFormatReader();
+    const reader = new BrowserMultiFormatReader(undefined, {
+      delayBetweenScanAttempts: 70,
+      delayBetweenScanSuccess: 250,
+      tryPlayVideoTimeout: 5000,
+    });
+
     readerRef.current = reader;
 
     let stopped = false;
+    let controls: any = null;
 
     const stopCamera = () => {
       stopped = true;
+
+      try {
+        controls?.stop?.();
+      } catch {
+        // ignore
+      }
 
       const video = videoRef.current;
 
@@ -90,21 +102,28 @@ function BarcodeScanner({
 
     async function startScanner() {
       try {
-        const devices =
-          await BrowserMultiFormatReader.listVideoInputDevices();
-
-        if (!devices.length) {
-          alert("لم يتم العثور على كاميرا");
-          onClose();
-          return;
-        }
-
-        const deviceId = devices[devices.length - 1]?.deviceId;
-
         if (!videoRef.current || stopped) return;
 
-        reader.decodeFromVideoDevice(
-          deviceId,
+        /*
+         * نطلب الكاميرا الخلفية بدقة عالية نسبيًا.
+         * الدقة الأعلى بتخلي الباركود الصغير يفضل واضح حتى من مسافة أبعد.
+         * continuous focus مهم جدًا على الموبايل لو المتصفح بيدعمه.
+         */
+        const constraints: MediaStreamConstraints = {
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30, max: 60 },
+            ...( {
+              focusMode: "continuous",
+            } as any ),
+          },
+        };
+
+        controls = await reader.decodeFromConstraints(
+          constraints,
           videoRef.current,
           (result) => {
             if (!result || stopped) return;
@@ -117,9 +136,35 @@ function BarcodeScanner({
             stopCamera();
           }
         );
+
+        /*
+         * بعد تشغيل الكاميرا نحاول إجبار الـ autofocus المستمر
+         * لو الجهاز والمتصفح بيسمحوا بده.
+         */
+        const stream = videoRef.current?.srcObject as MediaStream | null;
+        const track = stream?.getVideoTracks?.()[0];
+
+        if (track) {
+          try {
+            const capabilities = track.getCapabilities?.() as any;
+            const advanced: any[] = [];
+
+            if (capabilities?.focusMode?.includes?.("continuous")) {
+              advanced.push({ focusMode: "continuous" });
+            }
+
+            if (advanced.length) {
+              await track.applyConstraints({ advanced });
+            }
+          } catch {
+            // Some browsers do not expose focus controls.
+          }
+        }
       } catch (error) {
         console.error("Barcode scanner error:", error);
-        alert("تعذر تشغيل الكاميرا. تأكد من السماح للموقع باستخدام الكاميرا.");
+        alert(
+          "تعذر تشغيل الكاميرا. تأكد من السماح للموقع باستخدام الكاميرا."
+        );
         onClose();
       }
     }
@@ -141,7 +186,7 @@ function BarcodeScanner({
               Scan Barcode
             </div>
             <div className="text-xs text-gray-500">
-              وجّه الكاميرا ناحية الباركود
+              خلي الباركود ظاهر بالكامل — مش لازم تقرّبه من الكاميرا
             </div>
           </div>
 
@@ -176,7 +221,7 @@ function BarcodeScanner({
         </div>
 
         <div className="px-4 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-          بمجرد قراءة الباركود، الكاميرا هتقف تلقائيًا.
+          قرب أو بعّد الموبايل براحتك — الكاميرا هتحاول تعمل فوكس تلقائيًا وتقرأ الباركود بسرعة.
         </div>
       </div>
     </div>

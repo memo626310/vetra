@@ -3647,699 +3647,198 @@ export default function ProductsPage() {
 
 
 
-function BarcodeScanner({
 
-
-  onScan,
-
-
-  onClose,
-
-
+function Field({
+  label,
+  value,
+  onChange,
+  type = "text",
 }: {
-
-
-  onScan: (barcode: string) => void;
-
-
-  onClose: () => void;
-
-
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
 }) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-semibold">
+        {label}
+      </label>
 
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 outline-none focus:border-blue-500 dark:border-gray-700 dark:bg-gray-950"
+      />
+    </div>
+  );
+}
 
-  const videoRef =
-
-
-    useRef<HTMLVideoElement | null>(
-
-
-      null
-
-
-    );
-
-
-
-
-
-
-  const readerRef =
-
-
-    useRef<BrowserMultiFormatReader | null>(
-
-
-      null
-
-
-    );
-
-
-
-
-
+function BarcodeScanner({
+  onScan,
+  onClose,
+}: {
+  onScan: (barcode: string) => void;
+  onClose: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
 
   useEffect(() => {
+    const reader = new BrowserMultiFormatReader(undefined, {
+      delayBetweenScanAttempts: 70,
+      delayBetweenScanSuccess: 250,
+      tryPlayVideoTimeout: 5000,
+    });
 
-
-    const reader =
-
-
-      new BrowserMultiFormatReader();
-
-
-
-
-
-
-    readerRef.current =
-
-
-      reader;
-
-
-
-
-
+    readerRef.current = reader;
 
     let stopped = false;
+    let controls: any = null;
 
-
-
-
-
-
-    async function startScanner() {
-
+    const stopCamera = () => {
+      stopped = true;
 
       try {
-
-
-        const devices =
-
-
-          await BrowserMultiFormatReader.listVideoInputDevices();
-
-
-
-
-
-
-        if (
-
-
-          !devices ||
-
-
-          devices.length === 0
-
-
-        ) {
-
-
-          alert(
-
-
-            "لم يتم العثور على كاميرا"
-
-
-          );
-
-
-
-
-
-
-          onClose();
-
-
-          return;
-
-
-        }
-
-
-
-
-
-
-        /*
-
-
-         * بنختار آخر كاميرا متاحة.
-
-
-         * على الموبايل غالبًا بتكون الكاميرا الخلفية.
-
-
-         */
-
-
-        const deviceId =
-
-
-          devices[
-
-
-            devices.length - 1
-
-
-          ]?.deviceId;
-
-
-
-
-
-
-        if (
-
-
-          !videoRef.current ||
-
-
-          stopped
-
-
-        ) {
-
-
-          return;
-
-
-        }
-
-
-
-
-
-
-        reader.decodeFromVideoDevice(
-
-
-          deviceId,
-
-
-          videoRef.current,
-
-
-          (result) => {
-
-
-            if (
-
-
-              !result ||
-
-
-              stopped
-
-
-            ) {
-
-
-              return;
-
-
-            }
-
-
-
-
-
-
-            const barcode =
-
-
-              result
-
-
-                .getText()
-
-
-                .trim();
-
-
-
-
-
-
-            if (!barcode) {
-
-
-              return;
-
-
-            }
-
-
-
-
-
-
-            stopped = true;
-
-
-
-
-
-
-            onScan(barcode);
-
-
-
-
-
-
-            if (videoRef.current?.srcObject) {
-              const stream = videoRef.current.srcObject as MediaStream;
-              stream.getTracks().forEach((track) => track.stop());
-              videoRef.current.srcObject = null;
-            }
-
-
-          }
-
-
-        );
-
-
-      } catch (error) {
-
-
-        console.error(
-
-
-          "Barcode scanner error:",
-
-
-          error
-
-
-        );
-
-
-
-
-
-
-        alert(
-
-
-          "تعذر تشغيل الكاميرا. تأكد من السماح للموقع باستخدام الكاميرا."
-
-
-        );
-
-
-
-
-
-
-        onClose();
-
-
+        controls?.stop?.();
+      } catch {
+        // ignore
       }
 
+      const video = videoRef.current;
 
+      if (video?.srcObject) {
+        const stream = video.srcObject as MediaStream;
+        stream.getTracks().forEach((track) => track.stop());
+        video.srcObject = null;
+      }
+    };
+
+    async function startScanner() {
+      try {
+        if (!videoRef.current || stopped) return;
+
+        /*
+         * نطلب الكاميرا الخلفية بدقة عالية نسبيًا.
+         * الدقة الأعلى بتخلي الباركود الصغير يفضل واضح حتى من مسافة أبعد.
+         * continuous focus مهم جدًا على الموبايل لو المتصفح بيدعمه.
+         */
+        const constraints: MediaStreamConstraints = {
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30, max: 60 },
+            ...( {
+              focusMode: "continuous",
+            } as any ),
+          },
+        };
+
+        controls = await reader.decodeFromConstraints(
+          constraints,
+          videoRef.current,
+          (result) => {
+            if (!result || stopped) return;
+
+            const value = result.getText().trim();
+            if (!value) return;
+
+            stopped = true;
+            onScan(value);
+            stopCamera();
+          }
+        );
+
+        /*
+         * بعد تشغيل الكاميرا نحاول إجبار الـ autofocus المستمر
+         * لو الجهاز والمتصفح بيسمحوا بده.
+         */
+        const stream = videoRef.current?.srcObject as MediaStream | null;
+        const track = stream?.getVideoTracks?.()[0];
+
+        if (track) {
+          try {
+            const capabilities = track.getCapabilities?.() as any;
+            const advanced: any[] = [];
+
+            if (capabilities?.focusMode?.includes?.("continuous")) {
+              advanced.push({ focusMode: "continuous" });
+            }
+
+            if (advanced.length) {
+              await track.applyConstraints({ advanced });
+            }
+          } catch {
+            // Some browsers do not expose focus controls.
+          }
+        }
+      } catch (error) {
+        console.error("Barcode scanner error:", error);
+        alert(
+          "تعذر تشغيل الكاميرا. تأكد من السماح للموقع باستخدام الكاميرا."
+        );
+        onClose();
+      }
     }
-
-
-
-
-
 
     startScanner();
 
-
-
-
-
-
     return () => {
-
-
-      stopped = true;
-
-
-
-
-
-
-      try {
-
-
-        if (videoRef.current?.srcObject) {
-          const stream = videoRef.current.srcObject as MediaStream;
-          stream.getTracks().forEach((track) => track.stop());
-          videoRef.current.srcObject = null;
-        }
-
-
-      } catch {
-
-
-        // ignore
-
-
-      }
-
-
+      stopCamera();
+      readerRef.current = null;
     };
-
-
   }, [onScan, onClose]);
 
-
-
-
-
-
   return (
-
-
-    <div className="mt-4 overflow-hidden rounded-2xl border border-blue-200 bg-black shadow-lg dark:border-blue-900">
-
-
-
-
-
-
-      <div className="relative">
-
-
-
-
-
-
-        <video
-
-
-          ref={videoRef}
-
-
-          className="h-64 w-full object-cover"
-
-
-          autoPlay
-
-
-          muted
-
-
-          playsInline
-
-
-        />
-
-
-
-
-
-
-        {/* SCAN FRAME */}
-
-
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-
-
-
-
-
-
-          <div className="relative h-28 w-72">
-
-
-
-
-
-
-            <div className="absolute left-0 top-0 h-8 w-8 border-l-4 border-t-4 border-blue-500" />
-
-
-
-
-
-
-            <div className="absolute right-0 top-0 h-8 w-8 border-r-4 border-t-4 border-blue-500" />
-
-
-
-
-
-
-            <div className="absolute bottom-0 left-0 h-8 w-8 border-b-4 border-l-4 border-blue-500" />
-
-
-
-
-
-
-            <div className="absolute bottom-0 right-0 h-8 w-8 border-b-4 border-r-4 border-blue-500" />
-
-
-
-
-
-
-            <div className="absolute left-3 right-3 top-1/2 h-0.5 bg-red-500 shadow-lg" />
-
-
-
-
-
-
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+          <div>
+            <div className="font-bold text-gray-900 dark:text-white">
+              Scan Barcode
+            </div>
+            <div className="text-xs text-gray-500">
+              خلي الباركود ظاهر بالكامل — مش لازم تقرّبه من الكاميرا
+            </div>
           </div>
 
-
-
-
-
-
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-3 py-2 text-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+            aria-label="Close scanner"
+          >
+            ✕
+          </button>
         </div>
 
+        <div className="relative bg-black">
+          <video
+            ref={videoRef}
+            className="h-80 w-full object-cover"
+            autoPlay
+            muted
+            playsInline
+          />
 
-
-
-
-
-      </div>
-
-
-
-
-
-
-      <div className="flex items-center justify-between gap-3 bg-gray-950 px-4 py-3 text-white">
-
-
-
-
-
-
-        <div>
-
-
-          <div className="text-sm font-semibold">
-
-
-            📷 مسح الباركود
-
-
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="relative h-32 w-80">
+              <div className="absolute left-0 top-0 h-8 w-8 border-l-4 border-t-4 border-blue-500" />
+              <div className="absolute right-0 top-0 h-8 w-8 border-r-4 border-t-4 border-blue-500" />
+              <div className="absolute bottom-0 left-0 h-8 w-8 border-b-4 border-l-4 border-blue-500" />
+              <div className="absolute bottom-0 right-0 h-8 w-8 border-b-4 border-r-4 border-blue-500" />
+              <div className="absolute left-2 right-2 top-1/2 h-0.5 bg-blue-500" />
+            </div>
           </div>
-
-
-
-
-
-
-          <div className="mt-1 text-xs text-gray-400">
-
-
-            وجّه الكاميرا ناحية الباركود
-
-
-          </div>
-
-
         </div>
 
-
-
-
-
-
-        <button
-
-
-          type="button"
-
-
-          onClick={
-
-
-            onClose
-
-
-          }
-
-
-          className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold hover:bg-red-700"
-
-
-        >
-
-
-          إغلاق
-
-
-        </button>
-
-
-
-
-
-
+        <div className="px-4 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+          قرب أو بعّد الموبايل براحتك — الكاميرا هتحاول تعمل فوكس تلقائيًا وتقرأ الباركود بسرعة.
+        </div>
       </div>
-
-
-
-
-
-
     </div>
-
-
   );
-
-
 }
-
-
-
-
-
-
-
-
-/* =========================================================
-
-
-   FORM FIELD
-
-
-========================================================= */
-
-
-
-
-
-
-function Field({
-
-
-  label,
-
-
-  value,
-
-
-  onChange,
-
-
-  type = "text",
-
-
-}: {
-
-
-  label: string;
-
-
-  value: string;
-
-
-  onChange: (
-
-
-    value: string
-
-
-  ) => void;
-
-
-  type?: string;
-
-
-}) {
-
-
-  return (
-
-
-    <div>
-
-
-
-
-
-
-      <label className="mb-2 block text-sm font-semibold">
-
-
-        {label}
-
-
-      </label>
-
-
-
-
-
-
-      <input
-
-
-        type={type}
-
-
-        value={value}
-
-
-        onChange={(e) =>
-
-
-          onChange(
-
-
-            e.target.value
-
-
-          )
-
-
-        }
-
-
-        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 outline-none focus:border-blue-500 dark:border-gray-700 dark:bg-gray-950"
-
-
-      />
-
-
-
-
-
-
-    </div>
-
-
-  );
-
-
-}
-
-
-
-
-
