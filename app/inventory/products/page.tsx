@@ -3685,45 +3685,231 @@ function BarcodeScanner({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
 
+  const onScanRef = useRef(onScan);
+  const onCloseRef = useRef(onClose);
+
   useEffect(() => {
-    const reader = new BrowserMultiFormatReader(undefined, {
-      delayBetweenScanAttempts: 70,
-      delayBetweenScanSuccess: 250,
-      tryPlayVideoTimeout: 5000,
-    });
+    onScanRef.current = onScan;
+    onCloseRef.current = onClose;
+  }, [onScan, onClose]);
 
-    readerRef.current = reader;
-
+  useEffect(() => {
     let stopped = false;
-    let controls: any = null;
+    let animationFrame = 0;
+    let lastDetectTime = 0;
+    let controls: { stop: () => void } | null = null;
+    let stream: MediaStream | null = null;
 
     const stopCamera = () => {
       stopped = true;
 
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+        animationFrame = 0;
+      }
+
       try {
-        controls?.stop?.();
+        controls?.stop();
       } catch {
         // ignore
+      }
+
+      controls = null;
+
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+        stream = null;
       }
 
       const video = videoRef.current;
 
       if (video?.srcObject) {
-        const stream = video.srcObject as MediaStream;
-        stream.getTracks().forEach((track) => track.stop());
+        const currentStream = video.srcObject as MediaStream;
+        currentStream.getTracks().forEach((track) => track.stop());
         video.srcObject = null;
       }
     };
 
-    async function startScanner() {
+    const applyCameraEnhancements = async (
+      currentStream: MediaStream
+    ) => {
+      const track = currentStream.getVideoTracks()[0];
+
+      if (!track) return;
+
       try {
-        if (!videoRef.current || stopped) return;
+        const capabilities = track.getCapabilities() as MediaTrackCapabilities & {
+          focusMode?: string[];
+          zoom?: {
+            min: number;
+            max: number;
+            step?: number;
+          };
+        };
+
+        const advanced: MediaTrackConstraintSet[] = [];
+
+        if (capabilities.focusMode?.includes("continuous")) {
+          advanced.push({
+            focusMode: "continuous",
+          } as MediaTrackConstraintSet);
+        }
 
         /*
-         * نطلب الكاميرا الخلفية بدقة عالية نسبيًا.
-         * الدقة الأعلى بتخلي الباركود الصغير يفضل واضح حتى من مسافة أبعد.
-         * continuous focus مهم جدًا على الموبايل لو المتصفح بيدعمه.
+         * Zoom بسيط فقط لو الكاميرا بتدعمه.
+         * الهدف إن الباركود الصغير يفضل مقروء من مسافة طبيعية،
+         * من غير ما نقص الـ field of view بشكل مبالغ فيه.
          */
+        if (capabilities.zoom) {
+          const minZoom = capabilities.zoom.min;
+          const maxZoom = capabilities.zoom.max;
+          const targetZoom = Math.min(
+            maxZoom,
+            Math.max(minZoom, minZoom + 0.5)
+          );
+
+          if (targetZoom > minZoom) {
+            advanced.push({
+              zoom: targetZoom,
+            } as MediaTrackConstraintSet);
+          }
+        }
+
+        if (advanced.length) {
+          await track.applyConstraints({ advanced });
+        }
+      } catch {
+        // Focus/zoom controls are optional and unsupported on some devices.
+      }
+    };
+
+    const getNativeBarcodeDetector = () => {
+      const browserWindow = window as unknown as {
+        BarcodeDetector?: new (options?: {
+          formats?: string[];
+        }) => {
+          detect: (
+            source: HTMLVideoElement
+          ) => Promise<
+            Array<{
+              rawValue?: string;
+            }>
+          >;
+        };
+      };
+
+      if (!browserWindow.BarcodeDetector) {
+        return null;
+      }
+
+      try {
+        return new browserWindow.BarcodeDetector({
+          formats: [
+            "ean_13",
+            "ean_8",
+            "upc_a",
+            "upc_e",
+            "code_128",
+            "code_39",
+            "itf",
+            "codabar",
+          ],
+        });
+      } catch {
+        return null;
+      }
+    };
+
+    async function startNativeScanner() {
+      const detector = getNativeBarcodeDetector();
+
+      if (!detector || !navigator.mediaDevices?.getUserMedia) {
+        return false;
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30, max: 60 },
+          },
+        });
+
+        if (stopped || !videoRef.current) {
+          stopCamera();
+          return true;
+        }
+
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        await applyCameraEnhancements(stream);
+
+        const detectLoop = async (timestamp: number) => {
+          if (stopped || !videoRef.current) return;
+
+          animationFrame = requestAnimationFrame(detectLoop);
+
+          if (timestamp - lastDetectTime < 45) return;
+          lastDetectTime = timestamp;
+
+          if (
+            videoRef.current.readyState <
+            HTMLMediaElement.HAVE_CURRENT_DATA
+          ) {
+            return;
+          }
+
+          try {
+            const results = await detector.detect(
+              videoRef.current
+            );
+
+            if (stopped) return;
+
+            const value = results
+              .map((item) => item.rawValue?.trim() || "")
+              .find(Boolean);
+
+            if (!value) return;
+
+            stopped = true;
+            onScanRef.current(value);
+            stopCamera();
+          } catch {
+            // Keep scanning. Detection can fail on individual frames.
+          }
+        };
+
+        animationFrame = requestAnimationFrame(detectLoop);
+        return true;
+      } catch (error) {
+        console.warn(
+          "Native barcode scanner unavailable:",
+          error
+        );
+
+        stopCamera();
+        return false;
+      }
+    }
+
+    async function startZxingFallback() {
+      try {
+        const video = videoRef.current;
+
+        if (!video || stopped) return;
+
+        const reader = new BrowserMultiFormatReader(undefined, {
+          delayBetweenScanAttempts: 40,
+          delayBetweenScanSuccess: 200,
+          tryPlayVideoTimeout: 5000,
+        });
+
+        readerRef.current = reader;
+
         const constraints: MediaStreamConstraints = {
           audio: false,
           video: {
@@ -3731,66 +3917,57 @@ function BarcodeScanner({
             width: { ideal: 1920 },
             height: { ideal: 1080 },
             frameRate: { ideal: 30, max: 60 },
-            ...( {
-              focusMode: "continuous",
-            } as any ),
           },
         };
 
         controls = await reader.decodeFromConstraints(
           constraints,
-          videoRef.current,
-          (result) => {
+          video,
+          async (result) => {
             if (!result || stopped) return;
 
             const value = result.getText().trim();
+
             if (!value) return;
 
             stopped = true;
-            onScan(value);
+            onScanRef.current(value);
             stopCamera();
           }
         );
 
-        /*
-         * بعد تشغيل الكاميرا نحاول إجبار الـ autofocus المستمر
-         * لو الجهاز والمتصفح بيسمحوا بده.
-         */
-        const stream = videoRef.current?.srcObject as MediaStream | null;
-        const track = stream?.getVideoTracks?.()[0];
+        if (stopped) return;
 
-        if (track) {
-          try {
-            const capabilities = track.getCapabilities?.() as any;
-            const advanced: any[] = [];
+        const currentStream = video.srcObject as MediaStream | null;
 
-            if (capabilities?.focusMode?.includes?.("continuous")) {
-              advanced.push({ focusMode: "continuous" });
-            }
-
-            if (advanced.length) {
-              await track.applyConstraints({ advanced });
-            }
-          } catch {
-            // Some browsers do not expose focus controls.
-          }
+        if (currentStream) {
+          stream = currentStream;
+          await applyCameraEnhancements(currentStream);
         }
       } catch (error) {
         console.error("Barcode scanner error:", error);
-        alert(
-          "تعذر تشغيل الكاميرا. تأكد من السماح للموقع باستخدام الكاميرا."
-        );
-        onClose();
+        stopCamera();
+        onCloseRef.current();
       }
     }
 
-    startScanner();
+    async function startScanner() {
+      const nativeStarted = await startNativeScanner();
+
+      if (stopped) return;
+
+      if (!nativeStarted) {
+        await startZxingFallback();
+      }
+    }
+
+    void startScanner();
 
     return () => {
       stopCamera();
       readerRef.current = null;
     };
-  }, [onScan, onClose]);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
@@ -3800,8 +3977,9 @@ function BarcodeScanner({
             <div className="font-bold text-gray-900 dark:text-white">
               Scan Barcode
             </div>
+
             <div className="text-xs text-gray-500">
-              خلي الباركود ظاهر بالكامل — مش لازم تقرّبه من الكاميرا
+              وجّه الكاميرا للباركود — مش لازم تقرّبه جدًا
             </div>
           </div>
 
@@ -3836,9 +4014,11 @@ function BarcodeScanner({
         </div>
 
         <div className="px-4 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-          قرب أو بعّد الموبايل براحتك — الكاميرا هتحاول تعمل فوكس تلقائيًا وتقرأ الباركود بسرعة.
+          حرّك الموبايل بهدوء — الـ autofocus والـ scanner هيحاولوا يلقطوا
+          الباركود حتى لو بعيد نسبيًا.
         </div>
       </div>
     </div>
   );
 }
+
