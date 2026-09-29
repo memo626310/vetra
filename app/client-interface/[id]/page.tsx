@@ -45,6 +45,8 @@ export default function ClientInterfaceIdPage() {
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
   const [canInstall, setCanInstall] = useState(false);
   const [installDone, setInstallDone] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
     const savedLanguage = window.localStorage.getItem("vetra-language");
@@ -104,6 +106,16 @@ export default function ClientInterfaceIdPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    const ios =
+      /iPad|iPhone|iPod/.test(window.navigator.userAgent) ||
+      (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as any).standalone === true;
+
+    setIsIOS(ios);
+    setIsStandalone(standalone);
+
     if ("Notification" in window) {
       const permission = window.Notification.permission;
       setNotificationState(permission === "granted" ? "granted" : permission === "denied" ? "denied" : "default");
@@ -126,7 +138,7 @@ export default function ClientInterfaceIdPage() {
     window.addEventListener("beforeinstallprompt", handler);
     window.addEventListener("appinstalled", installed);
 
-    if (window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone === true) {
+    if (standalone) {
       setInstallDone(true);
     }
 
@@ -148,13 +160,23 @@ export default function ClientInterfaceIdPage() {
   }, [authorized]);
 
   async function enableNotifications() {
+    if (isIOS && !isStandalone) {
+      return;
+    }
+
     if (!("Notification" in window)) {
       setNotificationState("unsupported");
       return;
     }
 
     const permission = await window.Notification.requestPermission();
-    setNotificationState(permission === "granted" ? "granted" : permission === "denied" ? "denied" : "default");
+    setNotificationState(
+      permission === "granted"
+        ? "granted"
+        : permission === "denied"
+          ? "denied"
+          : "default"
+    );
 
     if (permission === "granted") {
       try {
@@ -164,7 +186,9 @@ export default function ClientInterfaceIdPage() {
           icon: "/icon-192.png",
           badge: "/icon-192.png",
         });
-      } catch {}
+      } catch (error) {
+        console.error("VETRA NOTIFICATION ERROR:", error);
+      }
     }
   }
 
@@ -225,12 +249,54 @@ export default function ClientInterfaceIdPage() {
         <p className="mt-2 text-center text-sm leading-7 text-slate-500 dark:text-slate-300">فعّل الإشعارات واحفظ VETRA على موبايلك عشان توصلك التنبيهات المهمة بسهولة.</p>
 
         <div className="mt-6 space-y-3">
-          <button type="button" onClick={enableNotifications} disabled={notificationState === "granted"} className="flex w-full items-center justify-between rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-80 dark:border-cyan-400/10 dark:bg-cyan-400/10">
-            <span><span className="block font-black">{notificationState === "granted" ? "الإشعارات مفعّلة ✓" : "السماح بإشعارات VETRA"}</span><span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">{notificationState === "denied" ? "الإشعارات مرفوضة من إعدادات المتصفح." : "استقبل تنبيهات المواعيد والتطعيمات والتحديثات المهمة."}</span></span><span className="text-2xl">🔔</span>
+          <button
+            type="button"
+            onClick={enableNotifications}
+            disabled={notificationState === "granted" || (isIOS && !isStandalone)}
+            className="flex w-full items-center justify-between rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-90 dark:border-cyan-400/10 dark:bg-cyan-400/10"
+          >
+            <span>
+              <span className="block font-black">
+                {notificationState === "granted"
+                  ? "الإشعارات مفعّلة ✓"
+                  : isIOS && !isStandalone
+                    ? "فعّل الإشعارات بعد إضافة VETRA"
+                    : "السماح بإشعارات VETRA"}
+              </span>
+              <span className="mt-1 block text-xs leading-6 text-slate-500 dark:text-slate-300">
+                {notificationState === "denied"
+                  ? "الإشعارات مرفوضة من إعدادات الجهاز."
+                  : isIOS && !isStandalone
+                    ? "أولًا أضف VETRA للشاشة الرئيسية وافتحها من الأيقونة، وبعدها فعّل الإشعارات."
+                    : "استقبل تنبيهات المواعيد والتطعيمات والتحديثات المهمة."}
+              </span>
+            </span>
+            <span className="text-2xl">🔔</span>
           </button>
 
-          <button type="button" onClick={installWebsite} disabled={!canInstall} className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-80 dark:border-emerald-400/10 dark:bg-emerald-400/10">
-            <span><span className="block font-black">{installDone ? "VETRA محفوظة على الموبايل ✓" : "احفظ VETRA على موبايلك"}</span><span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">{canInstall ? "أضف VETRA للشاشة الرئيسية بضغطة واحدة." : installDone ? "تقدر تفتح VETRA من الشاشة الرئيسية." : "من المتصفح اختار إضافة إلى الشاشة الرئيسية."}</span></span><span className="text-2xl">📲</span>
+          <button
+            type="button"
+            onClick={isIOS ? undefined : installWebsite}
+            disabled={isIOS ? isStandalone : !canInstall}
+            className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-90 dark:border-emerald-400/10 dark:bg-emerald-400/10"
+          >
+            <span>
+              <span className="block font-black">
+                {installDone ? "VETRA محفوظة على الموبايل ✓" : "احفظ VETRA على موبايلك"}
+              </span>
+              <span className="mt-1 block text-xs leading-6 text-slate-500 dark:text-slate-300">
+                {isIOS && !isStandalone
+                  ? "اضغط مشاركة ↑ ثم إضافة إلى الشاشة الرئيسية، وبعدها افتح VETRA من الأيقونة."
+                  : isIOS && isStandalone
+                    ? "VETRA تعمل الآن كتطبيق على جهازك."
+                    : canInstall
+                      ? "أضف VETRA للشاشة الرئيسية بضغطة واحدة."
+                      : installDone
+                        ? "تقدر تفتح VETRA من الشاشة الرئيسية."
+                        : "من المتصفح اختار إضافة إلى الشاشة الرئيسية."}
+              </span>
+            </span>
+            <span className="text-2xl">📲</span>
           </button>
         </div>
 
