@@ -4,6 +4,20 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
+const PUBLIC_PATHS = [
+  "/",
+  "/login",
+  "/client-interface",
+  "/client-interface/login",
+];
+
+function isPublicPath(pathname: string) {
+  return (
+    PUBLIC_PATHS.includes(pathname) ||
+    pathname.startsWith("/client-interface/")
+  );
+}
+
 export default function AuthGuard({
   children,
 }: {
@@ -14,7 +28,7 @@ export default function AuthGuard({
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    if (pathname === "/login") {
+    if (isPublicPath(pathname)) {
       setChecking(false);
       return;
     }
@@ -41,7 +55,7 @@ export default function AuthGuard({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session && pathname !== "/login") {
+      if (!session && !isPublicPath(pathname)) {
         router.replace("/login");
       }
     });
@@ -52,7 +66,7 @@ export default function AuthGuard({
     };
   }, [pathname, router]);
 
-  if (checking && pathname !== "/login") {
+  if (checking && !isPublicPath(pathname)) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="text-center">
