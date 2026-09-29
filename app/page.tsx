@@ -560,6 +560,7 @@ export default function Home() {
                     if (index === 6) {
                       goTo("/barcode-test");
                     }
+                    if (index === 7) goTo("/invoices");
                   }}
                   className={`group relative min-h-[220px] overflow-hidden rounded-[32px] p-7 transition-all duration-300 ease-out hover:-translate-y-2 hover:scale-[1.01] active:scale-[0.98] ${
                     isArabic

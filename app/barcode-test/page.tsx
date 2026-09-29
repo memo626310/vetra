@@ -2,61 +2,251 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
+import { supabase } from "@/lib/supabase";
 
-export default function BarcodeTestPage() {
+export default function QuickProductLookupPage() {
   const [barcode, setBarcode] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [error, setError] = useState("");
+  const [product, setProduct] = useState<{
+    id: string;
+    name: string;
+    barcode: string | null;
+    unit: string;
+    quantity: number;
+    wholesale_price: number;
+    retail_price: number;
+    last_purchase_price: number;
+    expiry_date: string | null;
+    reorder_level: number;
+    notes: string | null;
+    category?: { name: string } | null;
+  } | null>(null);
+
+  async function lookupProduct(value?: string) {
+    const code = (value ?? barcode).trim();
+
+    setError("");
+    setSearched(true);
+    setProduct(null);
+
+    if (!code) {
+      setError("اكتب الباركود أو امسحه بالكاميرا أولاً");
+      return;
+    }
+
+    setBarcode(code);
+    setLoading(true);
+
+    const { data, error: queryError } = await supabase
+      .from("products")
+      .select(`
+        id,
+        name,
+        barcode,
+        unit,
+        quantity,
+        wholesale_price,
+        retail_price,
+        last_purchase_price,
+        expiry_date,
+        reorder_level,
+        notes,
+        category:product_categories (
+          name
+        )
+      `)
+      .eq("barcode", code)
+      .maybeSingle();
+
+    if (queryError) {
+      console.error(queryError);
+      setError("حصل خطأ أثناء الاستعلام عن المنتج");
+      setLoading(false);
+      return;
+    }
+
+    if (!data) {
+      setError("المنتج بالباركود ده مش موجود في المخزون");
+      setLoading(false);
+      return;
+    }
+
+    setProduct({
+      ...data,
+      category: Array.isArray(data.category)
+        ? data.category[0] ?? null
+        : data.category ?? null,
+    });
+    setLoading(false);
+  }
+
+  function formatPrice(value: number) {
+    return `${Number(value || 0).toLocaleString("en-US")} ج`;
+  }
+
+  function formatExpiry(value: string | null) {
+    if (!value) return "بدون تاريخ";
+    return new Date(`${value}T00:00:00`).toLocaleDateString("ar-EG");
+  }
+
+  const stockLow = product
+    ? Number(product.quantity) <= Number(product.reorder_level)
+    : false;
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6 dark:bg-gray-950">
-      <div className="mx-auto max-w-2xl">
-        <div className="rounded-2xl bg-white p-6 shadow-sm dark:bg-gray-900">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Barcode Scanner Test
-          </h1>
+    <main dir="rtl" className="min-h-screen bg-slate-50 px-4 py-8 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">استعلام سريع عن المنتجات</h1>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              امسح الباركود أو اكتبه يدويًا لمعرفة بيانات المنتج والمخزون فورًا.
+            </p>
+          </div>
 
-          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-            جرّب قراءة الباركود بالكاميرا أو اكتبه يدويًا.
-          </p>
+          <button
+            type="button"
+            onClick={() => (window.location.href = "/inventory/products")}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            ← المنتجات
+          </button>
+        </div>
 
-          <div className="mt-6 flex gap-3">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-col gap-3 md:flex-row">
             <input
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
-              placeholder="اكتب الباركود يدويًا"
-              className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 outline-none focus:border-blue-500 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  lookupProduct();
+                }
+              }}
+              placeholder="اكتب الباركود هنا"
+              className="h-12 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 text-left text-lg outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:focus:ring-blue-950"
+              dir="ltr"
+              autoFocus
             />
 
             <button
               type="button"
               onClick={() => setScannerOpen(true)}
-              className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"
+              className="h-12 rounded-xl bg-slate-900 px-5 font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
             >
-              📷 Scan
+              📷 مسح الباركود
+            </button>
+
+            <button
+              type="button"
+              onClick={() => lookupProduct()}
+              disabled={loading}
+              className="h-12 rounded-xl bg-blue-600 px-6 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? "جاري البحث..." : "🔎 استعلام"}
             </button>
           </div>
 
-          <div className="mt-6 rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30">
-            <div className="text-sm font-semibold text-gray-500 dark:text-gray-400">
-              Result
+          {error && (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+              {error}
             </div>
-            <div className="mt-1 break-all text-xl font-bold text-gray-900 dark:text-white">
-              {barcode || "—"}
+          )}
+
+          {!searched && !loading && (
+            <div className="mt-8 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center dark:border-slate-800 dark:bg-slate-950">
+              <div className="text-4xl">📦</div>
+              <p className="mt-3 font-semibold">جاهز للاستعلام</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                اكتب الباركود واضغط Enter، أو استخدم الكاميرا.
+              </p>
             </div>
-          </div>
-        </div>
+          )}
+
+          {loading && (
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-6 py-10 text-center dark:border-slate-800 dark:bg-slate-950">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+              <p className="mt-3 text-sm text-slate-500">جاري البحث عن المنتج...</p>
+            </div>
+          )}
+
+          {product && !loading && (
+            <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+              <div className="bg-blue-600 px-5 py-4 text-white">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-xl font-bold">{product.name}</p>
+                    <p className="mt-1 text-sm text-blue-100" dir="ltr">
+                      {product.barcode || "بدون باركود"}
+                    </p>
+                  </div>
+
+                  <span
+                    className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${
+                      stockLow
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-emerald-100 text-emerald-800"
+                    }`}
+                  >
+                    {stockLow ? "⚠ المخزون منخفض" : "✓ متوفر"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-px bg-slate-200 sm:grid-cols-2 lg:grid-cols-3 dark:bg-slate-800">
+                <Info label="التصنيف" value={product.category?.name || "بدون تصنيف"} />
+                <Info
+                  label="الكمية"
+                  value={`${Number(product.quantity || 0).toLocaleString("en-US")} ${product.unit || ""}`.trim()}
+                />
+                <Info label="سعر البيع" value={formatPrice(product.retail_price)} />
+                <Info label="سعر الجملة" value={formatPrice(product.wholesale_price)} />
+                <Info label="آخر سعر شراء" value={formatPrice(product.last_purchase_price)} />
+                <Info label="تاريخ الانتهاء" value={formatExpiry(product.expiry_date)} />
+              </div>
+
+              {product.notes && (
+                <div className="border-t border-slate-200 p-5 dark:border-slate-800">
+                  <p className="mb-1 text-xs font-semibold text-slate-500">ملاحظات</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    {product.notes}
+                  </p>
+                </div>
+              )}
+
+              <div className="border-t border-slate-200 px-5 py-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                حد إعادة الطلب:{" "}
+                {Number(product.reorder_level || 0).toLocaleString("en-US")}{" "}
+                {product.unit || ""}
+              </div>
+            </div>
+          )}
+        </section>
       </div>
 
       {scannerOpen && (
         <BarcodeScanner
           onScan={(value) => {
-            setBarcode(value);
             setScannerOpen(false);
+            setBarcode(value);
+            lookupProduct(value);
           }}
           onClose={() => setScannerOpen(false)}
         />
       )}
     </main>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-white p-5 dark:bg-slate-900">
+      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-1 text-base font-bold text-slate-900 dark:text-slate-100">{value}</p>
+    </div>
   );
 }
 

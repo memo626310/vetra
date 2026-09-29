@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 
 type Invoice = {
   id: string;
+  client_id: string;
   invoice_number: number;
   status: string;
   subtotal: number;
@@ -64,6 +65,7 @@ export default function InvoicesPage() {
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [clientFilterId, setClientFilterId] = useState("");
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
@@ -108,10 +110,14 @@ export default function InvoicesPage() {
 
     setAuthorized(true);
 
-    const { data, error } = await supabase
+    const clientIdFromUrl = new URLSearchParams(window.location.search).get("client") || "";
+    setClientFilterId(clientIdFromUrl);
+
+    let invoiceQuery = supabase
       .from("invoices")
       .select(`
         id,
+        client_id,
         invoice_number,
         status,
         subtotal,
@@ -125,6 +131,12 @@ export default function InvoicesPage() {
         pet:pets(name)
       `)
       .order("created_at", { ascending: false });
+
+    if (clientIdFromUrl) {
+      invoiceQuery = invoiceQuery.eq("client_id", clientIdFromUrl);
+    }
+
+    const { data, error } = await invoiceQuery;
 
     if (error) {
       console.error(error);
@@ -374,6 +386,58 @@ export default function InvoicesPage() {
                 </option>
               ))}
             </select>
+          </div>
+        </section>
+
+        <section
+          className={`mb-6 rounded-3xl border p-3 ${
+            darkMode
+              ? "border-white/[0.06] bg-[#13161B]"
+              : "border-slate-100 bg-white"
+          }`}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setStatus("all")}
+              className={`rounded-2xl px-4 py-2.5 text-sm font-bold transition ${
+                status === "all"
+                  ? "bg-blue-600 text-white"
+                  : darkMode
+                    ? "bg-[#0F1115] text-slate-400 hover:bg-[#1D2129] hover:text-white"
+                    : "bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              }`}
+            >
+              {language === "ar" ? "كل الفواتير" : "All invoices"}
+            </button>
+
+            <button
+              onClick={() => setStatus("draft")}
+              className={`rounded-2xl px-4 py-2.5 text-sm font-bold transition ${
+                status === "draft"
+                  ? "bg-amber-500 text-white"
+                  : darkMode
+                    ? "bg-[#0F1115] text-slate-400 hover:bg-[#1D2129] hover:text-white"
+                    : "bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              }`}
+            >
+              📝 {language === "ar" ? "المسودات" : "Drafts"}
+              <span className="ms-1 opacity-80">
+                ({invoices.filter((invoice) => invoice.status === "draft").length})
+              </span>
+            </button>
+
+            <button
+              onClick={() => setStatus("issued")}
+              className={`rounded-2xl px-4 py-2.5 text-sm font-bold transition ${
+                status === "issued"
+                  ? "bg-blue-600 text-white"
+                  : darkMode
+                    ? "bg-[#0F1115] text-slate-400 hover:bg-[#1D2129] hover:text-white"
+                    : "bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              }`}
+            >
+              {language === "ar" ? "الصادرة" : "Issued"}
+            </button>
           </div>
         </section>
 

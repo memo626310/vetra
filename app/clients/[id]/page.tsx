@@ -31,6 +31,7 @@ export default function ClientPage() {
   const [client, setClient] = useState<Client | null>(null);
   const [pets, setPets] = useState<Pet[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [petName, setPetName] = useState("");
   const [species, setSpecies] = useState("Cat");
@@ -42,7 +43,6 @@ export default function ClientPage() {
   const [petNotes, setPetNotes] = useState("");
 
   const [savingPet, setSavingPet] = useState(false);
-  const [deletingClient, setDeletingClient] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -67,6 +67,18 @@ export default function ClientPage() {
       }
 
       setClient(clientData);
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+
+        setIsAdmin(profile?.role === "admin");
+      }
 
       const { data: petsData } = await supabase
         .from("pets")
@@ -111,7 +123,6 @@ export default function ClientPage() {
       .single();
 
     if (error) {
-      console.error(error);
       setMessage("حصل خطأ أثناء إضافة الحيوان.");
       setSavingPet(false);
       return;
@@ -131,35 +142,6 @@ export default function ClientPage() {
 
     setMessage("تم إضافة الحيوان بنجاح ✓");
     setSavingPet(false);
-  }
-
-  async function deleteClient() {
-    if (!client) return;
-
-    const confirmed = window.confirm(
-      `هل أنت متأكد من حذف العميل "${client.name}"؟\n\nسيتم حذف الحيوانات والزيارات المرتبطة بهذا العميل أيضًا.`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setDeletingClient(true);
-    setMessage("");
-
-    const { error } = await supabase
-      .from("clients")
-      .delete()
-      .eq("id", client.id);
-
-    if (error) {
-      console.error(error);
-      setMessage("حصل خطأ أثناء حذف العميل.");
-      setDeletingClient(false);
-      return;
-    }
-
-    window.location.href = "/clients";
   }
 
   if (loading) {
@@ -213,7 +195,7 @@ export default function ClientPage() {
 
         {/* Client Header */}
         <section className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-slate-100 text-4xl">
               👤
             </div>
@@ -233,6 +215,15 @@ export default function ClientPage() {
                 {client.address && <span>📍 {client.address}</span>}
               </div>
             </div>
+
+            {isAdmin && (
+              <Link
+                href={`/invoices?client=${client.id}`}
+                className="inline-flex shrink-0 items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800"
+              >
+                🧾 الفواتير
+              </Link>
+            )}
           </div>
 
           {client.notes && (
@@ -240,18 +231,6 @@ export default function ClientPage() {
               <strong>ملاحظات:</strong> {client.notes}
             </div>
           )}
-
-          {/* Delete Client */}
-          <div className="mt-6 flex justify-end border-t border-slate-100 pt-5">
-            <button
-              type="button"
-              onClick={deleteClient}
-              disabled={deletingClient}
-              className="rounded-2xl bg-red-50 px-5 py-3 text-sm font-bold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {deletingClient ? "جاري الحذف..." : "🗑️ حذف العميل"}
-            </button>
-          </div>
         </section>
 
         {/* Pets */}
