@@ -106,35 +106,19 @@ export default function ClientInterfaceIdPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const nav = window.navigator;
-
-    // Strong iOS detection:
-    // 1) Normal iPhone/iPad/iPod user agents.
-    // 2) iPadOS 13+ can identify itself as a Mac, so use touch points too.
-    // 3) iOS standalone mode is exposed by Safari as navigator.standalone.
-    const userAgent = nav.userAgent || "";
-    const platform = nav.platform || "";
-    const maxTouchPoints = nav.maxTouchPoints || 0;
-
-    const ios =
-      /iPhone|iPad|iPod/i.test(userAgent) ||
-      /iPhone|iPad|iPod/i.test(platform) ||
-      (platform === "MacIntel" && maxTouchPoints > 1);
-
     const standalone =
       window.matchMedia("(display-mode: standalone)").matches ||
-      (nav as Navigator & { standalone?: boolean }).standalone === true;
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+
+    // Device type is informational only. The actual notification flow is
+    // controlled by whether VETRA is running as an installed web app.
+    const nav = window.navigator;
+    const ios =
+      /iPhone|iPad|iPod/i.test(nav.userAgent || "") ||
+      (nav.platform === "MacIntel" && (nav.maxTouchPoints || 0) > 1);
 
     setIsIOS(ios);
     setIsStandalone(standalone);
-
-    console.log("VETRA DEVICE:", {
-      userAgent,
-      platform,
-      maxTouchPoints,
-      isIOS: ios,
-      isStandalone: standalone,
-    });
 
     if ("Notification" in window) {
       const permission = window.Notification.permission;
@@ -267,11 +251,9 @@ export default function ClientInterfaceIdPage() {
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-100 text-3xl dark:bg-cyan-400/10">🐾</div>
         <h2 className="mt-5 text-center text-2xl font-black">خلي VETRA معاك دايمًا 🐾</h2>
         <div className="mt-3 text-center text-xs font-bold text-cyan-600 dark:text-cyan-300">
-          {isIOS
-            ? isStandalone
-              ? "🍎 تم اكتشاف iPhone — VETRA تعمل كتطبيق"
-              : "🍎 تم اكتشاف iPhone — افتحها كتطبيق من الشاشة الرئيسية"
-            : "📱 تم اكتشاف جهاز Android / متصفح يدعم التثبيت"}
+          {isStandalone
+            ? "✓ VETRA تعمل الآن كتطبيق على جهازك"
+            : "📱 ثبّت VETRA على الشاشة الرئيسية أولًا لتفعيل أفضل تجربة وإشعارات الهاتف"}
         </div>
         <p className="mt-2 text-center text-sm leading-7 text-slate-500 dark:text-slate-300">فعّل الإشعارات واحفظ VETRA على موبايلك عشان توصلك التنبيهات المهمة بسهولة.</p>
 
@@ -279,22 +261,22 @@ export default function ClientInterfaceIdPage() {
           <button
             type="button"
             onClick={enableNotifications}
-            disabled={notificationState === "granted" || (isIOS && !isStandalone)}
+            disabled={notificationState === "granted" || !isStandalone}
             className="flex w-full items-center justify-between rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-90 dark:border-cyan-400/10 dark:bg-cyan-400/10"
           >
             <span>
               <span className="block font-black">
                 {notificationState === "granted"
                   ? "الإشعارات مفعّلة ✓"
-                  : isIOS && !isStandalone
-                    ? "فعّل الإشعارات بعد إضافة VETRA"
+                  : !isStandalone
+                    ? "ثبّت VETRA أولًا لتفعيل الإشعارات"
                     : "السماح بإشعارات VETRA"}
               </span>
               <span className="mt-1 block text-xs leading-6 text-slate-500 dark:text-slate-300">
                 {notificationState === "denied"
                   ? "الإشعارات مرفوضة من إعدادات الجهاز."
-                  : isIOS && !isStandalone
-                    ? "أولًا أضف VETRA للشاشة الرئيسية وافتحها من الأيقونة، وبعدها فعّل الإشعارات."
+                  : !isStandalone
+                    ? "أضف VETRA للشاشة الرئيسية وافتحها من الأيقونة، وبعدها فعّل الإشعارات."
                     : "استقبل تنبيهات المواعيد والتطعيمات والتحديثات المهمة."}
               </span>
             </span>
@@ -304,7 +286,7 @@ export default function ClientInterfaceIdPage() {
           <button
             type="button"
             onClick={isIOS ? undefined : installWebsite}
-            disabled={isIOS ? isStandalone : !canInstall}
+            disabled={isIOS ? false : !canInstall}
             className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-90 dark:border-emerald-400/10 dark:bg-emerald-400/10"
           >
             <span>
@@ -312,15 +294,13 @@ export default function ClientInterfaceIdPage() {
                 {installDone ? "VETRA محفوظة على الموبايل ✓" : "احفظ VETRA على موبايلك"}
               </span>
               <span className="mt-1 block text-xs leading-6 text-slate-500 dark:text-slate-300">
-                {isIOS && !isStandalone
+                {!isStandalone && isIOS
                   ? "اضغط مشاركة ↑ ثم إضافة إلى الشاشة الرئيسية، وبعدها افتح VETRA من الأيقونة."
-                  : isIOS && isStandalone
-                    ? "VETRA تعمل الآن كتطبيق على جهازك."
-                    : canInstall
-                      ? "أضف VETRA للشاشة الرئيسية بضغطة واحدة."
-                      : installDone
-                        ? "تقدر تفتح VETRA من الشاشة الرئيسية."
-                        : "من المتصفح اختار إضافة إلى الشاشة الرئيسية."}
+                  : !isStandalone && canInstall
+                    ? "أضف VETRA للشاشة الرئيسية بضغطة واحدة."
+                    : isStandalone
+                      ? "VETRA تعمل الآن كتطبيق على جهازك."
+                      : "من المتصفح اختار إضافة إلى الشاشة الرئيسية."}
               </span>
             </span>
             <span className="text-2xl">📲</span>
