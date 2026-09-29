@@ -30,6 +30,7 @@ const translations = {
       ["المواعيد", "مواعيد اليوم والمتابعة", "📅"],
       ["التطعيمات", "القادمة والمتأخرة", "💉"],
       ["المخزون", "الأدوية والمنتجات", "📦"],
+      ["استعلام سريع", "ابحث عن منتج بالباركود", "🔎"],
       ["المالية", "الدخل والمصروفات", "💰"],
       ["التقارير", "ملخص العيادة", "📊"],
     ],
@@ -74,6 +75,7 @@ const translations = {
       ["Appointments", "Today's appointments", "📅"],
       ["Vaccines", "Due and overdue", "💉"],
       ["Inventory", "Medicines and products", "📦"],
+      ["Quick Lookup", "Find a product by barcode", "🔎"],
       ["Finance", "Income and expenses", "💰"],
       ["Reports", "Clinic summary", "📊"],
     ],
@@ -135,6 +137,11 @@ const cardColors = [
     light: "bg-indigo-50",
     dark: "bg-indigo-500/10",
     icon: "text-indigo-600",
+  },
+  {
+    light: "bg-cyan-50",
+    dark: "bg-cyan-500/10",
+    icon: "text-cyan-600",
   },
 ];
 
@@ -544,6 +551,14 @@ export default function Home() {
 
                     if (index === 2) {
                       goTo("/pets");
+                    }
+
+                    if (index === 5) {
+                      goTo("/inventory/products");
+                    }
+
+                    if (index === 6) {
+                      goTo("/barcode-test");
                     }
                   }}
                   className={`group relative min-h-[220px] overflow-hidden rounded-[32px] p-7 transition-all duration-300 ease-out hover:-translate-y-2 hover:scale-[1.01] active:scale-[0.98] ${
