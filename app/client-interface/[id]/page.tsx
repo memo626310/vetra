@@ -106,15 +106,35 @@ export default function ClientInterfaceIdPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    const nav = window.navigator;
+
+    // Strong iOS detection:
+    // 1) Normal iPhone/iPad/iPod user agents.
+    // 2) iPadOS 13+ can identify itself as a Mac, so use touch points too.
+    // 3) iOS standalone mode is exposed by Safari as navigator.standalone.
+    const userAgent = nav.userAgent || "";
+    const platform = nav.platform || "";
+    const maxTouchPoints = nav.maxTouchPoints || 0;
+
     const ios =
-      /iPad|iPhone|iPod/.test(window.navigator.userAgent) ||
-      (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
+      /iPhone|iPad|iPod/i.test(userAgent) ||
+      /iPhone|iPad|iPod/i.test(platform) ||
+      (platform === "MacIntel" && maxTouchPoints > 1);
+
     const standalone =
       window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as any).standalone === true;
+      (nav as Navigator & { standalone?: boolean }).standalone === true;
 
     setIsIOS(ios);
     setIsStandalone(standalone);
+
+    console.log("VETRA DEVICE:", {
+      userAgent,
+      platform,
+      maxTouchPoints,
+      isIOS: ios,
+      isStandalone: standalone,
+    });
 
     if ("Notification" in window) {
       const permission = window.Notification.permission;
