@@ -873,7 +873,23 @@ export default function NewVisitPage() {
     });
 
     if (error) {
-      setMessage(t.saveError);
+      console.error("SAVE VISIT ERROR:", error);
+
+      const details = [
+        error.message,
+        error.details,
+        error.hint,
+        error.code ? `Code: ${error.code}` : "",
+      ]
+        .filter(Boolean)
+        .join(" — ");
+
+      setMessage(
+        language === "ar"
+          ? `تعذر حفظ الزيارة: ${details}`
+          : `Could not save the visit: ${details}`
+      );
+
       setSaving(false);
       return;
     }
