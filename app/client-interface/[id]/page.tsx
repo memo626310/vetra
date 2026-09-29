@@ -40,6 +40,11 @@ export default function ClientInterfaceIdPage() {
   const [language, setLanguage] = useState<"en" | "ar">("en");
   const [dark, setDark] = useState(false);
   const [message, setMessage] = useState("");
+  const [showDeviceSetup, setShowDeviceSetup] = useState(false);
+  const [notificationState, setNotificationState] = useState<"default" | "granted" | "denied" | "unsupported">("default");
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
+  const [canInstall, setCanInstall] = useState(false);
+  const [installDone, setInstallDone] = useState(false);
 
   useEffect(() => {
     const savedLanguage = window.localStorage.getItem("vetra-language");
@@ -52,11 +57,9 @@ export default function ClientInterfaceIdPage() {
     async function load() {
       setLoading(true);
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const savedClientId = window.sessionStorage.getItem("vetra-client-id");
 
-      if (!user) {
+      if (!savedClientId || savedClientId !== clientId) {
         router.replace("/client-interface/login");
         return;
       }
@@ -68,17 +71,7 @@ export default function ClientInterfaceIdPage() {
         .maybeSingle();
 
       if (clientError || !clientData) {
-        setMessage("Client profile not found.");
-        setLoading(false);
-        return;
-      }
-
-      if (
-        clientData.email &&
-        user.email &&
-        clientData.email.toLowerCase() !== user.email.toLowerCase()
-      ) {
-        setMessage("This client profile does not belong to the signed-in account.");
+        setMessage("ملف العميل غير موجود.");
         setLoading(false);
         return;
       }
@@ -102,9 +95,94 @@ export default function ClientInterfaceIdPage() {
     if (clientId) load();
   }, [clientId, router]);
 
-  async function signOut() {
-    await supabase.auth.signOut();
+  function signOut() {
+    window.sessionStorage.removeItem("vetra-client-id");
+    window.sessionStorage.removeItem("vetra-client-code");
     router.replace("/client-interface/login");
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if ("Notification" in window) {
+      const permission = window.Notification.permission;
+      setNotificationState(permission === "granted" ? "granted" : permission === "denied" ? "denied" : "default");
+    } else {
+      setNotificationState("unsupported");
+    }
+
+    const handler = (event: Event) => {
+      event.preventDefault();
+      setDeferredInstallPrompt(event);
+      setCanInstall(true);
+    };
+
+    const installed = () => {
+      setCanInstall(false);
+      setInstallDone(true);
+      window.localStorage.setItem("vetra-pwa-installed", "true");
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", installed);
+
+    if (window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone === true) {
+      setInstallDone(true);
+    }
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch((error) => { console.error("VETRA SERVICE WORKER ERROR:", error); });
+    }
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", installed);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authorized) return;
+    if (window.localStorage.getItem("vetra-device-setup-seen") === "true") return;
+    const timer = window.setTimeout(() => setShowDeviceSetup(true), 700);
+    return () => window.clearTimeout(timer);
+  }, [authorized]);
+
+  async function enableNotifications() {
+    if (!("Notification" in window)) {
+      setNotificationState("unsupported");
+      return;
+    }
+
+    const permission = await window.Notification.requestPermission();
+    setNotificationState(permission === "granted" ? "granted" : permission === "denied" ? "denied" : "default");
+
+    if (permission === "granted") {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.showNotification("VETRA 🐾", {
+          body: "تم تفعيل إشعارات VETRA بنجاح. هتوصلك التنبيهات المهمة هنا.",
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+        });
+      } catch {}
+    }
+  }
+
+  async function installWebsite() {
+    if (!deferredInstallPrompt) return;
+    try {
+      await deferredInstallPrompt.prompt();
+      const result = await deferredInstallPrompt.userChoice;
+      if (result?.outcome === "accepted") setInstallDone(true);
+    } finally {
+      setDeferredInstallPrompt(null);
+      setCanInstall(false);
+    }
+  }
+
+  function finishDeviceSetup() {
+    window.localStorage.setItem("vetra-device-setup-seen", "true");
+    setShowDeviceSetup(false);
   }
 
   const ar = language === "ar";
@@ -139,8 +217,32 @@ export default function ClientInterfaceIdPage() {
     );
   }
 
+  const setupModal = showDeviceSetup ? (
+    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/45 p-4 backdrop-blur-sm sm:items-center">
+      <div dir="rtl" className="w-full max-w-md rounded-[2rem] border border-white/70 bg-white p-6 text-slate-900 shadow-2xl dark:border-white/10 dark:bg-[#101923] dark:text-white">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-100 text-3xl dark:bg-cyan-400/10">🐾</div>
+        <h2 className="mt-5 text-center text-2xl font-black">خلي VETRA معاك دايمًا 🐾</h2>
+        <p className="mt-2 text-center text-sm leading-7 text-slate-500 dark:text-slate-300">فعّل الإشعارات واحفظ VETRA على موبايلك عشان توصلك التنبيهات المهمة بسهولة.</p>
+
+        <div className="mt-6 space-y-3">
+          <button type="button" onClick={enableNotifications} disabled={notificationState === "granted"} className="flex w-full items-center justify-between rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-80 dark:border-cyan-400/10 dark:bg-cyan-400/10">
+            <span><span className="block font-black">{notificationState === "granted" ? "الإشعارات مفعّلة ✓" : "السماح بإشعارات VETRA"}</span><span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">{notificationState === "denied" ? "الإشعارات مرفوضة من إعدادات المتصفح." : "استقبل تنبيهات المواعيد والتطعيمات والتحديثات المهمة."}</span></span><span className="text-2xl">🔔</span>
+          </button>
+
+          <button type="button" onClick={installWebsite} disabled={!canInstall} className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-80 dark:border-emerald-400/10 dark:bg-emerald-400/10">
+            <span><span className="block font-black">{installDone ? "VETRA محفوظة على الموبايل ✓" : "احفظ VETRA على موبايلك"}</span><span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">{canInstall ? "أضف VETRA للشاشة الرئيسية بضغطة واحدة." : installDone ? "تقدر تفتح VETRA من الشاشة الرئيسية." : "من المتصفح اختار إضافة إلى الشاشة الرئيسية."}</span></span><span className="text-2xl">📲</span>
+          </button>
+        </div>
+
+        <button type="button" onClick={finishDeviceSetup} className="mt-5 w-full rounded-2xl px-4 py-3 text-sm font-bold text-slate-400 transition hover:text-slate-700 dark:hover:text-white">لاحقًا</button>
+      </div>
+    </div>
+  ) : null;
+
   return (
-    <main
+    <>
+      {setupModal}
+      <main
       dir={ar ? "rtl" : "ltr"}
       className={`min-h-screen overflow-hidden transition-colors duration-700 ${
         dark ? "bg-[#07111C] text-white" : "bg-[#F8FBFF] text-slate-900"
@@ -293,5 +395,6 @@ export default function ClientInterfaceIdPage() {
         </div>
       </section>
     </main>
+    </>
   );
 }
