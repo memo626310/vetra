@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 
 type Client = {
   id: string;
+  client_code: string;
   name: string;
   phone: string | null;
   email: string | null;
@@ -201,7 +202,16 @@ export default function ClientPage() {
             </div>
 
             <div>
-              <h1 className="text-3xl font-bold">{client.name}</h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-bold">{client.name}</h1>
+                <span
+                  dir="ltr"
+                  className="inline-flex items-center rounded-xl bg-slate-900 px-3 py-1.5 text-sm font-bold tracking-wider text-white"
+                  title="Client ID"
+                >
+                  ID: {client.client_code}
+                </span>
+              </div>
 
               <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-500">
                 {client.phone && (

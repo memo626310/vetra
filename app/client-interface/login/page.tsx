@@ -8,14 +8,15 @@ export default function ClientLoginPage() {
   const router = useRouter();
   const [language, setLanguage] = useState<"en" | "ar">("en");
   const [dark, setDark] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [clientCode, setClientCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     const savedLanguage = window.localStorage.getItem("vetra-language");
     const savedTheme = window.localStorage.getItem("vetra-theme");
+
     if (savedLanguage === "ar") setLanguage("ar");
     if (savedTheme === "dark") setDark(true);
   }, []);
@@ -24,39 +25,42 @@ export default function ClientLoginPage() {
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
     setLoading(true);
     setMessage("");
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
+    const normalizedPhone = phone.trim();
+    const normalizedCode = clientCode.trim().toUpperCase();
 
-    if (error || !data.user) {
+    if (!normalizedPhone || !normalizedCode) {
       setMessage(
         ar
-          ? "البريد الإلكتروني أو كلمة المرور غير صحيحة."
-          : "Invalid email or password."
+          ? "من فضلك اكتب رقم التليفون و Client ID."
+          : "Please enter your phone number and Client ID."
       );
       setLoading(false);
       return;
     }
 
-    const { data: client, error: clientError } = await supabase
+    const { data: client, error } = await supabase
       .from("clients")
-      .select("id")
-      .eq("email", data.user.email ?? email.trim())
+      .select("id, client_code")
+      .eq("phone", normalizedPhone)
+      .eq("client_code", normalizedCode)
       .maybeSingle();
 
-    if (clientError || !client) {
+    if (error || !client) {
       setMessage(
         ar
-          ? "تم تسجيل الدخول، لكن لم يتم العثور على ملف صاحب الحيوان."
-          : "Signed in, but no matching pet-owner profile was found."
+          ? "رقم التليفون أو Client ID غير صحيح."
+          : "The phone number or Client ID is incorrect."
       );
       setLoading(false);
       return;
     }
+
+    window.sessionStorage.setItem("vetra-client-id", client.id);
+    window.sessionStorage.setItem("vetra-client-code", client.client_code);
 
     router.replace(`/client-interface/${client.id}`);
   }
@@ -98,6 +102,7 @@ export default function ClientLoginPage() {
           >
             {ar ? "English" : "العربية"}
           </button>
+
           <button
             onClick={() => setDark((v) => !v)}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/70 backdrop-blur dark:border-white/10 dark:bg-white/5"
@@ -114,12 +119,15 @@ export default function ClientLoginPage() {
               <div className="mx-auto flex h-56 w-56 items-center justify-center rounded-full bg-white/10 text-[8rem] shadow-2xl">
                 🐕
               </div>
+
               <div className="mt-10 text-xs font-bold uppercase tracking-[0.4em] text-cyan-300">
                 VETRA
               </div>
+
               <h1 className="mt-4 text-4xl font-black">
                 {ar ? "أهلاً بيك تاني 🐾" : "Welcome back 🐾"}
               </h1>
+
               <p className="mx-auto mt-4 max-w-sm text-sm leading-7 text-slate-300">
                 {ar
                   ? "كل ما يخص حيوانك المميز، في مكان واحد."
@@ -133,44 +141,50 @@ export default function ClientLoginPage() {
               <div className="text-sm font-bold uppercase tracking-[0.25em] text-cyan-500">
                 VETRA
               </div>
+
               <h2 className="mt-3 text-4xl font-black tracking-tight">
                 {ar ? "تسجيل الدخول" : "Sign in"}
               </h2>
+
               <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-300">
                 {ar
-                  ? "ادخل لحسابك لمتابعة رعاية حيوانك."
-                  : "Sign in to manage your pet care."}
+                  ? "استخدم رقم التليفون و Client ID للدخول لملفك."
+                  : "Use your phone number and Client ID to access your pet care."}
               </p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5">
               <label className="block">
                 <span className="mb-2 block text-sm font-bold">
-                  {ar ? "البريد الإلكتروني" : "Email"}
+                  {ar ? "رقم التليفون" : "Phone Number"}
                 </span>
+
                 <input
-                  type="email"
+                  type="tel"
                   required
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 dark:border-white/10 dark:bg-white/5"
-                  placeholder="you@example.com"
+                  placeholder="010XXXXXXXX"
+                  dir="ltr"
                 />
               </label>
 
               <label className="block">
                 <span className="mb-2 block text-sm font-bold">
-                  {ar ? "كلمة المرور" : "Password"}
+                  {ar ? "Client ID" : "Client ID"}
                 </span>
+
                 <input
-                  type="password"
+                  type="text"
                   required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 dark:border-white/10 dark:bg-white/5"
-                  placeholder="••••••••"
+                  autoCapitalize="characters"
+                  value={clientCode}
+                  onChange={(e) => setClientCode(e.target.value.toUpperCase())}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 font-bold uppercase tracking-wider outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 dark:border-white/10 dark:bg-white/5"
+                  placeholder="VETRA-000125"
+                  dir="ltr"
                 />
               </label>
 
@@ -185,15 +199,19 @@ export default function ClientLoginPage() {
                 className="w-full rounded-2xl bg-slate-900 px-5 py-4 text-sm font-black text-white shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-900"
               >
                 {loading
-                  ? ar ? "جاري الدخول..." : "Signing in..."
-                  : ar ? "دخول 🐾" : "Sign in 🐾"}
+                  ? ar
+                    ? "جاري الدخول..."
+                    : "Signing in..."
+                  : ar
+                    ? "دخول 🐾"
+                    : "Sign in 🐾"}
               </button>
             </form>
 
             <p className="mt-6 text-center text-xs text-slate-400">
               {ar
-                ? "سيتم فتح ملف صاحب الحيوان المرتبط بهذا البريد تلقائيًا."
-                : "Your linked pet-owner profile will open automatically after sign in."}
+                ? "الـ Client ID موجود في ملفك لدى VETRA."
+                : "Your Client ID is available in your VETRA client profile."}
             </p>
           </div>
         </div>

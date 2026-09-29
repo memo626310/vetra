@@ -35,7 +35,7 @@ export default function NewClientPage() {
         address: address.trim() || null,
         notes: notes.trim() || null,
       })
-      .select("id")
+      .select("id, client_code")
       .single();
 
     if (error) {
@@ -46,6 +46,8 @@ export default function NewClientPage() {
     }
 
     if (data?.id) {
+      // The database trigger generates the 4-digit Client ID automatically.
+      // Keep the normal flow and let the client profile display it.
       router.push(`/clients/${data.id}`);
     }
   }

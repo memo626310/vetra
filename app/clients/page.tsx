@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 
 type Client = {
   id: string;
+  client_code: string;
   name: string;
   phone: string | null;
   email: string | null;
@@ -41,6 +42,7 @@ export default function ClientsPage() {
     const text = search.toLowerCase();
 
     return (
+      client.client_code.toLowerCase().includes(text) ||
       client.name.toLowerCase().includes(text) ||
       (client.phone || "").toLowerCase().includes(text) ||
       (client.email || "").toLowerCase().includes(text)
@@ -75,18 +77,18 @@ export default function ClientsPage() {
           </div>
 
           <button
-  onClick={() => (window.location.href = "/clients/new")}
-  className="rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
->
-  + عميل جديد
-</button>
+            onClick={() => (window.location.href = "/clients/new")}
+            className="rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+          >
+            + عميل جديد
+          </button>
         </div>
 
         {/* Search */}
         <div className="mb-6">
           <input
             type="text"
-            placeholder="ابحث باسم العميل أو رقم الهاتف..."
+            placeholder="ابحث باسم العميل أو رقم الهاتف أو Client ID..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
@@ -111,7 +113,7 @@ export default function ClientsPage() {
 
             <p className="mt-2 text-slate-500">
               {search
-                ? "جرب البحث باسم مختلف أو رقم الهاتف."
+                ? "جرب البحث باسم مختلف أو رقم الهاتف أو Client ID."
                 : "ابدأ بإضافة أول عميل للعيادة."}
             </p>
           </div>
@@ -131,14 +133,22 @@ export default function ClientsPage() {
                     👤
                   </div>
 
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <h2 className="truncate text-lg font-bold">
                       {client.name}
                     </h2>
 
-                    <p className="mt-1 text-sm text-slate-500">
-                      عميل
-                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="text-xs font-medium text-slate-400">
+                        Client ID
+                      </span>
+                      <span
+                        dir="ltr"
+                        className="rounded-lg bg-slate-100 px-2.5 py-1 text-sm font-bold tracking-wider text-slate-700"
+                      >
+                        {client.client_code}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
