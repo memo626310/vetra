@@ -174,7 +174,7 @@ export default function ClientInterfaceIdPage() {
 
   useEffect(() => {
     if (!authorized) return;
-    if (window.localStorage.getItem("vetra-device-setup-seen") === "true") return;
+    if (window.localStorage.getItem("vetra-device-setup-seen-v2") === "true") return;
     const timer = window.setTimeout(() => setShowDeviceSetup(true), 700);
     return () => window.clearTimeout(timer);
   }, [authorized]);
@@ -225,7 +225,7 @@ export default function ClientInterfaceIdPage() {
   }
 
   function finishDeviceSetup() {
-    window.localStorage.setItem("vetra-device-setup-seen", "true");
+    window.localStorage.setItem("vetra-device-setup-seen-v2", "true");
     setShowDeviceSetup(false);
   }
 
@@ -266,6 +266,13 @@ export default function ClientInterfaceIdPage() {
       <div dir="rtl" className="w-full max-w-md rounded-[2rem] border border-white/70 bg-white p-6 text-slate-900 shadow-2xl dark:border-white/10 dark:bg-[#101923] dark:text-white">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-100 text-3xl dark:bg-cyan-400/10">🐾</div>
         <h2 className="mt-5 text-center text-2xl font-black">خلي VETRA معاك دايمًا 🐾</h2>
+        <div className="mt-3 text-center text-xs font-bold text-cyan-600 dark:text-cyan-300">
+          {isIOS
+            ? isStandalone
+              ? "🍎 تم اكتشاف iPhone — VETRA تعمل كتطبيق"
+              : "🍎 تم اكتشاف iPhone — افتحها كتطبيق من الشاشة الرئيسية"
+            : "📱 تم اكتشاف جهاز Android / متصفح يدعم التثبيت"}
+        </div>
         <p className="mt-2 text-center text-sm leading-7 text-slate-500 dark:text-slate-300">فعّل الإشعارات واحفظ VETRA على موبايلك عشان توصلك التنبيهات المهمة بسهولة.</p>
 
         <div className="mt-6 space-y-3">
