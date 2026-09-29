@@ -1256,9 +1256,6 @@ function BarcodeScanner({
         videoRef.current.srcObject = null;
       }
 
-      try {
-        readerRef.current?.reset();
-      } catch {}
     };
 
     const enhanceCamera = async (currentStream: MediaStream) => {
