@@ -29,7 +29,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.replace("/");
+    router.replace("/dashboard");
     router.refresh();
   }
 
@@ -37,7 +37,7 @@ export default function LoginPage() {
     <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900 dark:bg-slate-950 dark:text-white">
       <div className="mx-auto flex min-h-[85vh] max-w-md items-center justify-center">
         <div className="w-full rounded-3xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          
+
           <div className="mb-8 text-center">
             <div className="mb-4 text-4xl">🐾</div>
 
