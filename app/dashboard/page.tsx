@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+
 import { supabase } from "@/lib/supabase";
+import { vetraCore } from "@/lib/vetra-core";
 
 type Language = "ar" | "en";
 
@@ -166,6 +168,47 @@ export default function Home() {
     setReady(true);
   }, []);
 
+  /*
+   * =========================================================
+   * VETRA CORE TEST
+   * =========================================================
+   *
+   * This runs from the actual browser session that logged in
+   * through VETRA Core.
+   *
+   * Open:
+   * F12 → Console
+   *
+   * We expect to see:
+   *
+   * VETRA CORE CONTEXT: [...]
+   * VETRA CORE ERROR: null
+   *
+   * =========================================================
+   */
+
+  useEffect(() => {
+    if (!ready) return;
+
+    async function testCoreContext() {
+      const { data, error } = await vetraCore.rpc(
+        "get_my_clinic_context"
+      );
+
+      console.log(
+        "VETRA CORE CONTEXT:",
+        data
+      );
+
+      console.log(
+        "VETRA CORE ERROR:",
+        error
+      );
+    }
+
+    void testCoreContext();
+  }, [ready]);
+
   useEffect(() => {
     if (!ready) return;
 
@@ -198,17 +241,20 @@ export default function Home() {
       dayNumber % t.encouragement.length;
 
     return t.encouragement[index];
-  }, [language]);
+  }, [language, t.encouragement]);
 
-  const formattedDate = new Date().toLocaleDateString(
-    language === "ar" ? "ar-EG" : "en-US",
-    {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }
-  );
+  const formattedDate =
+    new Date().toLocaleDateString(
+      language === "ar"
+        ? "ar-EG"
+        : "en-US",
+      {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }
+    );
 
   const goTo = (href: string) => {
     if (href !== "#") {
@@ -219,7 +265,10 @@ export default function Home() {
   const handleLogout = async () => {
     setLoggingOut(true);
 
-    await supabase.auth.signOut();
+    await Promise.all([
+      vetraCore.auth.signOut(),
+      supabase.auth.signOut(),
+    ]);
 
     window.location.href = "/login";
   };
@@ -246,7 +295,9 @@ export default function Home() {
     >
       <div className="flex min-h-screen">
 
-        {/* ================= SIDEBAR ================= */}
+        {/* =====================================================
+            SIDEBAR
+        ===================================================== */}
 
         <aside
           className={`hidden w-72 shrink-0 border-l px-7 py-8 transition-all duration-500 lg:block ${
@@ -282,53 +333,55 @@ export default function Home() {
           {/* Navigation */}
 
           <nav className="space-y-2">
-            {navItems.map(([icon, title], index) => {
-              const isHome = index === 0;
-              const isClients = index === 1;
-              const isPets = index === 2;
+            {navItems.map(
+              ([icon, title], index) => {
+                const isHome = index === 0;
+                const isClients = index === 1;
+                const isPets = index === 2;
 
-              return (
-                <button
-                  key={title}
-                  onClick={() => {
-                    if (isClients) {
-                      goTo("/clients");
-                    }
+                return (
+                  <button
+                    key={title}
+                    onClick={() => {
+                      if (isClients) {
+                        goTo("/clients");
+                      }
 
-                    if (isPets) {
-                      goTo("/pets");
-                    }
-                  }}
-                  className={`group w-full rounded-2xl px-5 py-4 text-base font-medium transition-all duration-300 hover:translate-x-1 ${
-                    isArabic
-                      ? "text-right"
-                      : "text-left"
-                  } ${
-                    isHome
-                      ? darkMode
-                        ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15"
-                        : "bg-blue-50 text-blue-800 hover:bg-blue-100"
-                      : darkMode
-                        ? "text-slate-400 hover:bg-white/[0.04] hover:text-white"
-                        : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-                  }`}
-                >
-                  <span className="inline-block transition-transform duration-300 group-hover:scale-110">
-                    {icon}
-                  </span>
-
-                  <span
-                    className={
+                      if (isPets) {
+                        goTo("/pets");
+                      }
+                    }}
+                    className={`group w-full rounded-2xl px-5 py-4 text-base font-medium transition-all duration-300 hover:translate-x-1 ${
                       isArabic
-                        ? "mr-3"
-                        : "ml-3"
-                    }
+                        ? "text-right"
+                        : "text-left"
+                    } ${
+                      isHome
+                        ? darkMode
+                          ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15"
+                          : "bg-blue-50 text-blue-800 hover:bg-blue-100"
+                        : darkMode
+                          ? "text-slate-400 hover:bg-white/[0.04] hover:text-white"
+                          : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                    }`}
                   >
-                    {title}
-                  </span>
-                </button>
-              );
-            })}
+                    <span className="inline-block transition-transform duration-300 group-hover:scale-110">
+                      {icon}
+                    </span>
+
+                    <span
+                      className={
+                        isArabic
+                          ? "mr-3"
+                          : "ml-3"
+                      }
+                    >
+                      {title}
+                    </span>
+                  </button>
+                );
+              }
+            )}
           </nav>
 
           {/* Settings */}
@@ -368,11 +421,15 @@ export default function Home() {
           </div>
         </aside>
 
-        {/* ================= MAIN ================= */}
+        {/* =====================================================
+            MAIN
+        ===================================================== */}
 
         <section className="flex-1 p-5 transition-colors duration-500 sm:p-8 lg:p-12">
 
-          {/* ================= HEADER ================= */}
+          {/* ===================================================
+              HEADER
+          =================================================== */}
 
           <header className="mb-10 flex items-start justify-between gap-4">
 
@@ -408,7 +465,9 @@ export default function Home() {
 
             </div>
 
-            {/* ================= ACTIONS ================= */}
+            {/* =================================================
+                ACTIONS
+            ================================================= */}
 
             <div className="flex shrink-0 items-center gap-2">
 
@@ -417,7 +476,9 @@ export default function Home() {
               <button
                 onClick={() =>
                   setLanguage(
-                    isArabic ? "en" : "ar"
+                    isArabic
+                      ? "en"
+                      : "ar"
                   )
                 }
                 className={`flex h-12 items-center gap-2 rounded-2xl border px-3 text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 active:scale-95 sm:px-4 ${
@@ -480,8 +541,10 @@ export default function Home() {
                 }`}
               >
                 <button
-                  onClick={() => goTo("/profile")}
-                  className={`text-right transition-all duration-200 hover:opacity-80 ${
+                  onClick={() =>
+                    goTo("/profile")
+                  }
+                  className={`transition-all duration-200 hover:opacity-80 ${
                     isArabic
                       ? "text-right"
                       : "text-left"
@@ -518,127 +581,153 @@ export default function Home() {
                       : "bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-600"
                   }`}
                 >
-                  {loggingOut ? "…" : "↪"}
+                  {loggingOut
+                    ? "…"
+                    : "↪"}
                 </button>
               </div>
             </div>
           </header>
 
-          {/* ================= CARDS ================= */}
+          {/* ===================================================
+              CARDS
+          =================================================== */}
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
 
-            {t.cards.map((card, index) => {
-              const [title, subtitle, icon] = card;
+            {t.cards.map(
+              (card, index) => {
+                const [
+                  title,
+                  subtitle,
+                  icon,
+                ] = card;
 
-              const colors =
-                cardColors[index];
+                const colors =
+                  cardColors[index];
 
-              const featured =
-                index === 0;
+                const featured =
+                  index === 0;
 
-              return (
-                <button
-                  key={title}
-                  onClick={() => {
-                    if (index === 0) {
-                      goTo("/visits/new");
-                    }
+                return (
+                  <button
+                    key={title}
+                    onClick={() => {
+                      if (index === 0) {
+                        goTo(
+                          "/visits/new"
+                        );
+                      }
 
-                    if (index === 1) {
-                      goTo("/clients");
-                    }
+                      if (index === 1) {
+                        goTo(
+                          "/clients"
+                        );
+                      }
 
-                    if (index === 2) {
-                      goTo("/pets");
-                    }
+                      if (index === 2) {
+                        goTo("/pets");
+                      }
 
-                    if (index === 5) {
-                      goTo("/inventory/products");
-                    }
+                      if (index === 5) {
+                        goTo(
+                          "/inventory/products"
+                        );
+                      }
 
-                    if (index === 6) {
-                      goTo("/barcode-test");
-                    }
-                    if (index === 7) goTo("/invoices");
-                  }}
-                  className={`group relative min-h-[220px] overflow-hidden rounded-[32px] p-7 transition-all duration-300 ease-out hover:-translate-y-2 hover:scale-[1.01] active:scale-[0.98] ${
-                    isArabic
-                      ? "text-right"
-                      : "text-left"
-                  } ${
-                    featured
-                      ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20 hover:bg-blue-500 hover:shadow-xl hover:shadow-blue-900/30"
-                      : darkMode
-                        ? "border border-white/[0.06] bg-[#181B21] text-white shadow-sm hover:border-white/[0.10] hover:bg-[#1C2026] hover:shadow-xl"
-                        : "border border-slate-100 bg-white text-slate-800 shadow-sm hover:border-slate-200 hover:shadow-xl"
-                  }`}
-                >
+                      if (index === 6) {
+                        goTo(
+                          "/barcode-test"
+                        );
+                      }
 
-                  {/* Glow */}
-
-                  <div
-                    className={`pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full blur-3xl transition-all duration-700 group-hover:scale-150 ${
+                      if (index === 7) {
+                        goTo("/invoices");
+                      }
+                    }}
+                    className={`group relative min-h-[220px] overflow-hidden rounded-[32px] p-7 transition-all duration-300 ease-out hover:-translate-y-2 hover:scale-[1.01] active:scale-[0.98] ${
+                      isArabic
+                        ? "text-right"
+                        : "text-left"
+                    } ${
                       featured
-                        ? "bg-white/10"
+                        ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20 hover:bg-blue-500 hover:shadow-xl hover:shadow-blue-900/30"
                         : darkMode
-                          ? "bg-blue-500/[0.04]"
-                          : "bg-blue-500/[0.05]"
-                    }`}
-                  />
-
-                  {/* Icon */}
-
-                  <div
-                    className={`relative mb-7 flex h-16 w-16 items-center justify-center rounded-3xl text-3xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 ${
-                      featured
-                        ? "bg-white/15"
-                        : `${darkMode ? colors.dark : colors.light} ${colors.icon}`
+                          ? "border border-white/[0.06] bg-[#181B21] text-white shadow-sm hover:border-white/[0.10] hover:bg-[#1C2026] hover:shadow-xl"
+                          : "border border-slate-100 bg-white text-slate-800 shadow-sm hover:border-slate-200 hover:shadow-xl"
                     }`}
                   >
-                    <span className="transition-transform duration-500 group-hover:scale-110">
-                      {icon}
-                    </span>
-                  </div>
 
-                  {/* Title */}
+                    {/* Glow */}
 
-                  <h3 className="relative text-2xl font-black tracking-tight transition-transform duration-300 group-hover:translate-x-1">
-                    {title}
-                  </h3>
+                    <div
+                      className={`pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full blur-3xl transition-all duration-700 group-hover:scale-150 ${
+                        featured
+                          ? "bg-white/10"
+                          : darkMode
+                            ? "bg-blue-500/[0.04]"
+                            : "bg-blue-500/[0.05]"
+                      }`}
+                    />
 
-                  {/* Subtitle */}
+                    {/* Icon */}
 
-                  <p
-                    className={`relative mt-3 text-base font-medium leading-7 transition-colors duration-300 ${
-                      featured
-                        ? "text-blue-100"
-                        : darkMode
-                          ? "text-slate-500"
-                          : "text-slate-400"
-                    }`}
-                  >
-                    {subtitle}
-                  </p>
+                    <div
+                      className={`relative mb-7 flex h-16 w-16 items-center justify-center rounded-3xl text-3xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 ${
+                        featured
+                          ? "bg-white/15"
+                          : `${
+                              darkMode
+                                ? colors.dark
+                                : colors.light
+                            } ${colors.icon}`
+                      }`}
+                    >
+                      <span className="transition-transform duration-500 group-hover:scale-110">
+                        {icon}
+                      </span>
+                    </div>
 
-                  {/* Open */}
+                    {/* Title */}
 
-                  <div
-                    className={`relative mt-6 text-sm font-bold transition-all duration-300 ${
-                      featured
-                        ? "text-white"
-                        : "translate-y-1 text-blue-500 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
-                    }`}
-                  >
-                    {t.open}{" "}
-                    {isArabic
-                      ? "←"
-                      : "→"}
-                  </div>
+                    <h3 className="relative text-2xl font-black tracking-tight transition-transform duration-300 group-hover:translate-x-1">
+                      {title}
+                    </h3>
 
-                </button>
-              );
-            })}
+                    {/* Subtitle */}
+
+                    <p
+                      className={`relative mt-3 text-base font-medium leading-7 transition-colors duration-300 ${
+                        featured
+                          ? "text-blue-100"
+                          : darkMode
+                            ? "text-slate-500"
+                            : "text-slate-400"
+                      }`}
+                    >
+                      {subtitle}
+                    </p>
+
+                    {/* Open */}
+
+                    <div
+                      className={`relative mt-6 text-sm font-bold transition-all duration-300 ${
+                        featured
+                          ? "text-white"
+                          : "translate-y-1 text-blue-500 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
+                      }`}
+                    >
+                      {t.open}{" "}
+
+                      {isArabic
+                        ? "←"
+                        : "→"}
+                    </div>
+
+                  </button>
+                );
+              }
+            )}
 
           </div>
 

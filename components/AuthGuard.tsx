@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { vetraCore } from "@/lib/vetra-core";
 
 const PUBLIC_PATHS = [
   "/",
@@ -27,6 +27,7 @@ export default function AuthGuard({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
@@ -37,10 +38,15 @@ export default function AuthGuard({
 
     let mounted = true;
 
-    async function checkUser() {
+    async function checkCoreSession() {
       const {
         data: { session },
-      } = await supabase.auth.getSession();
+        error,
+      } = await vetraCore.auth.getSession();
+
+      if (error) {
+        console.error("VETRA Core auth check failed:", error);
+      }
 
       if (!session) {
         router.replace("/login");
@@ -52,15 +58,22 @@ export default function AuthGuard({
       }
     }
 
-    checkUser();
+    void checkCoreSession();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session && !isPublicPath(pathname)) {
-        router.replace("/login");
+    } = vetraCore.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!session && !isPublicPath(pathname)) {
+          router.replace("/login");
+          return;
+        }
+
+        if (session && mounted) {
+          setChecking(false);
+        }
       }
-    });
+    );
 
     return () => {
       mounted = false;
@@ -72,7 +85,9 @@ export default function AuthGuard({
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="text-center">
-          <div className="mb-3 text-4xl">🐾</div>
+          <div className="mb-3 text-4xl">
+            🐾
+          </div>
 
           <p className="text-sm text-slate-500">
             Loading VETRA...
