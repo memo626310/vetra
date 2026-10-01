@@ -7,6 +7,8 @@ import { supabase } from "@/lib/supabase";
 const PUBLIC_PATHS = [
   "/",
   "/login",
+  "/register",
+  "/clinic-setup",
   "/client-interface",
   "/client-interface/login",
 ];
@@ -71,6 +73,7 @@ export default function AuthGuard({
       <main className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="text-center">
           <div className="mb-3 text-4xl">🐾</div>
+
           <p className="text-sm text-slate-500">
             Loading VETRA...
           </p>
