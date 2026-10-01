@@ -27,7 +27,6 @@ export default function AuthGuard({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
@@ -45,7 +44,10 @@ export default function AuthGuard({
       } = await vetraCore.auth.getSession();
 
       if (error) {
-        console.error("VETRA Core auth check failed:", error);
+        console.error(
+          "VETRA Core auth check failed:",
+          error
+        );
       }
 
       if (!session) {

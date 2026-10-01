@@ -1,11 +1,28 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-
 import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
 
 type Language = "ar" | "en";
+
+type ClinicContext = {
+  clinic_id: string;
+  clinic_name: string;
+  clinic_status: string;
+  doctor_id: string;
+  doctor_name: string;
+  role: string;
+  member_status: string;
+  database_provider: string | null;
+  project_ref: string | null;
+  database_region: string | null;
+  database_status: string | null;
+  subscription_status: string | null;
+  plan_code: string | null;
+  plan_name: string | null;
+  trial_ends_at: string | null;
+};
 
 const translations = {
   ar: {
@@ -42,6 +59,11 @@ const translations = {
     notifications: "الإشعارات",
     signOut: "تسجيل الخروج",
     profile: "الملف الشخصي",
+    clinic: "العيادة",
+    owner: "المالك",
+    database: "قاعدة البيانات",
+    ready: "جاهزة",
+    loading: "جاري التحميل...",
 
     encouragement: [
       "صباح جديد، وحالات جديدة تقدر تساعدها. 🐾",
@@ -87,6 +109,11 @@ const translations = {
     notifications: "Notifications",
     signOut: "Sign out",
     profile: "Profile",
+    clinic: "Clinic",
+    owner: "Owner",
+    database: "Database",
+    ready: "Ready",
+    loading: "Loading...",
 
     encouragement: [
       "A new day, new cases, new lives to help. 🐾",
@@ -153,6 +180,11 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  const [clinicContext, setClinicContext] =
+    useState<ClinicContext | null>(null);
+
+  const [clinicLoading, setClinicLoading] = useState(true);
+
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
     const savedLanguage = localStorage.getItem("vetra-language");
@@ -168,47 +200,6 @@ export default function Home() {
     setReady(true);
   }, []);
 
-  /*
-   * =========================================================
-   * VETRA CORE TEST
-   * =========================================================
-   *
-   * This runs from the actual browser session that logged in
-   * through VETRA Core.
-   *
-   * Open:
-   * F12 → Console
-   *
-   * We expect to see:
-   *
-   * VETRA CORE CONTEXT: [...]
-   * VETRA CORE ERROR: null
-   *
-   * =========================================================
-   */
-
-  useEffect(() => {
-    if (!ready) return;
-
-    async function testCoreContext() {
-      const { data, error } = await vetraCore.rpc(
-        "get_my_clinic_context"
-      );
-
-      console.log(
-        "VETRA CORE CONTEXT:",
-        data
-      );
-
-      console.log(
-        "VETRA CORE ERROR:",
-        error
-      );
-    }
-
-    void testCoreContext();
-  }, [ready]);
-
   useEffect(() => {
     if (!ready) return;
 
@@ -223,8 +214,72 @@ export default function Home() {
     );
   }, [darkMode, language, ready]);
 
+  useEffect(() => {
+    if (!ready) return;
+
+    let mounted = true;
+
+    async function loadClinicContext() {
+      setClinicLoading(true);
+
+      const { data, error } = await vetraCore.rpc(
+        "get_my_clinic_context"
+      );
+
+      if (error) {
+        console.error(
+          "VETRA CORE CONTEXT ERROR:",
+          error
+        );
+
+        if (mounted) {
+          setClinicContext(null);
+          setClinicLoading(false);
+        }
+
+        return;
+      }
+
+      const context = Array.isArray(data)
+        ? data[0] ?? null
+        : null;
+
+      console.log(
+        "ACTIVE VETRA CLINIC:",
+        context
+      );
+
+      if (mounted) {
+        setClinicContext(context);
+        setClinicLoading(false);
+      }
+    }
+
+    void loadClinicContext();
+
+    return () => {
+      mounted = false;
+    };
+  }, [ready]);
+
   const t = translations[language];
   const isArabic = language === "ar";
+
+  const doctorName =
+    clinicContext?.doctor_name ||
+    t.doctor;
+
+  const clinicName =
+    clinicContext?.clinic_name ||
+    t.clinic;
+
+  const doctorRole =
+    clinicContext?.role ||
+    "—";
+
+  const databaseStatus =
+    clinicContext?.database_status ||
+    "—";
 
   const todayMessage = useMemo(() => {
     const today = new Date();
@@ -243,18 +298,15 @@ export default function Home() {
     return t.encouragement[index];
   }, [language, t.encouragement]);
 
-  const formattedDate =
-    new Date().toLocaleDateString(
-      language === "ar"
-        ? "ar-EG"
-        : "en-US",
-      {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }
-    );
+  const formattedDate = new Date().toLocaleDateString(
+    language === "ar" ? "ar-EG" : "en-US",
+    {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }
+  );
 
   const goTo = (href: string) => {
     if (href !== "#") {
@@ -295,9 +347,7 @@ export default function Home() {
     >
       <div className="flex min-h-screen">
 
-        {/* =====================================================
-            SIDEBAR
-        ===================================================== */}
+        {/* ================= SIDEBAR ================= */}
 
         <aside
           className={`hidden w-72 shrink-0 border-l px-7 py-8 transition-all duration-500 lg:block ${
@@ -328,60 +378,100 @@ export default function Home() {
             >
               {t.sidebarSubtitle}
             </p>
+
+            {/* Active clinic */}
+
+            <div
+              className={`mt-6 rounded-2xl border p-4 ${
+                darkMode
+                  ? "border-white/[0.06] bg-white/[0.025]"
+                  : "border-slate-100 bg-slate-50"
+              }`}
+            >
+              <p
+                className={`text-xs font-semibold ${
+                  darkMode
+                    ? "text-slate-500"
+                    : "text-slate-400"
+                }`}
+              >
+                {t.clinic}
+              </p>
+
+              <p className="mt-1 truncate text-sm font-bold">
+                {clinicLoading
+                  ? t.loading
+                  : clinicName}
+              </p>
+
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-xs">
+                  👤
+                </span>
+
+                <span
+                  className={`truncate text-xs ${
+                    darkMode
+                      ? "text-slate-500"
+                      : "text-slate-400"
+                  }`}
+                >
+                  {doctorName}
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Navigation */}
 
           <nav className="space-y-2">
-            {navItems.map(
-              ([icon, title], index) => {
-                const isHome = index === 0;
-                const isClients = index === 1;
-                const isPets = index === 2;
+            {navItems.map(([icon, title], index) => {
+              const isHome = index === 0;
+              const isClients = index === 1;
+              const isPets = index === 2;
 
-                return (
-                  <button
-                    key={title}
-                    onClick={() => {
-                      if (isClients) {
-                        goTo("/clients");
-                      }
+              return (
+                <button
+                  key={title}
+                  onClick={() => {
+                    if (isClients) {
+                      goTo("/clients");
+                    }
 
-                      if (isPets) {
-                        goTo("/pets");
-                      }
-                    }}
-                    className={`group w-full rounded-2xl px-5 py-4 text-base font-medium transition-all duration-300 hover:translate-x-1 ${
+                    if (isPets) {
+                      goTo("/pets");
+                    }
+                  }}
+                  className={`group w-full rounded-2xl px-5 py-4 text-base font-medium transition-all duration-300 hover:translate-x-1 ${
+                    isArabic
+                      ? "text-right"
+                      : "text-left"
+                  } ${
+                    isHome
+                      ? darkMode
+                        ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15"
+                        : "bg-blue-50 text-blue-800 hover:bg-blue-100"
+                      : darkMode
+                        ? "text-slate-400 hover:bg-white/[0.04] hover:text-white"
+                        : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                  }`}
+                >
+                  <span className="inline-block transition-transform duration-300 group-hover:scale-110">
+                    {icon}
+                  </span>
+
+                  <span
+                    className={
                       isArabic
-                        ? "text-right"
-                        : "text-left"
-                    } ${
-                      isHome
-                        ? darkMode
-                          ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15"
-                          : "bg-blue-50 text-blue-800 hover:bg-blue-100"
-                        : darkMode
-                          ? "text-slate-400 hover:bg-white/[0.04] hover:text-white"
-                          : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-                    }`}
+                        ? "mr-3"
+                        : "ml-3"
+                    }
                   >
-                    <span className="inline-block transition-transform duration-300 group-hover:scale-110">
-                      {icon}
-                    </span>
-
-                    <span
-                      className={
-                        isArabic
-                          ? "mr-3"
-                          : "ml-3"
-                      }
-                    >
-                      {title}
-                    </span>
-                  </button>
-                );
-              }
-            )}
+                    {title}
+                  </span>
+                </button>
+              );
+            })}
           </nav>
 
           {/* Settings */}
@@ -421,15 +511,11 @@ export default function Home() {
           </div>
         </aside>
 
-        {/* =====================================================
-            MAIN
-        ===================================================== */}
+        {/* ================= MAIN ================= */}
 
         <section className="flex-1 p-5 transition-colors duration-500 sm:p-8 lg:p-12">
 
-          {/* ===================================================
-              HEADER
-          =================================================== */}
+          {/* ================= HEADER ================= */}
 
           <header className="mb-10 flex items-start justify-between gap-4">
 
@@ -446,7 +532,7 @@ export default function Home() {
               </p>
 
               <h2 className="text-2xl font-black tracking-tight sm:text-4xl">
-                {t.welcome}، {t.doctor}{" "}
+                {t.welcome}، {doctorName}{" "}
 
                 <span className="inline-block transition-transform duration-300 hover:rotate-12">
                   👋
@@ -463,11 +549,51 @@ export default function Home() {
                 {todayMessage}
               </p>
 
+              {/* Core status */}
+
+              {!clinicLoading && clinicContext && (
+                <div className="mt-4 flex flex-wrap gap-2">
+
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-bold ${
+                      darkMode
+                        ? "bg-white/[0.05] text-slate-300"
+                        : "bg-white text-slate-600 shadow-sm"
+                    }`}
+                  >
+                    🏥 {clinicName}
+                  </span>
+
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-bold ${
+                      darkMode
+                        ? "bg-blue-500/10 text-blue-400"
+                        : "bg-blue-50 text-blue-700"
+                    }`}
+                  >
+                    👤 {doctorRole}
+                  </span>
+
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-bold ${
+                      databaseStatus === "ready"
+                        ? darkMode
+                          ? "bg-emerald-500/10 text-emerald-400"
+                          : "bg-emerald-50 text-emerald-700"
+                        : darkMode
+                          ? "bg-orange-500/10 text-orange-400"
+                          : "bg-orange-50 text-orange-700"
+                    }`}
+                  >
+                    🗄️ {t.database}: {databaseStatus}
+                  </span>
+
+                </div>
+              )}
+
             </div>
 
-            {/* =================================================
-                ACTIONS
-            ================================================= */}
+            {/* ================= ACTIONS ================= */}
 
             <div className="flex shrink-0 items-center gap-2">
 
@@ -476,9 +602,7 @@ export default function Home() {
               <button
                 onClick={() =>
                   setLanguage(
-                    isArabic
-                      ? "en"
-                      : "ar"
+                    isArabic ? "en" : "ar"
                   )
                 }
                 className={`flex h-12 items-center gap-2 rounded-2xl border px-3 text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 active:scale-95 sm:px-4 ${
@@ -541,10 +665,8 @@ export default function Home() {
                 }`}
               >
                 <button
-                  onClick={() =>
-                    goTo("/profile")
-                  }
-                  className={`transition-all duration-200 hover:opacity-80 ${
+                  onClick={() => goTo("/profile")}
+                  className={`text-right transition-all duration-200 hover:opacity-80 ${
                     isArabic
                       ? "text-right"
                       : "text-left"
@@ -552,7 +674,7 @@ export default function Home() {
                   title={t.profile}
                 >
                   <p className="text-sm font-bold">
-                    {t.doctor}
+                    {doctorName}
                   </p>
 
                   <p
@@ -562,9 +684,11 @@ export default function Home() {
                         : "text-slate-400"
                     }`}
                   >
-                    {isArabic
-                      ? "الطبيب"
-                      : "Doctor"}
+                    {doctorRole !== "—"
+                      ? doctorRole
+                      : isArabic
+                        ? "الطبيب"
+                        : "Doctor"}
                   </p>
                 </button>
 
@@ -581,153 +705,122 @@ export default function Home() {
                       : "bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-600"
                   }`}
                 >
-                  {loggingOut
-                    ? "…"
-                    : "↪"}
+                  {loggingOut ? "…" : "↪"}
                 </button>
               </div>
             </div>
           </header>
 
-          {/* ===================================================
-              CARDS
-          =================================================== */}
+          {/* ================= CARDS ================= */}
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
 
-            {t.cards.map(
-              (card, index) => {
-                const [
-                  title,
-                  subtitle,
-                  icon,
-                ] = card;
+            {t.cards.map((card, index) => {
+              const [title, subtitle, icon] = card;
 
-                const colors =
-                  cardColors[index];
+              const colors =
+                cardColors[index];
 
-                const featured =
-                  index === 0;
+              const featured =
+                index === 0;
 
-                return (
-                  <button
-                    key={title}
-                    onClick={() => {
-                      if (index === 0) {
-                        goTo(
-                          "/visits/new"
-                        );
-                      }
+              return (
+                <button
+                  key={title}
+                  onClick={() => {
+                    if (index === 0) {
+                      goTo("/visits/new");
+                    }
 
-                      if (index === 1) {
-                        goTo(
-                          "/clients"
-                        );
-                      }
+                    if (index === 1) {
+                      goTo("/clients");
+                    }
 
-                      if (index === 2) {
-                        goTo("/pets");
-                      }
+                    if (index === 2) {
+                      goTo("/pets");
+                    }
 
-                      if (index === 5) {
-                        goTo(
-                          "/inventory/products"
-                        );
-                      }
+                    if (index === 6) {
+                      goTo("/barcode-test");
+                    }
+                  }}
+                  className={`group relative min-h-[220px] overflow-hidden rounded-[32px] p-7 transition-all duration-300 ease-out hover:-translate-y-2 hover:scale-[1.01] active:scale-[0.98] ${
+                    isArabic
+                      ? "text-right"
+                      : "text-left"
+                  } ${
+                    featured
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20 hover:bg-blue-500 hover:shadow-xl hover:shadow-blue-900/30"
+                      : darkMode
+                        ? "border border-white/[0.06] bg-[#181B21] text-white shadow-sm hover:border-white/[0.10] hover:bg-[#1C2026] hover:shadow-xl"
+                        : "border border-slate-100 bg-white text-slate-800 shadow-sm hover:border-slate-200 hover:shadow-xl"
+                  }`}
+                >
 
-                      if (index === 6) {
-                        goTo(
-                          "/barcode-test"
-                        );
-                      }
+                  {/* Glow */}
 
-                      if (index === 7) {
-                        goTo("/invoices");
-                      }
-                    }}
-                    className={`group relative min-h-[220px] overflow-hidden rounded-[32px] p-7 transition-all duration-300 ease-out hover:-translate-y-2 hover:scale-[1.01] active:scale-[0.98] ${
-                      isArabic
-                        ? "text-right"
-                        : "text-left"
-                    } ${
+                  <div
+                    className={`pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full blur-3xl transition-all duration-700 group-hover:scale-150 ${
                       featured
-                        ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20 hover:bg-blue-500 hover:shadow-xl hover:shadow-blue-900/30"
+                        ? "bg-white/10"
                         : darkMode
-                          ? "border border-white/[0.06] bg-[#181B21] text-white shadow-sm hover:border-white/[0.10] hover:bg-[#1C2026] hover:shadow-xl"
-                          : "border border-slate-100 bg-white text-slate-800 shadow-sm hover:border-slate-200 hover:shadow-xl"
+                          ? "bg-blue-500/[0.04]"
+                          : "bg-blue-500/[0.05]"
+                    }`}
+                  />
+
+                  {/* Icon */}
+
+                  <div
+                    className={`relative mb-7 flex h-16 w-16 items-center justify-center rounded-3xl text-3xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 ${
+                      featured
+                        ? "bg-white/15"
+                        : `${darkMode ? colors.dark : colors.light} ${colors.icon}`
                     }`}
                   >
+                    <span className="transition-transform duration-500 group-hover:scale-110">
+                      {icon}
+                    </span>
+                  </div>
 
-                    {/* Glow */}
+                  {/* Title */}
 
-                    <div
-                      className={`pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full blur-3xl transition-all duration-700 group-hover:scale-150 ${
-                        featured
-                          ? "bg-white/10"
-                          : darkMode
-                            ? "bg-blue-500/[0.04]"
-                            : "bg-blue-500/[0.05]"
-                      }`}
-                    />
+                  <h3 className="relative text-2xl font-black tracking-tight transition-transform duration-300 group-hover:translate-x-1">
+                    {title}
+                  </h3>
 
-                    {/* Icon */}
+                  {/* Subtitle */}
 
-                    <div
-                      className={`relative mb-7 flex h-16 w-16 items-center justify-center rounded-3xl text-3xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 ${
-                        featured
-                          ? "bg-white/15"
-                          : `${
-                              darkMode
-                                ? colors.dark
-                                : colors.light
-                            } ${colors.icon}`
-                      }`}
-                    >
-                      <span className="transition-transform duration-500 group-hover:scale-110">
-                        {icon}
-                      </span>
-                    </div>
+                  <p
+                    className={`relative mt-3 text-base font-medium leading-7 transition-colors duration-300 ${
+                      featured
+                        ? "text-blue-100"
+                        : darkMode
+                          ? "text-slate-500"
+                          : "text-slate-400"
+                    }`}
+                  >
+                    {subtitle}
+                  </p>
 
-                    {/* Title */}
+                  {/* Open */}
 
-                    <h3 className="relative text-2xl font-black tracking-tight transition-transform duration-300 group-hover:translate-x-1">
-                      {title}
-                    </h3>
+                  <div
+                    className={`relative mt-6 text-sm font-bold transition-all duration-300 ${
+                      featured
+                        ? "text-white"
+                        : "translate-y-1 text-blue-500 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
+                    }`}
+                  >
+                    {t.open}{" "}
+                    {isArabic
+                      ? "←"
+                      : "→"}
+                  </div>
 
-                    {/* Subtitle */}
-
-                    <p
-                      className={`relative mt-3 text-base font-medium leading-7 transition-colors duration-300 ${
-                        featured
-                          ? "text-blue-100"
-                          : darkMode
-                            ? "text-slate-500"
-                            : "text-slate-400"
-                      }`}
-                    >
-                      {subtitle}
-                    </p>
-
-                    {/* Open */}
-
-                    <div
-                      className={`relative mt-6 text-sm font-bold transition-all duration-300 ${
-                        featured
-                          ? "text-white"
-                          : "translate-y-1 text-blue-500 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
-                      }`}
-                    >
-                      {t.open}{" "}
-
-                      {isArabic
-                        ? "←"
-                        : "→"}
-                    </div>
-
-                  </button>
-                );
-              }
-            )}
+                </button>
+              );
+            })}
 
           </div>
 
