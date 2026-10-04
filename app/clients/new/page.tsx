@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { getClinicDb } from "@/lib/clinic-db";
 
 export default function NewClientPage() {
   const router = useRouter();
@@ -26,29 +26,46 @@ export default function NewClientPage() {
 
     setSaving(true);
 
-    const { data, error } = await supabase
-      .from("clients")
-      .insert({
-        name: name.trim(),
-        phone: phone.trim() || null,
-        email: email.trim() || null,
-        address: address.trim() || null,
-        notes: notes.trim() || null,
-      })
-      .select("id, client_code")
-      .single();
+    try {
+      // Get the active clinic database from VETRA Core.
+      const db = await getClinicDb();
 
-    if (error) {
-      console.error(error);
-      setError(error.message);
+      const { data, error: insertError } = await db
+        .from("clients")
+        .insert({
+          name: name.trim(),
+          phone: phone.trim() || null,
+          email: email.trim() || null,
+          address: address.trim() || null,
+          notes: notes.trim() || null,
+        })
+        .select("id, client_code")
+        .single();
+
+      if (insertError) {
+        console.error(insertError);
+        setError(insertError.message);
+        setSaving(false);
+        return;
+      }
+
+      if (data?.id) {
+        // The Clinic Database trigger generates the 4-digit Client ID.
+        router.push(`/clients/${data.id}`);
+        return;
+      }
+
+      setError("تم الحفظ لكن لم يتم استرجاع بيانات العميل.");
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "حصل خطأ أثناء حفظ العميل."
+      );
+    } finally {
       setSaving(false);
-      return;
-    }
-
-    if (data?.id) {
-      // The database trigger generates the 4-digit Client ID automatically.
-      // Keep the normal flow and let the client profile display it.
-      router.push(`/clients/${data.id}`);
     }
   }
 

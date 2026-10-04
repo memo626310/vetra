@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { getClinicDb } from "@/lib/clinic-db";
 
 type Pet = {
   id: string;
@@ -33,23 +33,36 @@ export default function PetsPage() {
 
   useEffect(() => {
     async function loadPets() {
-      const { data, error } = await supabase
-        .from("pets")
-        .select(`
-          *,
-          client:clients (
-            id,
-            name,
-            phone
-          )
-        `)
-        .order("created_at", { ascending: false });
+      setLoading(true);
 
-      if (!error && data) {
-        setPets(data as PetWithClient[]);
+      try {
+        const db = await getClinicDb();
+
+        const { data, error } = await db
+          .from("pets")
+          .select(`
+            *,
+            client:clients (
+              id,
+              name,
+              phone
+            )
+          `)
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("LOAD PETS ERROR:", error);
+          return;
+        }
+
+        if (data) {
+          setPets(data as PetWithClient[]);
+        }
+      } catch (error) {
+        console.error("LOAD PETS ERROR:", error);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     }
 
     loadPets();

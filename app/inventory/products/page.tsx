@@ -31,7 +31,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 
 
-import { supabase } from "@/lib/supabase";
+import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 
 
 
@@ -93,6 +93,7 @@ type Product = {
 
 
   notes: string | null;
+  is_active: boolean;
 
 
   category?: {
@@ -290,13 +291,33 @@ export default function ProductsPage() {
 
 
 
+    
+    let context;
+    let db;
+
+    try {
+      context = await getClinicContext();
+      db = await getClinicDb();
+    } catch (error) {
+      console.error(error);
+      setMessage("تعذر الاتصال ببيانات العيادة");
+      setLoading(false);
+      return;
+    }
+
+    if (!["owner", "admin"].includes(context.role)) {
+      setMessage("ليس لديك صلاحية إدارة المخزون");
+      setLoading(false);
+      return;
+    }
+
     const [productsResult, categoriesResult] =
 
 
       await Promise.all([
 
 
-        supabase
+        db
 
 
           .from("products")
@@ -320,6 +341,8 @@ export default function ProductsPage() {
           `)
 
 
+          .eq("clinic_id", context.clinic_id)
+          .eq("is_active", true)
           .order("created_at", {
 
 
@@ -333,13 +356,16 @@ export default function ProductsPage() {
 
 
 
-        supabase
+        db
 
 
           .from("product_categories")
 
 
           .select("*")
+
+
+          .eq("clinic_id", context.clinic_id)
 
 
           .order("name"),
@@ -610,7 +636,10 @@ export default function ProductsPage() {
 
 
 
-    const payload = {
+    
+    const context = await getClinicContext();
+    const db = await getClinicDb();
+const payload = {
 
 
       name: productForm.name.trim(),
@@ -752,6 +781,9 @@ export default function ProductsPage() {
         null,
 
 
+      clinic_id: context.clinic_id,
+
+
     };
 
 
@@ -772,7 +804,7 @@ export default function ProductsPage() {
       const result =
 
 
-        await supabase
+        await db
 
 
           .from("products")
@@ -790,7 +822,8 @@ export default function ProductsPage() {
             editingProduct.id
 
 
-          );
+          )
+          .eq("clinic_id", context.clinic_id);
 
 
 
@@ -806,7 +839,7 @@ export default function ProductsPage() {
       const result =
 
 
-        await supabase
+        await db
 
 
           .from("products")
@@ -936,18 +969,22 @@ export default function ProductsPage() {
     setSaving(true);
     setMessage("");
 
-    const { data, error } = await supabase
+    
+    const context = await getClinicContext();
+    const db = await getClinicDb();
+const { data, error } = await db
       .from("product_categories")
-      .insert({ name })
+      .insert({ name, clinic_id: context.clinic_id })
       .select("id, name")
       .single();
 
     if (error) {
       if (error.code === "23505") {
-        const { data: existing } = await supabase
+        const { data: existing } = await db
           .from("product_categories")
           .select("id, name")
           .eq("name", name)
+          .eq("clinic_id", context.clinic_id)
           .maybeSingle();
 
         if (existing) {
@@ -1012,10 +1049,14 @@ export default function ProductsPage() {
     setSaving(true);
     setMessage("");
 
-    const { error } = await supabase
+    
+    const context = await getClinicContext();
+    const db = await getClinicDb();
+const { error } = await db
       .from("products")
-      .delete()
-      .eq("id", product.id);
+      .update({ is_active: false })
+      .eq("id", product.id)
+      .eq("clinic_id", context.clinic_id);
 
     if (error) {
       console.error(error);
@@ -1066,10 +1107,13 @@ export default function ProductsPage() {
 
 
 
-    const { error } =
+    
+    const context = await getClinicContext();
+    const db = await getClinicDb();
+const { error } =
 
 
-      await supabase
+      await db
 
 
         .from("product_categories")
@@ -1079,6 +1123,9 @@ export default function ProductsPage() {
 
 
           name,
+
+
+          clinic_id: context.clinic_id,
 
 
         });
@@ -3873,14 +3920,14 @@ function BarcodeScanner({
     ) => {
       const width = input.width;
       const height = input.height;
-
-      enhancedCanvas.width = width;
-      enhancedCanvas.height = height;
+      const outputCanvas = document.createElement("canvas");
+      outputCanvas.width = width;
+      outputCanvas.height = height;
 
       const inputContext = input.getContext("2d", {
         willReadFrequently: true,
       });
-      const outputContext = enhancedCanvas.getContext("2d", {
+      const outputContext = outputCanvas.getContext("2d", {
         willReadFrequently: true,
       });
 
@@ -3903,11 +3950,11 @@ function BarcodeScanner({
 
             for (let channel = 0; channel < 3; channel += 1) {
               const value =
-                copy[i + channel] * 5 -
-                copy[left + channel] -
-                copy[right + channel] -
-                copy[top + channel] -
-                copy[bottom + channel];
+                copy[i + channel] * 3.5 -
+                copy[left + channel] * 0.625 -
+                copy[right + channel] * 0.625 -
+                copy[top + channel] * 0.625 -
+                copy[bottom + channel] * 0.625;
 
               out[i + channel] = Math.max(0, Math.min(255, value));
             }
@@ -3920,18 +3967,15 @@ function BarcodeScanner({
           const r = src[i];
           const g = src[i + 1];
           const b = src[i + 2];
-
-          // Perceived luminance.
           let gray = 0.299 * r + 0.587 * g + 0.114 * b;
 
           if (mode === "contrast") {
-            // Stronger separation between bars and the background.
-            gray = (gray - 128) * 1.75 + 128;
+            gray = (gray - 128) * 1.45 + 128;
             gray = Math.max(0, Math.min(255, gray));
           } else {
-            // A deliberately simple local-ish threshold. ZXing still gets
-            // several variants, so we don't depend on one threshold value.
-            gray = gray > 150 ? 255 : 0;
+            // Keep this variant deliberately mild. A hard threshold can
+            // destroy thin bars when the source image is already blurry.
+            gray = gray > 128 ? 255 : 0;
           }
 
           out[i] = gray;
@@ -3941,23 +3985,23 @@ function BarcodeScanner({
         }
       }
 
-      const output = new ImageData(out, width, height);
-      outputContext.putImageData(output, 0, 0);
-      return enhancedCanvas;
+      outputContext.putImageData(new ImageData(out, width, height), 0, 0);
+      return outputCanvas;
     };
 
     const makeTighterCrop = (input: HTMLCanvasElement) => {
       const width = input.width;
       const height = input.height;
-      const cropWidth = Math.floor(width * 0.88);
-      const cropHeight = Math.floor(height * 0.72);
+      const cropWidth = Math.floor(width * 0.92);
+      const cropHeight = Math.floor(height * 0.78);
       const sx = Math.floor((width - cropWidth) / 2);
       const sy = Math.floor((height - cropHeight) / 2);
 
-      workCanvas.width = Math.min(1800, Math.max(1100, cropWidth));
-      workCanvas.height = Math.min(1200, Math.max(700, cropHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.min(1800, Math.max(1200, cropWidth));
+      canvas.height = Math.min(1200, Math.max(800, cropHeight));
 
-      const context = workCanvas.getContext("2d", {
+      const context = canvas.getContext("2d", {
         willReadFrequently: true,
       });
 
@@ -3973,11 +4017,11 @@ function BarcodeScanner({
         cropHeight,
         0,
         0,
-        workCanvas.width,
-        workCanvas.height
+        canvas.width,
+        canvas.height
       );
 
-      return workCanvas;
+      return canvas;
     };
 
     const tryNativeOnCanvases = async (
@@ -4029,14 +4073,12 @@ function BarcodeScanner({
       const tighter = makeTighterCrop(base);
       const contrast = makeEnhancedCanvas(base, "contrast");
       const sharpen = makeEnhancedCanvas(base, "sharpen");
-      const threshold = makeEnhancedCanvas(base, "threshold");
 
       return [
-        tighter,
         base,
+        tighter,
         contrast,
         sharpen,
-        threshold,
       ].filter(Boolean) as HTMLCanvasElement[];
     };
 
@@ -4082,36 +4124,88 @@ function BarcodeScanner({
 
         readerRef.current = reader;
 
+        let lastSmartProcessTime = 0;
+        let fastCanvas: HTMLCanvasElement | null = null;
+
+        const prepareFastCanvas = () => {
+          const width = video.videoWidth || 1280;
+          const height = video.videoHeight || 720;
+          const maxWidth = 1280;
+          const scale = Math.min(1, maxWidth / width);
+          const targetWidth = Math.max(640, Math.floor(width * scale));
+          const targetHeight = Math.max(360, Math.floor(height * scale));
+
+          if (!fastCanvas) fastCanvas = document.createElement("canvas");
+          if (fastCanvas.width !== targetWidth || fastCanvas.height !== targetHeight) {
+            fastCanvas.width = targetWidth;
+            fastCanvas.height = targetHeight;
+          }
+
+          const ctx = fastCanvas.getContext("2d", { willReadFrequently: true });
+          if (!ctx) return null;
+          ctx.imageSmoothingEnabled = true;
+          ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+          return fastCanvas;
+        };
+
         const detectLoop = async (timestamp: number) => {
           if (stopped || !videoRef.current) return;
-
           animationFrame = requestAnimationFrame(detectLoop);
 
-          if (timestamp - lastDetectTime < 110) return;
-          if (zxingBusy) return;
-
-          lastDetectTime = timestamp;
-
           if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-
+          if (zxingBusy || timestamp - lastDetectTime < 85) return;
+          lastDetectTime = timestamp;
           zxingBusy = true;
 
           try {
-            const canvases = buildProcessingVariants(video);
-            if (!canvases.length) return;
-
-            // Native detector gets the fast path on browsers that support it.
-            const nativeValue = await tryNativeOnCanvases(canvases);
-            if (nativeValue) {
-              finishScan(nativeValue);
-              return;
+            // FAST PATH: use the real video frame first. Large/clear barcodes
+            // should normally be decoded here without any expensive processing.
+            if (nativeDetector) {
+              try {
+                const nativeResults = await nativeDetector.detect(video);
+                const value = nativeResults
+                  .map((item) => item.rawValue?.trim() || "")
+                  .find(Boolean);
+                if (value) {
+                  finishScan(value);
+                  return;
+                }
+              } catch {
+                // Continue to ZXing fast path.
+              }
             }
 
-            // ZXing then gets several high-resolution/preprocessed variants.
-            const zxingValue = await tryZxingOnCanvases(reader, canvases);
-            if (zxingValue) {
-              finishScan(zxingValue);
-              return;
+            const fast = prepareFastCanvas();
+            if (fast) {
+              try {
+                const value = reader.decodeFromCanvas(fast).getText().trim();
+                if (value) {
+                  finishScan(value);
+                  return;
+                }
+              } catch {
+                // Normal frame was not enough; smart processing may help.
+              }
+            }
+
+            // SMART PATH: run only periodically, so the CPU is not hammered
+            // while the user is simply moving a large/clear barcode around.
+            if (timestamp - lastSmartProcessTime >= 650) {
+              lastSmartProcessTime = timestamp;
+              const canvases = buildProcessingVariants(video);
+              if (canvases.length) {
+                const nativeValue = await tryNativeOnCanvases(canvases);
+                if (nativeValue) {
+                  finishScan(nativeValue);
+                  return;
+                }
+
+                const zxingValue = await tryZxingOnCanvases(reader, canvases);
+                if (zxingValue) {
+                  finishScan(zxingValue);
+                  return;
+                }
+              }
             }
           } finally {
             zxingBusy = false;
@@ -4193,7 +4287,7 @@ function BarcodeScanner({
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
           <div>
             <div className="font-bold text-gray-900 dark:text-white">
-              Scan Barcode V3
+              Scan Barcode V3.2
             </div>
             <div className="text-xs text-gray-500">
               تحسين تلقائي للباركود الصغير والـ low contrast
@@ -4231,7 +4325,7 @@ function BarcodeScanner({
         </div>
 
         <div className="px-4 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-          خليك على مسافة طبيعية وثبّت الموبايل ثانية واحدة. الـ V3 بيكبّر المنطقة ويجرّب أكثر من معالجة للصورة تلقائيًا.
+          خليك على مسافة طبيعية وثبّت الموبايل ثانية واحدة. الـ scanner بيكبّر المنطقة ويجرّب أكثر من معالجة للصورة تلقائيًا.
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 
 type Client = {
@@ -43,8 +43,7 @@ export default function ClientsPage() {
   const [clinicContext, setClinicContext] =
     useState<ClinicContext | null>(null);
 
-  const [errorMessage, setErrorMessage] =
-    useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   async function loadClinicContext() {
     setClinicLoading(true);
@@ -116,7 +115,9 @@ export default function ClientsPage() {
       return;
     }
 
-    const { data, error } = await supabase
+    const db = await getClinicDb();
+
+    const { data, error } = await db
       .from("clients")
       .select("*")
       .order("created_at", {

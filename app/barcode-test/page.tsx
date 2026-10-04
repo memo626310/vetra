@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
-import { supabase } from "@/lib/supabase";
+import { vetraCore } from "@/lib/vetra-core";
+import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 
-export default function QuickProductLookupPage() {
+export default function BarcodeTestPage() {
   const [barcode, setBarcode] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -40,47 +41,60 @@ export default function QuickProductLookupPage() {
     setBarcode(code);
     setLoading(true);
 
-    const { data, error: queryError } = await supabase
-      .from("products")
-      .select(`
-        id,
-        name,
-        barcode,
-        unit,
-        quantity,
-        wholesale_price,
-        retail_price,
-        last_purchase_price,
-        expiry_date,
-        reorder_level,
-        notes,
-        category:product_categories (
-          name
-        )
-      `)
-      .eq("barcode", code)
-      .maybeSingle();
+    const { data: userData, error: authError } = await vetraCore.auth.getUser();
 
-    if (queryError) {
-      console.error(queryError);
-      setError("حصل خطأ أثناء الاستعلام عن المنتج");
-      setLoading(false);
+    if (authError || !userData.user) {
+      window.location.href = "/login";
       return;
     }
 
-    if (!data) {
-      setError("المنتج بالباركود ده مش موجود في المخزون");
-      setLoading(false);
-      return;
-    }
+    try {
+      const context = await getClinicContext();
+      const db = await getClinicDb();
 
-    setProduct({
-      ...data,
-      category: Array.isArray(data.category)
-        ? data.category[0] ?? null
-        : data.category ?? null,
-    });
-    setLoading(false);
+      const { data, error: queryError } = await db
+        .from("products")
+        .select(`
+          id,
+          name,
+          barcode,
+          unit,
+          quantity,
+          wholesale_price,
+          retail_price,
+          last_purchase_price,
+          expiry_date,
+          reorder_level,
+          notes,
+          category:product_categories (
+            name
+          )
+        `)
+        .eq("clinic_id", context.clinic_id)
+        .eq("barcode", code)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (queryError) {
+        console.error(queryError);
+        setError("حصل خطأ أثناء الاستعلام عن المنتج");
+        setLoading(false);
+        return;
+      }
+
+      if (!data) {
+        setError("المنتج بالباركود ده مش موجود في المخزون");
+        setLoading(false);
+        return;
+      }
+
+      setProduct(data);
+    } catch (err) {
+      console.error(err);
+      setError("تعذر تحميل بيانات العيادة أو الاستعلام عن المنتج");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function formatPrice(value: number) {

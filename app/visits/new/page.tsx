@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { getClinicDb } from "@/lib/clinic-db";
 
 type Language = "en" | "ar";
 
@@ -689,87 +689,122 @@ export default function NewVisitPage() {
   async function loadClients() {
     setLoadingClients(true);
 
-    const { data, error } = await supabase
-      .from("clients")
-      .select("*")
-      .order("created_at", { ascending: false });
+    try {
+      const db = await getClinicDb();
 
-    if (!error) {
-      setClients(data || []);
+      const { data, error } = await db
+        .from("clients")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("LOAD CLIENTS ERROR:", error);
+        setMessage(error.message);
+      } else {
+        setClients(data || []);
+      }
+    } catch (error) {
+      console.error("LOAD CLIENTS ERROR:", error);
+      setMessage(error instanceof Error ? error.message : t.loadError);
+    } finally {
+      setLoadingClients(false);
     }
-
-    setLoadingClients(false);
   }
 
   async function loadPets(clientId: string) {
     setLoadingPets(true);
 
-    const { data, error } = await supabase
-      .from("pets")
-      .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: false });
+    try {
+      const db = await getClinicDb();
 
-    if (!error) {
-      setPets(data || []);
+      const { data, error } = await db
+        .from("pets")
+        .select("*")
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("LOAD PETS ERROR:", error);
+        setMessage(error.message);
+      } else {
+        setPets(data || []);
+      }
+    } catch (error) {
+      console.error("LOAD PETS ERROR:", error);
+      setMessage(error instanceof Error ? error.message : t.loadError);
+    } finally {
+      setLoadingPets(false);
     }
-
-    setLoadingPets(false);
   }
 
   async function loadPetFromUrl(petId: string) {
     setLoadingDetails(true);
 
-    const { data, error } = await supabase
-      .from("pets")
-      .select(`
-        *,
-        client:clients (
-          id,
-          name,
-          phone,
-          email
-        )
-      `)
-      .eq("id", petId)
-      .single();
+    try {
+      const db = await getClinicDb();
 
-    if (error || !data) {
-      setMessage(t.loadError);
-      setLoadingDetails(false);
-      return;
-    }
+      const { data, error } = await db
+        .from("pets")
+        .select(`
+          *,
+          client:clients (
+            id,
+            name,
+            phone,
+            email
+          )
+        `)
+        .eq("id", petId)
+        .single();
 
-    if (data.is_deceased) {
+      if (error || !data) {
+        setMessage(t.loadError);
+        return;
+      }
+
+      if (data.is_deceased) {
+        setPetDetails(data as PetDetails);
+        setSelectedPetId(data.id);
+        setSelectedClientId(data.client_id);
+        await loadVisits(data.id);
+        setMessage(t.deceasedPet);
+        setStarted(false);
+        return;
+      }
+
       setPetDetails(data as PetDetails);
       setSelectedPetId(data.id);
       setSelectedClientId(data.client_id);
+
       await loadVisits(data.id);
-      setMessage(t.deceasedPet);
-      setStarted(false);
+      setStarted(true);
+    } catch (error) {
+      console.error("LOAD PET FROM URL ERROR:", error);
+      setMessage(error instanceof Error ? error.message : t.loadError);
+    } finally {
       setLoadingDetails(false);
-      return;
     }
-
-    setPetDetails(data as PetDetails);
-    setSelectedPetId(data.id);
-    setSelectedClientId(data.client_id);
-
-    await loadVisits(data.id);
-
-    setStarted(true);
-    setLoadingDetails(false);
   }
 
   async function loadVisits(petId: string) {
-    const { data, error } = await supabase
-      .from("visits")
-      .select("*")
-      .eq("pet_id", petId)
-      .order("visit_date", { ascending: false });
+    try {
+      const db = await getClinicDb();
 
-    if (!error) {
+      const { data, error } = await db
+        .from("visits")
+        .select("*")
+        .eq("pet_id", petId)
+        .order("visit_date", { ascending: false });
+
+      if (error) {
+        console.error("LOAD VISITS ERROR:", error);
+        setMessage(error.message);
+        return;
+      }
+
       setVisits(data || []);
+    } catch (error) {
+      console.error("LOAD VISITS ERROR:", error);
     }
   }
 
@@ -781,52 +816,61 @@ export default function NewVisitPage() {
       return;
     }
 
-    const { data: selectedPet, error: selectedPetError } = await supabase
-      .from("pets")
-      .select("*")
-      .eq("id", selectedPetId)
-      .single();
-
-    if (selectedPetError || !selectedPet) {
-      setMessage(t.loadError);
-      return;
-    }
-
-    if (selectedPet.is_deceased) {
-      setMessage(t.deceasedPet);
-      setPetDetails(selectedPet as PetDetails);
-      setStarted(false);
-      return;
-    }
-
     setLoadingDetails(true);
 
-    const { data, error } = await supabase
-      .from("pets")
-      .select(`
-        *,
-        client:clients (
-          id,
-          name,
-          phone,
-          email
-        )
-      `)
-      .eq("id", selectedPetId)
-      .single();
+    try {
+      const db = await getClinicDb();
 
-    if (error || !data) {
-      setMessage(t.loadError);
+      const {
+        data: selectedPet,
+        error: selectedPetError,
+      } = await db
+        .from("pets")
+        .select("*")
+        .eq("id", selectedPetId)
+        .single();
+
+      if (selectedPetError || !selectedPet) {
+        setMessage(t.loadError);
+        return;
+      }
+
+      if (selectedPet.is_deceased) {
+        setMessage(t.deceasedPet);
+        setPetDetails(selectedPet as PetDetails);
+        setStarted(false);
+        return;
+      }
+
+      const { data, error } = await db
+        .from("pets")
+        .select(`
+          *,
+          client:clients (
+            id,
+            name,
+            phone,
+            email
+          )
+        `)
+        .eq("id", selectedPetId)
+        .single();
+
+      if (error || !data) {
+        setMessage(t.loadError);
+        return;
+      }
+
+      setPetDetails(data as PetDetails);
+
+      await loadVisits(selectedPetId);
+      setStarted(true);
+    } catch (error) {
+      console.error("START EXAMINATION ERROR:", error);
+      setMessage(error instanceof Error ? error.message : t.loadError);
+    } finally {
       setLoadingDetails(false);
-      return;
     }
-
-    setPetDetails(data as PetDetails);
-
-    await loadVisits(selectedPetId);
-
-    setStarted(true);
-    setLoadingDetails(false);
   }
 
   async function saveVisit() {
@@ -837,79 +881,71 @@ export default function NewVisitPage() {
       return;
     }
 
-    const { data: currentPet, error: currentPetError } = await supabase
-      .from("pets")
-      .select("is_deceased")
-      .eq("id", selectedPetId)
-      .single();
-
-    if (currentPetError || !currentPet) {
-      setMessage(t.loadError);
-      return;
-    }
-
-    if (currentPet.is_deceased) {
-      setMessage(t.deceasedPet);
-      setStarted(false);
-      return;
-    }
-
     setSaving(true);
 
-    const { error } = await supabase.from("visits").insert({
-      client_id: selectedClientId,
-      pet_id: selectedPetId,
-      reason: reason || null,
-      examination: examination || null,
-      diagnosis: diagnosis || null,
-      treatment: treatment || null,
-      weight: weight ? Number(weight) : null,
-      temperature: temperature ? Number(temperature) : null,
-      heart_rate: heartRate ? Number(heartRate) : null,
-      respiratory_rate: respiratoryRate
-        ? Number(respiratoryRate)
-        : null,
-      notes: visitNotes || null,
-    });
+    try {
+      const db = await getClinicDb();
 
-    if (error) {
+      const {
+        data: currentPet,
+        error: currentPetError,
+      } = await db
+        .from("pets")
+        .select("is_deceased")
+        .eq("id", selectedPetId)
+        .single();
+
+      if (currentPetError || !currentPet) {
+        setMessage(t.loadError);
+        return;
+      }
+
+      if (currentPet.is_deceased) {
+        setMessage(t.deceasedPet);
+        setStarted(false);
+        return;
+      }
+
+      const { error } = await db.from("visits").insert({
+        client_id: selectedClientId,
+        pet_id: selectedPetId,
+        reason: reason || null,
+        examination: examination || null,
+        diagnosis: diagnosis || null,
+        treatment: treatment || null,
+        weight: weight ? Number(weight) : null,
+        temperature: temperature ? Number(temperature) : null,
+        heart_rate: heartRate ? Number(heartRate) : null,
+        respiratory_rate: respiratoryRate ? Number(respiratoryRate) : null,
+        notes: visitNotes || null,
+      });
+
+      if (error) {
+        console.error("SAVE VISIT ERROR:", error);
+        setMessage(error.message || t.saveError);
+        return;
+      }
+
+      setMessage(t.visitSaved);
+
+      setReason("");
+      setExamination("");
+      setDiagnosis("");
+      setTreatment("");
+      setVisitNotes("");
+
+      setWeight("");
+      setTemperature("");
+      setHeartRate("");
+      setRespiratoryRate("");
+
+      await loadVisits(selectedPetId);
+    } catch (error) {
       console.error("SAVE VISIT ERROR:", error);
-
-      const details = [
-        error.message,
-        error.details,
-        error.hint,
-        error.code ? `Code: ${error.code}` : "",
-      ]
-        .filter(Boolean)
-        .join(" — ");
-
-      setMessage(
-        language === "ar"
-          ? `تعذر حفظ الزيارة: ${details}`
-          : `Could not save the visit: ${details}`
-      );
-
+      setMessage(error instanceof Error ? error.message : t.saveError);
+    } finally {
       setSaving(false);
-      return;
     }
-
-    setMessage(t.visitSaved);
-
-    setReason("");
-    setExamination("");
-    setDiagnosis("");
-    setTreatment("");
-    setVisitNotes("");
-
-    setWeight("");
-    setTemperature("");
-    setHeartRate("");
-    setRespiratoryRate("");
-
-    await loadVisits(selectedPetId);
-
-    setSaving(false);
   }
 
   function resetSelection() {

@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { vetraCore } from "@/lib/vetra-core";
+import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 
 type Invoice = {
   id: string;
-  client_id: string;
   invoice_number: number;
   status: string;
   subtotal: number;
@@ -27,23 +27,32 @@ const statusOptions = [
   { value: "paid", ar: "مدفوعة", en: "Paid" },
   { value: "partially_paid", ar: "مدفوعة جزئيًا", en: "Partially paid" },
   { value: "unpaid", ar: "غير مدفوعة", en: "Unpaid" },
-  { value: "partially_returned", ar: "مرتجع جزئي", en: "Partially returned" },
+  {
+    value: "partially_returned",
+    ar: "مرتجع جزئي",
+    en: "Partially returned",
+  },
   { value: "returned", ar: "مرتجعة", en: "Returned" },
   { value: "cancelled", ar: "ملغاة", en: "Cancelled" },
 ];
 
 const statusStyle: Record<string, string> = {
-  draft: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  issued: "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300",
-  paid: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
+  draft:
+    "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  issued:
+    "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300",
+  paid:
+    "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
   partially_paid:
     "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
-  unpaid: "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300",
+  unpaid:
+    "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300",
   partially_returned:
     "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300",
   returned:
     "bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300",
-  cancelled: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300",
+  cancelled:
+    "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300",
 };
 
 const statusLabel = (status: string) => {
@@ -65,7 +74,6 @@ export default function InvoicesPage() {
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
-  const [clientFilterId, setClientFilterId] = useState("");
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
@@ -87,66 +95,74 @@ export default function InvoicesPage() {
     setLoading(true);
     setMessage("");
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user },
+      } = await vetraCore.auth.getUser();
 
-    if (!user) {
-      router.replace("/login");
-      return;
-    }
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+      const context = await getClinicContext();
 
-    if (profileError || profile?.role !== "admin") {
-      setAuthorized(false);
-      setLoading(false);
-      return;
-    }
+      const allowedRoles = ["owner", "admin"];
 
-    setAuthorized(true);
+      if (!allowedRoles.includes(context.role)) {
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
 
-    const clientIdFromUrl = new URLSearchParams(window.location.search).get("client") || "";
-    setClientFilterId(clientIdFromUrl);
+      setAuthorized(true);
 
-    let invoiceQuery = supabase
-      .from("invoices")
-      .select(`
-        id,
-        client_id,
-        invoice_number,
-        status,
-        subtotal,
-        discount,
-        total,
-        paid_amount,
-        payment_method,
-        created_at,
-        issued_at,
-        client:clients(name),
-        pet:pets(name)
-      `)
-      .order("created_at", { ascending: false });
+      const db = await getClinicDb();
 
-    if (clientIdFromUrl) {
-      invoiceQuery = invoiceQuery.eq("client_id", clientIdFromUrl);
-    }
+      const { data, error } = await db
+        .from("invoices")
+        .select(`
+          id,
+          clinic_id,
+          invoice_number,
+          status,
+          subtotal,
+          discount,
+          total,
+          paid_amount,
+          payment_method,
+          created_at,
+          issued_at,
+          client:clients(name),
+          pet:pets(name)
+        `)
+        .eq("clinic_id", context.clinic_id)
+        .order("created_at", { ascending: false });
 
-    const { data, error } = await invoiceQuery;
+      if (error) {
+        console.error("INVOICES LOAD ERROR:", error);
 
-    if (error) {
-      console.error(error);
-      setMessage(error.message || "حصل خطأ أثناء تحميل الفواتير");
+        setMessage(
+          error.message || "حصل خطأ أثناء تحميل الفواتير"
+        );
+
+        setInvoices([]);
+      } else {
+        setInvoices((data || []) as unknown as Invoice[]);
+      }
+    } catch (error) {
+      console.error("INVOICES LOAD ERROR:", error);
+
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "حصل خطأ أثناء تحميل الفواتير"
+      );
+
       setInvoices([]);
-    } else {
-      setInvoices((data || []) as unknown as Invoice[]);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -159,11 +175,14 @@ export default function InvoicesPage() {
     const query = search.trim().toLowerCase();
 
     return invoices.filter((invoice) => {
-      const matchesStatus = status === "all" || invoice.status === status;
+      const matchesStatus =
+        status === "all" || invoice.status === status;
 
       const numberText = String(invoice.invoice_number);
-      const clientName = invoice.client?.name?.toLowerCase() || "";
-      const petName = invoice.pet?.name?.toLowerCase() || "";
+      const clientName =
+        invoice.client?.name?.toLowerCase() || "";
+      const petName =
+        invoice.pet?.name?.toLowerCase() || "";
 
       const matchesSearch =
         !query ||
@@ -176,7 +195,8 @@ export default function InvoicesPage() {
   }, [invoices, search, status]);
 
   const totalVisible = filteredInvoices.reduce(
-    (sum, invoice) => sum + Number(invoice.total || 0),
+    (sum, invoice) =>
+      sum + Number(invoice.total || 0),
     0
   );
 
@@ -187,21 +207,28 @@ export default function InvoicesPage() {
     }).format(value);
 
   const formatDate = (value: string) =>
-    new Date(value).toLocaleString(language === "ar" ? "ar-EG" : "en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
+    new Date(value).toLocaleString(
+      language === "ar" ? "ar-EG" : "en-US",
+      {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }
+    );
 
   if (!ready || loading) {
     return (
       <main
         className={`flex min-h-screen items-center justify-center ${
-          darkMode ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"
+          darkMode
+            ? "bg-[#0F1115] text-white"
+            : "bg-[#F7F8FA] text-slate-800"
         }`}
       >
         <div className="text-center">
           <div className="mb-3 text-4xl">🧾</div>
-          <p className="text-sm text-slate-500">Loading invoices...</p>
+          <p className="text-sm text-slate-500">
+            Loading invoices...
+          </p>
         </div>
       </main>
     );
@@ -212,7 +239,9 @@ export default function InvoicesPage() {
       <main
         dir={language === "ar" ? "rtl" : "ltr"}
         className={`flex min-h-screen items-center justify-center px-6 ${
-          darkMode ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"
+          darkMode
+            ? "bg-[#0F1115] text-white"
+            : "bg-[#F7F8FA] text-slate-800"
         }`}
       >
         <div
@@ -223,19 +252,26 @@ export default function InvoicesPage() {
           }`}
         >
           <div className="mb-4 text-5xl">🔒</div>
+
           <h1 className="text-2xl font-bold">
-            {language === "ar" ? "غير مصرح بالدخول" : "Access restricted"}
+            {language === "ar"
+              ? "غير مصرح بالدخول"
+              : "Access restricted"}
           </h1>
+
           <p className="mt-3 text-sm text-slate-500">
             {language === "ar"
               ? "الفواتير والبيانات المالية متاحة للـ Admin فقط."
               : "Invoices and financial data are available to Admin users only."}
           </p>
+
           <button
             onClick={() => router.push("/")}
             className="mt-6 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
           >
-            {language === "ar" ? "العودة للرئيسية" : "Back to dashboard"}
+            {language === "ar"
+              ? "العودة للرئيسية"
+              : "Back to dashboard"}
           </button>
         </div>
       </main>
@@ -246,7 +282,9 @@ export default function InvoicesPage() {
     <main
       dir={language === "ar" ? "rtl" : "ltr"}
       className={`min-h-screen transition-colors duration-300 ${
-        darkMode ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"
+        darkMode
+          ? "bg-[#0F1115] text-white"
+          : "bg-[#F7F8FA] text-slate-800"
       }`}
     >
       <div className="mx-auto max-w-[1500px] px-5 py-6 sm:px-8 lg:px-10">
@@ -256,11 +294,16 @@ export default function InvoicesPage() {
               onClick={() => router.push("/")}
               className="mb-3 text-sm font-medium text-slate-500 transition hover:text-blue-600"
             >
-              ← {language === "ar" ? "الرئيسية" : "Dashboard"}
+              ←{" "}
+              {language === "ar"
+                ? "الرئيسية"
+                : "Dashboard"}
             </button>
 
             <h1 className="text-3xl font-black tracking-tight">
-              {language === "ar" ? "الفواتير" : "Invoices"}
+              {language === "ar"
+                ? "الفواتير"
+                : "Invoices"}
             </h1>
 
             <p className="mt-1 text-sm text-slate-500">
@@ -285,21 +328,32 @@ export default function InvoicesPage() {
             </button>
 
             <button
-              onClick={() => setLanguage((value) => (value === "ar" ? "en" : "ar"))}
+              onClick={() =>
+                setLanguage((value) =>
+                  value === "ar" ? "en" : "ar"
+                )
+              }
               className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
                 darkMode
                   ? "border-white/10 bg-[#171A20] hover:bg-[#1D2129]"
                   : "border-slate-200 bg-white hover:bg-slate-50"
               }`}
             >
-              {language === "ar" ? "English" : "عربي"}
+              {language === "ar"
+                ? "English"
+                : "عربي"}
             </button>
 
             <button
-              onClick={() => router.push("/invoices/new")}
+              onClick={() =>
+                router.push("/invoices/new")
+              }
               className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700"
             >
-              + {language === "ar" ? "فاتورة جديدة" : "New Invoice"}
+              +{" "}
+              {language === "ar"
+                ? "فاتورة جديدة"
+                : "New Invoice"}
             </button>
           </div>
         </header>
@@ -319,8 +373,11 @@ export default function InvoicesPage() {
             }`}
           >
             <p className="text-sm text-slate-500">
-              {language === "ar" ? "الفواتير الظاهرة" : "Visible invoices"}
+              {language === "ar"
+                ? "الفواتير الظاهرة"
+                : "Visible invoices"}
             </p>
+
             <p className="mt-2 text-3xl font-black">
               {filteredInvoices.length}
             </p>
@@ -334,11 +391,16 @@ export default function InvoicesPage() {
             }`}
           >
             <p className="text-sm text-slate-500">
-              {language === "ar" ? "إجمالي الظاهر" : "Visible total"}
+              {language === "ar"
+                ? "إجمالي الظاهر"
+                : "Visible total"}
             </p>
+
             <p className="mt-2 text-3xl font-black">
               {formatMoney(totalVisible)}{" "}
-              <span className="text-base font-semibold text-slate-500">EGP</span>
+              <span className="text-base font-semibold text-slate-500">
+                EGP
+              </span>
             </p>
           </div>
         </section>
@@ -355,9 +417,12 @@ export default function InvoicesPage() {
               <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-slate-400">
                 🔎
               </span>
+
               <input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) =>
+                  setSearch(e.target.value)
+                }
                 placeholder={
                   language === "ar"
                     ? "ابحث برقم الفاتورة أو العميل أو الحيوان..."
@@ -373,7 +438,9 @@ export default function InvoicesPage() {
 
             <select
               value={status}
-              onChange={(e) => setStatus(e.target.value)}
+              onChange={(e) =>
+                setStatus(e.target.value)
+              }
               className={`rounded-2xl border px-4 py-3.5 text-sm outline-none transition focus:border-blue-500 ${
                 darkMode
                   ? "border-white/[0.07] bg-[#0F1115] text-white"
@@ -381,63 +448,16 @@ export default function InvoicesPage() {
               }`}
             >
               {statusOptions.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {language === "ar" ? item.ar : item.en}
+                <option
+                  key={item.value}
+                  value={item.value}
+                >
+                  {language === "ar"
+                    ? item.ar
+                    : item.en}
                 </option>
               ))}
             </select>
-          </div>
-        </section>
-
-        <section
-          className={`mb-6 rounded-3xl border p-3 ${
-            darkMode
-              ? "border-white/[0.06] bg-[#13161B]"
-              : "border-slate-100 bg-white"
-          }`}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setStatus("all")}
-              className={`rounded-2xl px-4 py-2.5 text-sm font-bold transition ${
-                status === "all"
-                  ? "bg-blue-600 text-white"
-                  : darkMode
-                    ? "bg-[#0F1115] text-slate-400 hover:bg-[#1D2129] hover:text-white"
-                    : "bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-              }`}
-            >
-              {language === "ar" ? "كل الفواتير" : "All invoices"}
-            </button>
-
-            <button
-              onClick={() => setStatus("draft")}
-              className={`rounded-2xl px-4 py-2.5 text-sm font-bold transition ${
-                status === "draft"
-                  ? "bg-amber-500 text-white"
-                  : darkMode
-                    ? "bg-[#0F1115] text-slate-400 hover:bg-[#1D2129] hover:text-white"
-                    : "bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-              }`}
-            >
-              📝 {language === "ar" ? "المسودات" : "Drafts"}
-              <span className="ms-1 opacity-80">
-                ({invoices.filter((invoice) => invoice.status === "draft").length})
-              </span>
-            </button>
-
-            <button
-              onClick={() => setStatus("issued")}
-              className={`rounded-2xl px-4 py-2.5 text-sm font-bold transition ${
-                status === "issued"
-                  ? "bg-blue-600 text-white"
-                  : darkMode
-                    ? "bg-[#0F1115] text-slate-400 hover:bg-[#1D2129] hover:text-white"
-                    : "bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-              }`}
-            >
-              {language === "ar" ? "الصادرة" : "Issued"}
-            </button>
           </div>
         </section>
 
@@ -453,27 +473,47 @@ export default function InvoicesPage() {
               <thead>
                 <tr
                   className={`border-b text-right text-xs font-semibold text-slate-500 ${
-                    darkMode ? "border-white/[0.06]" : "border-slate-100"
+                    darkMode
+                      ? "border-white/[0.06]"
+                      : "border-slate-100"
                   }`}
                 >
                   <th className="px-5 py-4">#</th>
+
                   <th className="px-5 py-4">
-                    {language === "ar" ? "العميل" : "Client"}
+                    {language === "ar"
+                      ? "العميل"
+                      : "Client"}
                   </th>
+
                   <th className="px-5 py-4">
-                    {language === "ar" ? "الحيوان" : "Pet"}
+                    {language === "ar"
+                      ? "الحيوان"
+                      : "Pet"}
                   </th>
+
                   <th className="px-5 py-4">
-                    {language === "ar" ? "التاريخ" : "Date"}
+                    {language === "ar"
+                      ? "التاريخ"
+                      : "Date"}
                   </th>
+
                   <th className="px-5 py-4">
-                    {language === "ar" ? "الحالة" : "Status"}
+                    {language === "ar"
+                      ? "الحالة"
+                      : "Status"}
                   </th>
+
                   <th className="px-5 py-4">
-                    {language === "ar" ? "الإجمالي" : "Total"}
+                    {language === "ar"
+                      ? "الإجمالي"
+                      : "Total"}
                   </th>
+
                   <th className="px-5 py-4">
-                    {language === "ar" ? "فتح" : "Open"}
+                    {language === "ar"
+                      ? "فتح"
+                      : "Open"}
                   </th>
                 </tr>
               </thead>
@@ -489,7 +529,10 @@ export default function InvoicesPage() {
                     }`}
                   >
                     <td className="px-5 py-5 font-bold">
-                      INV-{String(invoice.invoice_number).padStart(6, "0")}
+                      INV-
+                      {String(
+                        invoice.invoice_number
+                      ).padStart(6, "0")}
                     </td>
 
                     <td className="px-5 py-5 font-semibold">
@@ -507,23 +550,38 @@ export default function InvoicesPage() {
                     <td className="px-5 py-5">
                       <span
                         className={`inline-flex rounded-full px-3 py-1.5 text-xs font-bold ${
-                          statusStyle[invoice.status] || statusStyle.draft
+                          statusStyle[
+                            invoice.status
+                          ] || statusStyle.draft
                         }`}
                       >
-                        {statusLabel(invoice.status)}
+                        {statusLabel(
+                          invoice.status
+                        )}
                       </span>
                     </td>
 
                     <td className="px-5 py-5 font-bold">
-                      {formatMoney(Number(invoice.total || 0))} EGP
+                      {formatMoney(
+                        Number(
+                          invoice.total || 0
+                        )
+                      )}{" "}
+                      EGP
                     </td>
 
                     <td className="px-5 py-5">
                       <button
-                        onClick={() => router.push(`/invoices/${invoice.id}`)}
+                        onClick={() =>
+                          router.push(
+                            `/invoices/${invoice.id}`
+                          )
+                        }
                         className="rounded-xl bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/20"
                       >
-                        {language === "ar" ? "فتح" : "Open"}
+                        {language === "ar"
+                          ? "فتح"
+                          : "Open"}
                       </button>
                     </td>
                   </tr>
@@ -535,12 +593,16 @@ export default function InvoicesPage() {
                       colSpan={7}
                       className="px-5 py-16 text-center text-slate-500"
                     >
-                      <div className="mb-3 text-4xl">🧾</div>
+                      <div className="mb-3 text-4xl">
+                        🧾
+                      </div>
+
                       <p className="font-semibold">
                         {language === "ar"
                           ? "لا توجد فواتير مطابقة"
                           : "No matching invoices"}
                       </p>
+
                       <p className="mt-1 text-xs">
                         {language === "ar"
                           ? "ابدأ بإنشاء فاتورة جديدة."

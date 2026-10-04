@@ -4,7 +4,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { vetraCore } from "@/lib/vetra-core";
+import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 
 type Client = {
   id: string;
@@ -165,31 +166,23 @@ export default function InvoiceDetailsPage() {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await vetraCore.auth.getUser();
 
       if (!user) {
         router.replace("/login");
         return;
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("role, language")
-        .eq("id", user.id)
-        .single();
+      const context = await getClinicContext();
 
-      if (profileError) throw profileError;
-
-      if (profile?.role !== "admin") {
+      if (!["owner", "admin"].includes(context.role)) {
         router.replace("/dashboard");
         return;
       }
 
-      if (profile.language === "ar" || profile.language === "en") {
-        setLanguage(profile.language);
-      }
+      const db = await getClinicDb();
 
-      const { data, error: invoiceError } = await supabase
+      const { data, error: invoiceError } = await db
         .from("invoices")
         .select(
           `
@@ -211,11 +204,12 @@ export default function InvoiceDetailsPage() {
         `
         )
         .eq("id", invoiceId)
+        .eq("clinic_id", context.clinic_id)
         .single();
 
       if (invoiceError) throw invoiceError;
 
-      const { data: itemData, error: itemError } = await supabase
+      const { data: itemData, error: itemError } = await db
         .from("invoice_items")
         .select(
           `
@@ -229,6 +223,7 @@ export default function InvoiceDetailsPage() {
         `
         )
         .eq("invoice_id", invoiceId)
+        .eq("clinic_id", context.clinic_id)
         .order("created_at", { ascending: true });
 
       if (itemError) throw itemError;
@@ -269,7 +264,10 @@ export default function InvoiceDetailsPage() {
     setError("");
 
     try {
-      const { data, error: returnsError } = await supabase
+      const context = await getClinicContext();
+      const db = await getClinicDb();
+
+      const { data, error: returnsError } = await db
         .from("invoice_return_items")
         .select(
           `
@@ -280,7 +278,8 @@ export default function InvoiceDetailsPage() {
           )
         `
         )
-        .eq("invoice_return.invoice_id", invoice.id);
+        .eq("invoice_return.invoice_id", invoice.id)
+        .eq("clinic_id", context.clinic_id);
 
       if (returnsError) throw returnsError;
 
@@ -379,18 +378,22 @@ export default function InvoiceDetailsPage() {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await vetraCore.auth.getUser();
 
       if (!user) throw new Error("Authentication required.");
+
+      const context = await getClinicContext();
+      const db = await getClinicDb();
 
       const refundAmount = selected.reduce(
         (sum, item) => sum + item.quantityNumber * item.unitPrice,
         0
       );
 
-      const { data: returnData, error: returnError } = await supabase
+      const { data: returnData, error: returnError } = await db
         .from("invoice_returns")
         .insert({
+          clinic_id: context.clinic_id,
           invoice_id: invoice.id,
           reason: returnReason.trim(),
           refund_amount: refundAmount,
@@ -402,6 +405,7 @@ export default function InvoiceDetailsPage() {
       if (returnError) throw returnError;
 
       const rows = selected.map((item) => ({
+        clinic_id: context.clinic_id,
         return_id: returnData.id,
         invoice_item_id: item.invoiceItemId,
         product_id: item.productId,
@@ -410,7 +414,7 @@ export default function InvoiceDetailsPage() {
         refund_amount: item.quantityNumber * item.unitPrice,
       }));
 
-      const { error: returnItemsError } = await supabase
+      const { error: returnItemsError } = await db
         .from("invoice_return_items")
         .insert(rows);
 
@@ -418,6 +422,7 @@ export default function InvoiceDetailsPage() {
 
       // Inventory return movement is created here.
       const movementRows = selected.map((item) => ({
+        clinic_id: context.clinic_id,
         product_id: item.productId,
         movement_type: "return",
         quantity: item.quantityNumber,
@@ -427,7 +432,7 @@ export default function InvoiceDetailsPage() {
         created_by: user.id,
       }));
 
-      const { error: movementError } = await supabase
+      const { error: movementError } = await db
         .from("inventory_movements")
         .insert(movementRows);
 
@@ -435,26 +440,28 @@ export default function InvoiceDetailsPage() {
 
       // Add returned quantity back to stock.
       for (const item of selected) {
-        const { data: product, error: productError } = await supabase
+        const { data: product, error: productError } = await db
           .from("products")
           .select("quantity")
           .eq("id", item.productId)
+          .eq("clinic_id", context.clinic_id)
           .single();
 
         if (productError) throw productError;
 
-        const { error: updateProductError } = await supabase
+        const { error: updateProductError } = await db
           .from("products")
           .update({
             quantity: Number(product.quantity || 0) + item.quantityNumber,
           })
-          .eq("id", item.productId);
+          .eq("id", item.productId)
+          .eq("clinic_id", context.clinic_id);
 
         if (updateProductError) throw updateProductError;
       }
 
       // Recalculate the return status from all returns.
-      const { data: allReturnItems, error: allReturnsError } = await supabase
+      const { data: allReturnItems, error: allReturnsError } = await db
         .from("invoice_return_items")
         .select(
           `
@@ -465,7 +472,8 @@ export default function InvoiceDetailsPage() {
           )
         `
         )
-        .eq("invoice_return.invoice_id", invoice.id);
+        .eq("invoice_return.invoice_id", invoice.id)
+        .eq("clinic_id", context.clinic_id);
 
       if (allReturnsError) throw allReturnsError;
 
@@ -494,14 +502,15 @@ export default function InvoiceDetailsPage() {
         newStatus = "partially_returned";
       }
 
-      const { error: invoiceUpdateError } = await supabase
+      const { error: invoiceUpdateError } = await db
         .from("invoices")
         .update({
           status: newStatus,
           updated_by: user.id,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", invoice.id);
+        .eq("id", invoice.id)
+        .eq("clinic_id", context.clinic_id);
 
       if (invoiceUpdateError) throw invoiceUpdateError;
 
@@ -536,11 +545,14 @@ export default function InvoiceDetailsPage() {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await vetraCore.auth.getUser();
 
       if (!user) throw new Error("Authentication required.");
 
-      const { error: cancelError } = await supabase
+      const context = await getClinicContext();
+      const db = await getClinicDb();
+
+      const { error: cancelError } = await db
         .from("invoices")
         .update({
           status: "cancelled",
@@ -551,6 +563,7 @@ export default function InvoiceDetailsPage() {
           updated_at: new Date().toISOString(),
         })
         .eq("id", invoice.id)
+        .eq("clinic_id", context.clinic_id)
         .neq("status", "cancelled");
 
       if (cancelError) throw cancelError;
@@ -562,26 +575,29 @@ export default function InvoiceDetailsPage() {
         );
 
         for (const item of productItems) {
-          const { data: product, error: productError } = await supabase
+          const { data: product, error: productError } = await db
             .from("products")
             .select("quantity")
             .eq("id", item.product_id)
+            .eq("clinic_id", context.clinic_id)
             .single();
 
           if (productError) throw productError;
 
-          const { error: productUpdateError } = await supabase
+          const { error: productUpdateError } = await db
             .from("products")
             .update({
               quantity: Number(product.quantity || 0) + Number(item.quantity || 0),
             })
-            .eq("id", item.product_id);
+            .eq("id", item.product_id)
+            .eq("clinic_id", context.clinic_id);
 
           if (productUpdateError) throw productUpdateError;
 
-          const { error: movementError } = await supabase
+          const { error: movementError } = await db
             .from("inventory_movements")
             .insert({
+              clinic_id: context.clinic_id,
               product_id: item.product_id,
               movement_type: "cancelled_sale",
               quantity: Number(item.quantity || 0),

@@ -1,400 +1,615 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { getClinicDb } from "@/lib/clinic-db";
 
 type Client = {
   id: string;
+  client_code: string;
   name: string;
   phone: string | null;
   email: string | null;
+  address: string | null;
+  notes: string | null;
+  created_at: string;
 };
 
 type Pet = {
   id: string;
+  client_id: string;
   name: string;
   species: string;
   breed: string | null;
   gender: string | null;
   birth_date: string | null;
-  is_deceased: boolean;
+  color: string | null;
+  microchip: string | null;
+  notes: string | null;
 };
 
-const cards = [
-  ["🐾", "Your Pets", "Everything about their care"],
-  ["💉", "Vaccines", "Never miss an important dose"],
-  ["📅", "Appointments", "Your next visit, one tap away"],
-  ["🧾", "Invoices", "Your records, always with you"],
-];
-
-export default function ClientInterfaceIdPage() {
+export default function ClientPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+
   const clientId = params.id;
 
   const [client, setClient] = useState<Client | null>(null);
   const [pets, setPets] = useState<Pet[]>([]);
+
   const [loading, setLoading] = useState(true);
-  const [authorized, setAuthorized] = useState(false);
-  const [language, setLanguage] = useState<"en" | "ar">("en");
-  const [dark, setDark] = useState(false);
+  const [savingPet, setSavingPet] = useState(false);
+
+  const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [showDeviceSetup, setShowDeviceSetup] = useState(false);
-  const [notificationState, setNotificationState] = useState<"default" | "granted" | "denied" | "unsupported">("default");
-  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
-  const [canInstall, setCanInstall] = useState(false);
-  const [installDone, setInstallDone] = useState(false);
 
-  useEffect(() => {
-    const savedLanguage = window.localStorage.getItem("vetra-language");
-    const savedTheme = window.localStorage.getItem("vetra-theme");
-    if (savedLanguage === "ar") setLanguage("ar");
-    if (savedTheme === "dark") setDark(true);
-  }, []);
+  const [petName, setPetName] = useState("");
+  const [species, setSpecies] = useState("Cat");
+  const [breed, setBreed] = useState("");
+  const [gender, setGender] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [color, setColor] = useState("");
+  const [microchip, setMicrochip] = useState("");
+  const [petNotes, setPetNotes] = useState("");
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
+  async function loadClient() {
+    setLoading(true);
+    setError("");
+    setMessage("");
 
-      const savedClientId = window.sessionStorage.getItem("vetra-client-id");
-
-      if (!savedClientId || savedClientId !== clientId) {
-        router.replace("/client-interface/login");
-        return;
-      }
-
-      const { data: clientData, error: clientError } = await supabase
-        .from("clients")
-        .select("id, name, phone, email")
-        .eq("id", clientId)
-        .maybeSingle();
-
-      if (clientError || !clientData) {
-        setMessage("ملف العميل غير موجود.");
+    try {
+      if (!clientId) {
+        setError("Client ID غير موجود.");
         setLoading(false);
         return;
       }
 
-      const { data: petsData, error: petsError } = await supabase
-        .from("pets")
-        .select("id, name, species, breed, gender, birth_date, is_deceased")
-        .eq("client_id", clientId)
-        .order("created_at", { ascending: false });
+      // Get the active clinic database from VETRA Core.
+      const db = await getClinicDb();
 
-      if (petsError) {
-        setMessage(petsError.message);
+      // Load client from the Clinic Database.
+      const {
+        data: clientData,
+        error: clientError,
+      } = await db
+        .from("clients")
+        .select("*")
+        .eq("id", clientId)
+        .single();
+
+      if (clientError || !clientData) {
+        console.error("CLIENT LOAD ERROR:", clientError);
+
+        setError(
+          clientError?.message ||
+            "العميل غير موجود في قاعدة بيانات العيادة."
+        );
+
+        setLoading(false);
+        return;
       }
 
-      setClient(clientData);
+      // Load this client's pets from the same Clinic Database.
+      const {
+        data: petsData,
+        error: petsError,
+      } = await db
+        .from("pets")
+        .select("*")
+        .eq("client_id", clientId)
+        .order("created_at", {
+          ascending: false,
+        });
+
+      if (petsError) {
+        console.error("PETS LOAD ERROR:", petsError);
+
+        setError(
+          "تم تحميل العميل لكن تعذر تحميل الحيوانات: " +
+            petsError.message
+        );
+
+        setClient(clientData as Client);
+        setPets([]);
+        setLoading(false);
+        return;
+      }
+
+      setClient(clientData as Client);
       setPets((petsData || []) as Pet[]);
-      setAuthorized(true);
+      setLoading(false);
+    } catch (err) {
+      console.error("CLIENT PAGE ERROR:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "حصل خطأ أثناء تحميل ملف العميل."
+      );
+
       setLoading(false);
     }
-
-    if (clientId) load();
-  }, [clientId, router]);
-
-  function signOut() {
-    window.sessionStorage.removeItem("vetra-client-id");
-    window.sessionStorage.removeItem("vetra-client-code");
-    router.replace("/client-interface/login");
   }
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    void loadClient();
+  }, [clientId]);
 
-    if ("Notification" in window) {
-      const permission = window.Notification.permission;
-      setNotificationState(permission === "granted" ? "granted" : permission === "denied" ? "denied" : "default");
-    } else {
-      setNotificationState("unsupported");
-    }
+  async function addPet(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
 
-    const handler = (event: Event) => {
-      event.preventDefault();
-      setDeferredInstallPrompt(event);
-      setCanInstall(true);
-    };
+    setError("");
+    setMessage("");
 
-    const installed = () => {
-      setCanInstall(false);
-      setInstallDone(true);
-      window.localStorage.setItem("vetra-pwa-installed", "true");
-    };
-
-    window.addEventListener("beforeinstallprompt", handler);
-    window.addEventListener("appinstalled", installed);
-
-    if (window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone === true) {
-      setInstallDone(true);
-    }
-
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    }
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
-      window.removeEventListener("appinstalled", installed);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!authorized) return;
-    if (window.localStorage.getItem("vetra-device-setup-seen") === "true") return;
-    const timer = window.setTimeout(() => setShowDeviceSetup(true), 700);
-    return () => window.clearTimeout(timer);
-  }, [authorized]);
-
-  async function enableNotifications() {
-    if (!("Notification" in window)) {
-      setNotificationState("unsupported");
+    if (!client) {
+      setError("بيانات العميل غير متاحة.");
       return;
     }
 
-    const permission = await window.Notification.requestPermission();
-    setNotificationState(permission === "granted" ? "granted" : permission === "denied" ? "denied" : "default");
-
-    if (permission === "granted") {
-      try {
-        const registration = await navigator.serviceWorker.ready;
-        await registration.showNotification("VETRA 🐾", {
-          body: "تم تفعيل إشعارات VETRA بنجاح. هتوصلك التنبيهات المهمة هنا.",
-          icon: "/icon-192.png",
-          badge: "/icon-192.png",
-        });
-      } catch {}
+    if (!petName.trim()) {
+      setError("اكتب اسم الحيوان الأول.");
+      return;
     }
-  }
 
-  async function installWebsite() {
-    if (!deferredInstallPrompt) return;
+    setSavingPet(true);
+
     try {
-      await deferredInstallPrompt.prompt();
-      const result = await deferredInstallPrompt.userChoice;
-      if (result?.outcome === "accepted") setInstallDone(true);
+      // Always use the current clinic database.
+      const db = await getClinicDb();
+
+      const {
+        data,
+        error: insertError,
+      } = await db
+        .from("pets")
+        .insert({
+          client_id: client.id,
+          name: petName.trim(),
+          species,
+          breed: breed.trim() || null,
+          gender: gender || null,
+          birth_date: birthDate || null,
+          color: color.trim() || null,
+          microchip: microchip.trim() || null,
+          notes: petNotes.trim() || null,
+        })
+        .select("*")
+        .single();
+
+      if (insertError) {
+        console.error(
+          "PET INSERT ERROR:",
+          insertError
+        );
+
+        setError(insertError.message);
+        setSavingPet(false);
+        return;
+      }
+
+      if (data) {
+        setPets((current) => [
+          data as Pet,
+          ...current,
+        ]);
+      }
+
+      setPetName("");
+      setSpecies("Cat");
+      setBreed("");
+      setGender("");
+      setBirthDate("");
+      setColor("");
+      setMicrochip("");
+      setPetNotes("");
+
+      setMessage("تم إضافة الحيوان بنجاح ✓");
+    } catch (err) {
+      console.error("ADD PET ERROR:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "حصل خطأ أثناء إضافة الحيوان."
+      );
     } finally {
-      setDeferredInstallPrompt(null);
-      setCanInstall(false);
+      setSavingPet(false);
     }
   }
-
-  function finishDeviceSetup() {
-    window.localStorage.setItem("vetra-device-setup-seen", "true");
-    setShowDeviceSetup(false);
-  }
-
-  const ar = language === "ar";
-  const heroPet = pets.find((pet) => !pet.is_deceased) || pets[0];
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#F8FBFF] dark:bg-[#07111C]">
-        <div className="text-center">
-          <div className="text-6xl animate-pulse">🐾</div>
-          <p className="mt-4 text-sm font-bold text-slate-500">Loading VETRA...</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (!authorized) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#F8FBFF] px-6 dark:bg-[#07111C]">
-        <div className="max-w-md rounded-[2rem] bg-white p-8 text-center shadow-2xl dark:bg-[#101923]">
-          <div className="text-5xl">🐾</div>
-          <h1 className="mt-4 text-2xl font-black">VETRA</h1>
-          <p className="mt-3 text-sm text-slate-500 dark:text-slate-300">{message}</p>
-          <button
-            onClick={() => router.replace("/client-interface/login")}
-            className="mt-6 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-black text-white dark:bg-white dark:text-slate-900"
-          >
-            Back to Login
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  const setupModal = showDeviceSetup ? (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/45 p-4 backdrop-blur-sm sm:items-center">
-      <div dir="rtl" className="w-full max-w-md rounded-[2rem] border border-white/70 bg-white p-6 text-slate-900 shadow-2xl dark:border-white/10 dark:bg-[#101923] dark:text-white">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-100 text-3xl dark:bg-cyan-400/10">🐾</div>
-        <h2 className="mt-5 text-center text-2xl font-black">خلي VETRA معاك دايمًا 🐾</h2>
-        <p className="mt-2 text-center text-sm leading-7 text-slate-500 dark:text-slate-300">فعّل الإشعارات واحفظ VETRA على موبايلك عشان توصلك التنبيهات المهمة بسهولة.</p>
-
-        <div className="mt-6 space-y-3">
-          <button type="button" onClick={enableNotifications} disabled={notificationState === "granted"} className="flex w-full items-center justify-between rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-80 dark:border-cyan-400/10 dark:bg-cyan-400/10">
-            <span><span className="block font-black">{notificationState === "granted" ? "الإشعارات مفعّلة ✓" : "السماح بإشعارات VETRA"}</span><span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">{notificationState === "denied" ? "الإشعارات مرفوضة من إعدادات المتصفح." : "استقبل تنبيهات المواعيد والتطعيمات والتحديثات المهمة."}</span></span><span className="text-2xl">🔔</span>
-          </button>
-
-          <button type="button" onClick={installWebsite} disabled={!canInstall} className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-80 dark:border-emerald-400/10 dark:bg-emerald-400/10">
-            <span><span className="block font-black">{installDone ? "VETRA محفوظة على الموبايل ✓" : "احفظ VETRA على موبايلك"}</span><span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">{canInstall ? "أضف VETRA للشاشة الرئيسية بضغطة واحدة." : installDone ? "تقدر تفتح VETRA من الشاشة الرئيسية." : "من المتصفح اختار إضافة إلى الشاشة الرئيسية."}</span></span><span className="text-2xl">📲</span>
-          </button>
-        </div>
-
-        <button type="button" onClick={finishDeviceSetup} className="mt-5 w-full rounded-2xl px-4 py-3 text-sm font-bold text-slate-400 transition hover:text-slate-700 dark:hover:text-white">لاحقًا</button>
-      </div>
-    </div>
-  ) : null;
-
-  return (
-    <>
-      {setupModal}
       <main
-      dir={ar ? "rtl" : "ltr"}
-      className={`min-h-screen overflow-hidden transition-colors duration-700 ${
-        dark ? "bg-[#07111C] text-white" : "bg-[#F8FBFF] text-slate-900"
-      }`}
-    >
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-cyan-300/20 blur-3xl" />
-        <div className="absolute -right-32 top-1/4 h-[30rem] w-[30rem] rounded-full bg-blue-300/20 blur-3xl" />
-        <div className="absolute bottom-[-10rem] left-1/3 h-96 w-96 rounded-full bg-emerald-300/15 blur-3xl" />
-        <div className="absolute left-[5%] top-[35%] rotate-[-18deg] text-8xl opacity-10">🐾</div>
-        <div className="absolute right-[5%] bottom-[20%] rotate-[18deg] text-8xl opacity-10">🐾</div>
-      </div>
+        dir="rtl"
+        className="flex min-h-screen items-center justify-center bg-[#f7f9fc] px-5"
+      >
+        <div className="rounded-3xl bg-white p-10 text-center shadow-sm">
+          <div className="mb-4 text-5xl">🐾</div>
 
-      <header className="relative z-10 flex items-center justify-between px-5 py-5 sm:px-10">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-2xl text-white shadow-xl dark:bg-white dark:text-slate-900">
-            🐾
-          </div>
-          <div>
-            <div className="font-black tracking-[0.2em]">VETRA</div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400">
-              Pet Care Portal
-            </div>
-          </div>
+          <p className="font-semibold text-slate-500">
+            جاري تحميل ملف العميل...
+          </p>
         </div>
+      </main>
+    );
+  }
 
-        <div className="flex gap-2">
+  if (error && !client) {
+    return (
+      <main
+        dir="rtl"
+        className="min-h-screen bg-[#f7f9fc] px-5 py-8"
+      >
+        <div className="mx-auto max-w-3xl">
           <button
-            onClick={() => setLanguage(ar ? "en" : "ar")}
-            className="rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-xs font-bold backdrop-blur dark:border-white/10 dark:bg-white/5"
+            type="button"
+            onClick={() => router.push("/clients")}
+            className="mb-6 text-sm font-semibold text-slate-500"
           >
-            {ar ? "English" : "العربية"}
+            ← العملاء
           </button>
-          <button
-            onClick={() => setDark((v) => !v)}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/70 backdrop-blur dark:border-white/10 dark:bg-white/5"
-          >
-            {dark ? "☀️" : "🌙"}
-          </button>
-          <button
-            onClick={signOut}
-            className="rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-xs font-bold backdrop-blur dark:border-white/10 dark:bg-white/5"
-          >
-            {ar ? "خروج" : "Sign out"}
-          </button>
-        </div>
-      </header>
 
-      <section className="relative z-10 mx-auto max-w-7xl px-5 pb-12 sm:px-10">
-        <div className="grid items-center gap-10 rounded-[3rem] border border-white/70 bg-white/65 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5 sm:p-10 lg:grid-cols-[1.05fr_.95fr]">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white/80 px-4 py-2 text-xs font-bold text-cyan-700 dark:border-cyan-300/10 dark:bg-white/5 dark:text-cyan-300">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              {ar ? "رعاية حيوانك في مكان واحد" : "Your pet care, all in one place"}
-            </div>
+          <div className="rounded-3xl border border-red-100 bg-white p-10 text-center shadow-sm">
+            <div className="mb-4 text-5xl">⚠️</div>
 
-            <h1 className="mt-6 text-5xl font-black leading-[1.02] tracking-tight sm:text-6xl">
-              {ar ? "Welcome back، " : "Welcome back, "}
-              <span className="text-cyan-500">
-                {client?.name || "Pet Owner"}
-              </span>{" "}
-              👋
+            <h1 className="text-2xl font-black">
+              تعذر فتح ملف العميل
             </h1>
 
-            <p className="mt-5 max-w-xl text-lg leading-8 text-slate-500 dark:text-slate-300">
-              {ar
-                ? "كل تفاصيل حيواناتك، مواعيدك وتطعيماتك وفواتيرك هنا."
-                : "Your pets, appointments, vaccines and invoices — all in one place."}
+            <p className="mt-3 text-sm text-slate-500">
+              {error}
             </p>
 
-            <div className="mt-7 flex flex-wrap gap-3">
-              <div className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white dark:bg-white dark:text-slate-900">
-                {pets.length} {ar ? "حيوان" : pets.length === 1 ? "Pet" : "Pets"}
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white/70 px-5 py-3 text-sm font-bold dark:border-white/10 dark:bg-white/5">
-                {ar ? "حساب آمن" : "Secure account"} 🔐
-              </div>
-            </div>
-          </div>
-
-          <div className="relative mx-auto h-[360px] w-full max-w-[430px]">
-            <div className="absolute inset-5 rounded-[3rem] bg-gradient-to-br from-cyan-100 via-white to-blue-100 shadow-2xl dark:from-cyan-500/10 dark:via-slate-900 dark:to-blue-500/10" />
-            <div className="absolute left-1/2 top-5 flex h-56 w-56 -translate-x-1/2 items-center justify-center rounded-full bg-white/80 text-[8rem] shadow-2xl backdrop-blur-xl dark:bg-white/5">
-              {heroPet?.species?.toLowerCase().includes("cat") ? "🐱" : "🐶"}
-            </div>
-
-            <div className="absolute bottom-0 left-4 right-4 rounded-[2rem] border border-white/70 bg-white/90 p-5 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#101923]/90">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                {ar ? "حيوانك المميز" : "Your Hero Pet"}
-              </div>
-              <div className="mt-1 text-2xl font-black">
-                {heroPet?.name || "Your Hero Pet"} 🐾
-              </div>
-              <div className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-                {heroPet
-                  ? `${heroPet.species}${heroPet.breed ? ` • ${heroPet.breed}` : ""}`
-                  : ar
-                    ? "لم تضف حيوانًا بعد"
-                    : "No pet added yet"}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {cards.map(([icon, title, subtitle]) => (
             <button
-              key={title}
-              className="group rounded-[2rem] border border-white/70 bg-white/70 p-6 text-left shadow-lg backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:shadow-2xl dark:border-white/10 dark:bg-white/5"
+              type="button"
+              onClick={() => void loadClient()}
+              className="mt-6 rounded-2xl bg-slate-900 px-6 py-3 font-bold text-white"
             >
-              <div className="text-3xl transition duration-300 group-hover:scale-110">{icon}</div>
-              <div className="mt-5 text-lg font-black">{ar ? title : title}</div>
-              <div className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-300">
-                {subtitle}
-              </div>
+              إعادة المحاولة
             </button>
-          ))}
+          </div>
         </div>
+      </main>
+    );
+  }
 
-        <div className="mt-8">
-          <h2 className="text-2xl font-black">{ar ? "حيواناتك" : "Your Pets"}</h2>
+  if (!client) {
+    return null;
+  }
+
+  return (
+    <main
+      dir="rtl"
+      className="min-h-screen bg-[#f7f9fc] px-5 py-8 text-slate-900"
+    >
+      <div className="mx-auto max-w-6xl">
+
+        <Link
+          href="/clients"
+          className="mb-6 inline-block text-sm font-semibold text-slate-500 transition hover:text-slate-900"
+        >
+          ← العودة للعملاء
+        </Link>
+
+        {/* Client Header */}
+        <section className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-slate-100 text-4xl">
+              👤
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-black">
+                  {client.name}
+                </h1>
+
+                <span
+                  dir="ltr"
+                  className="rounded-xl bg-slate-900 px-3 py-1.5 text-sm font-bold tracking-wider text-white"
+                >
+                  ID: {client.client_code}
+                </span>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-500">
+                {client.phone && (
+                  <span>
+                    📞{" "}
+                    <span dir="ltr">
+                      {client.phone}
+                    </span>
+                  </span>
+                )}
+
+                {client.email && (
+                  <span>
+                    ✉️ {client.email}
+                  </span>
+                )}
+
+                {client.address && (
+                  <span>
+                    📍 {client.address}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {client.notes && (
+            <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+              <span className="font-bold">
+                ملاحظات:
+              </span>{" "}
+              {client.notes}
+            </div>
+          )}
+        </section>
+
+        {/* Error */}
+        {error && (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+            {error}
+          </div>
+        )}
+
+        {/* Success */}
+        {message && (
+          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+            {message}
+          </div>
+        )}
+
+        {/* Pets */}
+        <section className="mb-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-black">
+                الحيوانات
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                الحيوانات المسجلة تحت العميل
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-white px-4 py-2 text-sm font-bold shadow-sm">
+              {pets.length} حيوان
+            </div>
+          </div>
+
           {pets.length === 0 ? (
-            <div className="mt-4 rounded-[2rem] border border-dashed border-slate-300 bg-white/50 p-8 text-center text-sm text-slate-500 dark:border-white/10 dark:bg-white/5">
-              {ar ? "لا توجد حيوانات مرتبطة بهذا الحساب حتى الآن." : "No pets are linked to this account yet."}
+            <div className="rounded-3xl bg-white p-10 text-center shadow-sm">
+              <div className="mb-4 text-5xl">🐾</div>
+
+              <h3 className="text-xl font-bold">
+                مفيش حيوانات لسه
+              </h3>
+
+              <p className="mt-2 text-sm text-slate-500">
+                أضف أول حيوان للعميل من النموذج تحت.
+              </p>
             </div>
           ) : (
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {pets.map((pet) => (
-                <button
+                <Link
                   key={pet.id}
-                  onClick={() => router.push(`/client-interface/${clientId}?pet=${pet.id}`)}
-                  className="rounded-[2rem] border border-white/70 bg-white/70 p-5 text-left shadow-lg backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-2xl dark:border-white/10 dark:bg-white/5"
+                  href={`/pets/${pet.id}`}
+                  className="group rounded-3xl border border-slate-100 bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
                 >
-                  <div className="text-4xl">
-                    {pet.species.toLowerCase().includes("cat") ? "🐱" : "🐶"}
-                  </div>
-                  <div className="mt-3 text-xl font-black">{pet.name}</div>
-                  <div className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-                    {pet.species}{pet.breed ? ` • ${pet.breed}` : ""}
-                  </div>
-                  {pet.is_deceased && (
-                    <div className="mt-3 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-white/10">
-                      {ar ? "متوفى" : "Deceased"}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-3xl transition group-hover:scale-105">
+                      {pet.species
+                        .toLowerCase()
+                        .includes("dog")
+                        ? "🐶"
+                        : pet.species
+                            .toLowerCase()
+                            .includes("cat")
+                          ? "🐱"
+                          : "🐾"}
                     </div>
-                  )}
-                </button>
+
+                    <div className="min-w-0">
+                      <h3 className="truncate text-xl font-black">
+                        {pet.name}
+                      </h3>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        {pet.species}
+                        {pet.breed
+                          ? ` • ${pet.breed}`
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 border-t border-slate-100 pt-4 text-sm font-bold text-slate-500 transition group-hover:text-slate-900">
+                    فتح الملف الطبي ←
+                  </div>
+                </Link>
               ))}
             </div>
           )}
-        </div>
-      </section>
+        </section>
+
+        {/* Add Pet */}
+        <section className="rounded-3xl bg-white p-6 shadow-sm">
+          <div className="mb-6">
+            <h2 className="text-2xl font-black">
+              إضافة حيوان جديد
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              الحيوان هيتسجل مباشرة في قاعدة بيانات العيادة الحالية.
+            </p>
+          </div>
+
+          <form
+            onSubmit={addPet}
+            className="grid gap-5 sm:grid-cols-2"
+          >
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                اسم الحيوان *
+              </label>
+
+              <input
+                value={petName}
+                onChange={(e) =>
+                  setPetName(e.target.value)
+                }
+                placeholder="مثال: لولو"
+                required
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 outline-none focus:border-blue-500 focus:bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                النوع *
+              </label>
+
+              <select
+                value={species}
+                onChange={(e) =>
+                  setSpecies(e.target.value)
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 outline-none focus:border-blue-500 focus:bg-white"
+              >
+                <option value="Cat">
+                  قط
+                </option>
+
+                <option value="Dog">
+                  كلب
+                </option>
+
+                <option value="Other">
+                  أخرى
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                السلالة
+              </label>
+
+              <input
+                value={breed}
+                onChange={(e) =>
+                  setBreed(e.target.value)
+                }
+                placeholder="مثال: Persian"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 outline-none focus:border-blue-500 focus:bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                الجنس
+              </label>
+
+              <select
+                value={gender}
+                onChange={(e) =>
+                  setGender(e.target.value)
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 outline-none focus:border-blue-500 focus:bg-white"
+              >
+                <option value="">
+                  اختر
+                </option>
+
+                <option value="Male">
+                  ذكر
+                </option>
+
+                <option value="Female">
+                  أنثى
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                تاريخ الميلاد
+              </label>
+
+              <input
+                type="date"
+                value={birthDate}
+                onChange={(e) =>
+                  setBirthDate(e.target.value)
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 outline-none focus:border-blue-500 focus:bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                اللون
+              </label>
+
+              <input
+                value={color}
+                onChange={(e) =>
+                  setColor(e.target.value)
+                }
+                placeholder="مثال: أبيض"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 outline-none focus:border-blue-500 focus:bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                Microchip
+              </label>
+
+              <input
+                value={microchip}
+                onChange={(e) =>
+                  setMicrochip(e.target.value)
+                }
+                placeholder="رقم الميكروشيب"
+                dir="ltr"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-left outline-none focus:border-blue-500 focus:bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                ملاحظات
+              </label>
+
+              <input
+                value={petNotes}
+                onChange={(e) =>
+                  setPetNotes(e.target.value)
+                }
+                placeholder="ملاحظات عن الحيوان"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 outline-none focus:border-blue-500 focus:bg-white"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <button
+                type="submit"
+                disabled={savingPet}
+                className="rounded-2xl bg-slate-900 px-7 py-3.5 font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingPet
+                  ? "جاري الإضافة..."
+                  : "إضافة الحيوان ✓"}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
     </main>
-    </>
   );
 }
