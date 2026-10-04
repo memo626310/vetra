@@ -88,7 +88,12 @@ export default function BarcodeTestPage() {
         return;
       }
 
-      setProduct(data);
+      setProduct({
+        ...data,
+        category: Array.isArray(data.category)
+          ? data.category[0] ?? null
+          : data.category ?? null,
+      });
     } catch (err) {
       console.error(err);
       setError("تعذر تحميل بيانات العيادة أو الاستعلام عن المنتج");

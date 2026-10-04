@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrowserMultiFormatReader } from "@zxing/browser";
-import { vetraCore } from "@/lib/vetra-core";
-import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
+import { supabase } from "@/lib/supabase";
 
 type Client = {
   id: string;
@@ -112,17 +111,20 @@ export default function NewInvoicePage() {
 
     const {
       data: { user },
-    } = await vetraCore.auth.getUser();
+    } = await supabase.auth.getUser();
 
     if (!user) {
       router.replace("/login");
       return;
     }
 
-    const context = await getClinicContext();
-    const db = await getClinicDb();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
 
-    if (!["owner", "admin"].includes(context.role)) {
+    if (profile?.role !== "admin") {
       setAuthorized(false);
       setLoading(false);
       return;
@@ -132,12 +134,11 @@ export default function NewInvoicePage() {
 
     const [clientsResult, productsResult, settingsResult] =
       await Promise.all([
-        db
+        supabase
           .from("clients")
           .select("id, name, phone")
-          .eq("clinic_id", context.clinic_id)
           .order("name"),
-        db
+        supabase
           .from("products")
           .select(`
             id,
@@ -148,12 +149,10 @@ export default function NewInvoicePage() {
             retail_price,
             category:product_categories(name)
           `)
-          .eq("clinic_id", context.clinic_id)
           .order("name"),
-        db
+        supabase
           .from("billing_settings")
           .select("consultation_fee")
-          .eq("clinic_id", context.clinic_id)
           .limit(1)
           .maybeSingle(),
       ]);
@@ -189,13 +188,9 @@ export default function NewInvoicePage() {
     }
 
     async function loadPets() {
-      const db = await getClinicDb();
-      const context = await getClinicContext();
-
-      const { data, error } = await db
+      const { data, error } = await supabase
         .from("pets")
         .select("id, client_id, name, species")
-        .eq("clinic_id", context.clinic_id)
         .eq("client_id", clientId)
         .eq("is_deceased", false)
         .order("name");
@@ -380,10 +375,7 @@ export default function NewInvoicePage() {
       return;
     }
 
-    const db = await getClinicDb();
-    const context = await getClinicContext();
-
-    const { data, error } = await db
+    const { data, error } = await supabase
       .from("products")
       .select(`
         id,
@@ -394,7 +386,6 @@ export default function NewInvoicePage() {
         retail_price,
         category:product_categories(name)
       `)
-      .eq("clinic_id", context.clinic_id)
       .eq("barcode", clean)
       .maybeSingle();
 
@@ -487,26 +478,23 @@ export default function NewInvoicePage() {
 
     const {
       data: { user },
-    } = await vetraCore.auth.getUser();
+    } = await supabase.auth.getUser();
 
     if (!user) {
       router.replace("/login");
       return;
     }
 
-    const context = await getClinicContext();
-    const db = await getClinicDb();
+    const calculatedStatus =
+      paid <= 0
+        ? "unpaid"
+        : paid >= total
+          ? "paid"
+          : "partially_paid";
 
-    if (!["owner", "admin"].includes(context.role)) {
-      setAuthorized(false);
-      setSaving(false);
-      return;
-    }
-
-    const { data: invoice, error: invoiceError } = await db
+    const { data: invoice, error: invoiceError } = await supabase
       .from("invoices")
       .insert({
-        clinic_id: context.clinic_id,
         client_id: clientId,
         pet_id: petId || null,
         status: "draft",
@@ -550,24 +538,19 @@ export default function NewInvoicePage() {
       ),
     }));
 
-    const tenantItemRows = itemRows.map((row) => ({
-      ...row,
-      clinic_id: context.clinic_id,
-    }));
-
-    const { error: itemsError } = await db
+    const { error: itemsError } = await supabase
       .from("invoice_items")
-      .insert(tenantItemRows);
+      .insert(itemRows);
 
     if (itemsError) {
-      await db.from("invoices").delete().eq("id", invoice.id).eq("clinic_id", context.clinic_id);
+      await supabase.from("invoices").delete().eq("id", invoice.id);
       setMessage(itemsError.message);
       setSaving(false);
       return;
     }
 
     if (issueAfterSave) {
-      const { error: issueError } = await db.rpc("issue_invoice", {
+      const { error: issueError } = await supabase.rpc("issue_invoice", {
         p_invoice_id: invoice.id,
       });
 
@@ -636,8 +619,8 @@ export default function NewInvoicePage() {
           </h1>
           <p className="mt-3 text-sm text-slate-500">
             {language === "ar"
-              ? "إنشاء الفواتير متاح للـ Owner و Admin فقط."
-              : "Invoice creation is available to Owner and Admin users only."}
+              ? "إنشاء الفواتير متاح للـ Admin فقط."
+              : "Invoice creation is available to Admin users only."}
           </p>
           <button
             onClick={() => router.push("/")}
@@ -1273,9 +1256,6 @@ function BarcodeScanner({
         videoRef.current.srcObject = null;
       }
 
-      try {
-        readerRef.current?.reset();
-      } catch {}
     };
 
     const enhanceCamera = async (currentStream: MediaStream) => {
