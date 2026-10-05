@@ -1285,9 +1285,9 @@ function BarcodeScanner({
         videoRef.current.srcObject = null;
       }
 
-      try {
-        readerRef.current?.reset();
-      } catch {}
+      // Camera tracks and ZXing controls are stopped above.
+      // BrowserMultiFormatReader in the installed @zxing/browser version
+      // does not expose reset() in its TypeScript API.
     };
 
     const enhanceCamera = async (currentStream: MediaStream) => {

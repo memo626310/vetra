@@ -1,17 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { BrowserMultiFormatReader } from "@zxing/browser";
+import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
-
-type Language = "en" | "ar";
 
 type Client = {
   id: string;
   name: string;
   phone: string | null;
-  email?: string | null;
 };
 
 type Pet = {
@@ -19,2889 +17,1525 @@ type Pet = {
   client_id: string;
   name: string;
   species: string;
-  breed: string | null;
-  gender: string | null;
-  birth_date: string | null;
-  color: string | null;
-  microchip: string | null;
-  notes: string | null;
-  is_deceased: boolean;
 };
 
-type Visit = {
-  id: string;
-  client_id: string;
-  pet_id: string;
-  visit_date: string;
-  reason: string | null;
-  examination: string | null;
-  diagnosis: string | null;
-  treatment: string | null;
-  weight: number | null;
-  temperature: number | null;
-  heart_rate: number | null;
-  respiratory_rate: number | null;
-  notes: string | null;
-};
-
-type Medication = {
+type Product = {
   id: string;
   name: string;
-  active_ingredient: string | null;
-  species: string[] | null;
-  concentration: number | null;
-  concentration_unit: string | null;
-  dose_type: string | null;
-  dose_value: number | null;
-  dose_min: number | null;
-  dose_max: number | null;
-  dose_unit: string | null;
-  route: string | null;
-  frequency: string | null;
-  duration_days: number | null;
-  instructions: string | null;
-};
-
-type MedicationDraft = {
-  id: string;
-  medication_id: string;
-  weight_kg: number;
-  calculated_dose: number;
-  calculated_dose_unit: string;
-  dose_per_kg: number | null;
-  concentration: number | null;
-  concentration_unit: string | null;
-  calculated_volume: number | null;
-  volume_unit: string | null;
-  route: string | null;
-  frequency: string | null;
-  duration_days: number | null;
-  instructions: string | null;
-};
-
-type VaccinationDraft = {
-  id: string;
-  vaccine_name: string;
-  vaccine_type: string;
-  administered_at: string;
-  next_dose_at: string;
-  dose: string;
-  route: string;
-  batch_number: string;
-  manufacturer: string;
-  notes: string;
-};
-
-type PetDetails = Pet & {
-  client: Client | null;
-};
-
-const translations = {
-  en: {
-    title: "New Visit",
-    subtitle: "Start a new medical examination",
-    dashboard: "Dashboard",
-    language: "العربية",
-    dark: "Dark mode",
-    light: "Light mode",
-
-    selectClient: "Select Client",
-    selectClientHint: "Choose the pet owner first",
-    searchClient: "Search clients...",
-    noClients: "No clients found",
-
-    selectPet: "Select Pet",
-    selectPetHint: "Choose the animal for this visit",
-    searchPet: "Search pets...",
-    noPets: "No pets found",
-
-    addClient: "Add Client",
-    addPet: "Add Pet",
-
-    selectedClient: "Selected Client",
-    selectedPet: "Selected Pet",
-
-    startExam: "Start Examination",
-    changeSelection: "Change selection",
-
-    patientSummary: "Patient Summary",
-    owner: "Owner",
-    breed: "Breed",
-    gender: "Gender",
-    birthDate: "Birth date",
-    color: "Color",
-    microchip: "Microchip",
-    importantNotes: "Important Notes",
-    noNotes: "No important notes recorded.",
-    previousVisits: "Previous Visits",
-
-    lastVisit: "Last Visit",
-    noPreviousVisits: "No previous visits",
-
-    lastDiagnosis: "Last Diagnosis",
-    noDiagnosis: "No previous diagnosis",
-
-    lastTreatment: "Last Treatment",
-    noTreatment: "No previous treatment",
-
-    visitCount: "Previous Visits",
-
-    trends: "Patient Trends",
-    weight: "Weight",
-    temperature: "Temperature",
-    heartRate: "Heart Rate",
-    respiratoryRate: "Respiratory Rate",
-    latest: "Latest",
-    previous: "Previous",
-    noData: "No data",
-    kg: "kg",
-    celsius: "°C",
-    bpm: "bpm",
-    rpm: "rpm",
-
-    examination: "Current Examination",
-    reason: "Reason for Visit",
-    reasonPlaceholder: "Why is the patient here today?",
-    examinationNotes: "Examination",
-    examinationPlaceholder: "Clinical examination findings...",
-    diagnosis: "Diagnosis",
-    diagnosisPlaceholder: "Diagnosis...",
-    treatment: "Treatment",
-    treatmentPlaceholder: "Treatment and medications...",
-    visitNotes: "Visit Notes",
-    visitNotesPlaceholder: "Additional notes for this visit...",
-
-    saveVisit: "Save Visit",
-    saving: "Saving...",
-    cancel: "Cancel",
-
-    visitHistory: "Visit History",
-    viewExamination: "View Examination",
-    noHistory: "No previous examinations.",
-
-    visitDetails: "Visit Details",
-    close: "Close",
-    date: "Date",
-    time: "Time",
-
-    visitSaved: "Visit saved successfully.",
-    saveError: "Could not save the visit.",
-    loadError: "Could not load patient data.",
-    selectPetFirst: "Please select a pet first.",
-    deceasedPet: "This pet is marked as deceased and cannot have new visits.",
-    deceasedBadge: "Deceased",
-    requiredFields: "Please select both a client and a pet.",
-
-    cat: "Cat",
-    dog: "Dog",
-    other: "Other",
-    male: "Male",
-    female: "Female",
-  },
-
-  ar: {
-    title: "زيارة جديدة",
-    subtitle: "ابدأ كشفًا طبيًا جديدًا",
-    dashboard: "الرئيسية",
-    language: "English",
-    dark: "الوضع الداكن",
-    light: "الوضع الفاتح",
-
-    selectClient: "اختيار العميل",
-    selectClientHint: "اختر صاحب الحيوان أولًا",
-    searchClient: "البحث عن عميل...",
-    noClients: "لا يوجد عملاء",
-
-    selectPet: "اختيار الحيوان",
-    selectPetHint: "اختر الحيوان الخاص بهذه الزيارة",
-    searchPet: "البحث عن حيوان...",
-    noPets: "لا توجد حيوانات",
-
-    addClient: "إضافة عميل",
-    addPet: "إضافة حيوان",
-
-    selectedClient: "العميل المختار",
-    selectedPet: "الحيوان المختار",
-
-    startExam: "ابدأ الكشف",
-    changeSelection: "تغيير الاختيار",
-
-    patientSummary: "ملخص حالة الحيوان",
-    owner: "المالك",
-    breed: "السلالة",
-    gender: "النوع",
-    birthDate: "تاريخ الميلاد",
-    color: "اللون",
-    microchip: "الميكروشيب",
-    importantNotes: "ملاحظات مهمة",
-    noNotes: "لا توجد ملاحظات مهمة مسجلة.",
-    previousVisits: "الزيارات السابقة",
-
-    lastVisit: "آخر زيارة",
-    noPreviousVisits: "لا توجد زيارات سابقة",
-
-    lastDiagnosis: "آخر تشخيص",
-    noDiagnosis: "لا يوجد تشخيص سابق",
-
-    lastTreatment: "آخر علاج",
-    noTreatment: "لا يوجد علاج سابق",
-
-    visitCount: "الزيارات السابقة",
-
-    trends: "متابعة المؤشرات",
-    weight: "الوزن",
-    temperature: "الحرارة",
-    heartRate: "نبض القلب",
-    respiratoryRate: "معدل التنفس",
-    latest: "الأحدث",
-    previous: "السابق",
-    noData: "لا توجد بيانات",
-    kg: "كجم",
-    celsius: "°C",
-    bpm: "نبضة/د",
-    rpm: "نفس/د",
-
-    examination: "الكشف الحالي",
-    reason: "سبب الزيارة",
-    reasonPlaceholder: "ما سبب حضور الحيوان اليوم؟",
-    examinationNotes: "الفحص",
-    examinationPlaceholder: "نتائج الفحص الإكلينيكي...",
-    diagnosis: "التشخيص",
-    diagnosisPlaceholder: "التشخيص...",
-    treatment: "العلاج",
-    treatmentPlaceholder: "العلاج والأدوية...",
-    visitNotes: "ملاحظات الزيارة",
-    visitNotesPlaceholder: "ملاحظات إضافية عن الزيارة...",
-
-    saveVisit: "حفظ الزيارة",
-    saving: "جاري الحفظ...",
-    cancel: "إلغاء",
-
-    visitHistory: "سجل الزيارات",
-    viewExamination: "عرض الكشف",
-    noHistory: "لا توجد كشوفات سابقة.",
-
-    visitDetails: "تفاصيل الكشف",
-    close: "إغلاق",
-    date: "التاريخ",
-    time: "الوقت",
-
-    visitSaved: "تم حفظ الزيارة بنجاح.",
-    saveError: "تعذر حفظ الزيارة.",
-    loadError: "تعذر تحميل بيانات الحيوان.",
-    selectPetFirst: "يرجى اختيار حيوان أولًا.",
-    deceasedPet: "هذا الحيوان مسجل كمتوفى ولا يمكن تسجيل زيارة جديدة له.",
-    deceasedBadge: "متوفى",
-    requiredFields: "يرجى اختيار العميل والحيوان.",
-
-    cat: "قط",
-    dog: "كلب",
-    other: "أخرى",
-    male: "ذكر",
-    female: "أنثى",
-  },
-};
-
-function speciesLabel(species: string, t: typeof translations.en) {
-  const value = species?.toLowerCase();
-
-  if (value === "cat") return t.cat;
-  if (value === "dog") return t.dog;
-
-  return t.other;
-}
-
-function genderLabel(gender: string | null, t: typeof translations.en) {
-  if (!gender) return "—";
-
-  const value = gender.toLowerCase();
-
-  if (value === "male") return t.male;
-  if (value === "female") return t.female;
-
-  return gender;
-}
-
-function formatDate(date: string | null, language: Language) {
-  if (!date) return "—";
-
-  return new Intl.DateTimeFormat(language === "ar" ? "ar-EG" : "en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(date));
-}
-
-function formatTime(date: string, language: Language) {
-  return new Intl.DateTimeFormat(language === "ar" ? "ar-EG" : "en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(date));
-}
-
-function calculateAge(
-  birthDate: string | null,
-  language: Language
-): string {
-  if (!birthDate) return "—";
-
-  const birth = new Date(birthDate);
-  const today = new Date();
-
-  let years = today.getFullYear() - birth.getFullYear();
-  let months = today.getMonth() - birth.getMonth();
-
-  if (months < 0) {
-    years--;
-    months += 12;
-  }
-
-  if (years > 0) {
-    return language === "ar"
-      ? `${years} سنة`
-      : `${years} ${years === 1 ? "year" : "years"}`;
-  }
-
-  return language === "ar"
-    ? `${months} شهر`
-    : `${months} ${months === 1 ? "month" : "months"}`;
-}
-
-function getDelta(
-  latest: number | null,
-  previous: number | null
-): string | null {
-  if (latest === null || previous === null) return null;
-
-  const delta = latest - previous;
-
-  if (delta === 0) return "0";
-
-  return delta > 0 ? `+${delta}` : `${delta}`;
-}
-
-function MiniGraph({
-  values,
-  color,
-  onPointClick,
-  unit,
-  darkMode,
-}: {
-  values: {
-    value: number;
-    visit: Visit;
-  }[];
-  color: string;
-  onPointClick: (visit: Visit) => void;
+  barcode: string | null;
   unit: string;
-  darkMode: boolean;
-}) {
-  if (values.length === 0) {
-    return (
-      <div
-        className={`flex h-28 items-center justify-center rounded-xl ${
-          darkMode ? "bg-slate-800/60" : "bg-slate-50"
-        }`}
-      >
-        <span
-          className={`text-xs ${
-            darkMode ? "text-slate-500" : "text-slate-400"
-          }`}
-        >
-          No data
-        </span>
-      </div>
-    );
-  }
+  quantity: number;
+  retail_price: number;
+  category?: { name: string } | null;
+};
 
-  const ordered = [...values].reverse();
+type InvoiceLine = {
+  key: string;
+  item_type: "product" | "service";
+  product_id: string | null;
+  service_name: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  discount: number;
+  available_quantity: number | null;
+};
 
-  const numericValues = ordered.map((item) => item.value);
+const emptyLine = (): InvoiceLine => ({
+  key: crypto.randomUUID(),
+  item_type: "service",
+  product_id: null,
+  service_name: "",
+  description: "",
+  quantity: 1,
+  unit_price: 0,
+  discount: 0,
+  available_quantity: null,
+});
 
-  const min = Math.min(...numericValues);
-  const max = Math.max(...numericValues);
+const money = (value: number) =>
+  new Intl.NumberFormat("en-EG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 
-  const range = max - min || 1;
-
-  const width = 300;
-  const height = 105;
-  const paddingX = 14;
-  const paddingY = 16;
-
-  const points = ordered.map((item, index) => {
-    const x =
-      ordered.length === 1
-        ? width / 2
-        : paddingX +
-          (index / (ordered.length - 1)) * (width - paddingX * 2);
-
-    const normalized = (item.value - min) / range;
-
-    const y =
-      height -
-      paddingY -
-      normalized * (height - paddingY * 2);
-
-    return {
-      x,
-      y,
-      item,
-    };
-  });
-
-  const path = points
-    .map((point, index) =>
-      index === 0
-        ? `M ${point.x} ${point.y}`
-        : `L ${point.x} ${point.y}`
-    )
-    .join(" ");
-
-  return (
-    <div className="relative h-28 w-full overflow-hidden rounded-xl">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-full w-full"
-        preserveAspectRatio="none"
-      >
-        <line
-          x1="0"
-          y1="25"
-          x2={width}
-          y2="25"
-          stroke={darkMode ? "#334155" : "#e2e8f0"}
-          strokeWidth="1"
-        />
-
-        <line
-          x1="0"
-          y1="53"
-          x2={width}
-          y2="53"
-          stroke={darkMode ? "#334155" : "#e2e8f0"}
-          strokeWidth="1"
-        />
-
-        <line
-          x1="0"
-          y1="81"
-          x2={width}
-          y2="81"
-          stroke={darkMode ? "#334155" : "#e2e8f0"}
-          strokeWidth="1"
-        />
-
-        <path
-          d={path}
-          fill="none"
-          stroke={color}
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {points.map((point) => (
-          <g key={point.item.visit.id}>
-            <circle
-              cx={point.x}
-              cy={point.y}
-              r="7"
-              fill={darkMode ? "#0f172a" : "#ffffff"}
-              stroke={color}
-              strokeWidth="3"
-              className="cursor-pointer transition-all duration-200 hover:scale-125"
-              onClick={() => onPointClick(point.item.visit)}
-            />
-
-            <title>
-              {point.item.value} {unit} —{" "}
-              {formatDate(point.item.visit.visit_date, "en")}
-            </title>
-          </g>
-        ))}
-      </svg>
-    </div>
-  );
-}
-
-function VitalCard({
-  title,
-  icon,
-  latest,
-  previous,
-  unit,
-  color,
-  values,
-  onPointClick,
-  darkMode,
-}: {
-  title: string;
-  icon: string;
-  latest: number | null;
-  previous: number | null;
-  unit: string;
-  color: string;
-  values: {
-    value: number;
-    visit: Visit;
-  }[];
-  onPointClick: (visit: Visit) => void;
-  darkMode: boolean;
-}) {
-  const delta = getDelta(latest, previous);
-
-  return (
-    <div
-      className={`group rounded-2xl border p-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
-        darkMode
-          ? "border-slate-800 bg-slate-900 hover:border-slate-700"
-          : "border-slate-200 bg-white hover:border-slate-300"
-      }`}
-    >
-      <div className="mb-3 flex items-start justify-between">
-        <div>
-          <div className="mb-1 flex items-center gap-2">
-            <span className="text-lg">{icon}</span>
-
-            <h3
-              className={`text-sm font-semibold ${
-                darkMode ? "text-slate-200" : "text-slate-700"
-              }`}
-            >
-              {title}
-            </h3>
-          </div>
-
-          <div className="flex items-baseline gap-1">
-            <span
-              className={`text-xl font-bold ${
-                darkMode ? "text-white" : "text-slate-900"
-              }`}
-            >
-              {latest !== null ? latest : "—"}
-            </span>
-
-            {latest !== null && (
-              <span
-                className={`text-xs ${
-                  darkMode ? "text-slate-500" : "text-slate-400"
-                }`}
-              >
-                {unit}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {delta !== null && (
-          <span
-            className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
-              Number(delta) > 0
-                ? darkMode
-                  ? "bg-emerald-950 text-emerald-400"
-                  : "bg-emerald-50 text-emerald-600"
-                : Number(delta) < 0
-                ? darkMode
-                  ? "bg-rose-950 text-rose-400"
-                  : "bg-rose-50 text-rose-600"
-                : darkMode
-                ? "bg-slate-800 text-slate-400"
-                : "bg-slate-100 text-slate-500"
-            }`}
-          >
-            {delta}
-          </span>
-        )}
-      </div>
-
-      <MiniGraph
-        values={values}
-        color={color}
-        onPointClick={onPointClick}
-        unit={unit}
-        darkMode={darkMode}
-      />
-
-      <div
-        className={`mt-2 flex justify-between text-[10px] ${
-          darkMode ? "text-slate-500" : "text-slate-400"
-        }`}
-      >
-        <span>
-          {previous !== null ? `Prev: ${previous}` : "No previous"}
-        </span>
-
-        <span>{values.length} readings</span>
-      </div>
-    </div>
-  );
-}
-
-export default function NewVisitPage() {
+export default function NewInvoicePage() {
   const router = useRouter();
 
-  const [language, setLanguage] = useState<Language>("en");
-  const [darkMode, setDarkMode] = useState(false);
+  const [language, setLanguage] = useState<"ar" | "en">("ar");
+  const [darkMode, setDarkMode] = useState(true);
+  const [ready, setReady] = useState(false);
 
-  const [petFromUrl, setPetFromUrl] = useState<string | null>(null);
+  const [authorized, setAuthorized] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [success, setSuccess] = useState("");
 
   const [clients, setClients] = useState<Client[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
-  const [selectedClientId, setSelectedClientId] = useState("");
-  const [selectedPetId, setSelectedPetId] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [petId, setPetId] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [lines, setLines] = useState<InvoiceLine[]>([]);
 
-  const [clientSearch, setClientSearch] = useState("");
-  const [petSearch, setPetSearch] = useState("");
+  const [discount, setDiscount] = useState("0");
+  const [paidAmount, setPaidAmount] = useState("0");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [notes, setNotes] = useState("");
 
-  const [petDetails, setPetDetails] = useState<PetDetails | null>(null);
-  const [visits, setVisits] = useState<Visit[]>([]);
-
-  const [loadingClients, setLoadingClients] = useState(true);
-  const [loadingPets, setLoadingPets] = useState(false);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-
-  const [started, setStarted] = useState(false);
-
-  const [reason, setReason] = useState("");
-  const [examination, setExamination] = useState("");
-  const [diagnosis, setDiagnosis] = useState("");
-  const [treatment, setTreatment] = useState("");
-  const [visitNotes, setVisitNotes] = useState("");
-
-  const [weight, setWeight] = useState("");
-  const [temperature, setTemperature] = useState("");
-  const [heartRate, setHeartRate] = useState("");
-  const [respiratoryRate, setRespiratoryRate] = useState("");
-
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-
-  const [selectedOldVisit, setSelectedOldVisit] =
-    useState<Visit | null>(null);
-
-  const [medications, setMedications] = useState<Medication[]>([]);
-  const [medicationSearch, setMedicationSearch] = useState("");
-  const [selectedMedicationId, setSelectedMedicationId] = useState("");
-  const [medicationDrafts, setMedicationDrafts] = useState<MedicationDraft[]>([]);
-  const [vaccinations, setVaccinations] = useState<VaccinationDraft[]>([]);
-  const [whatsappEnabled, setWhatsappEnabled] = useState(true);
-
-  const t = translations[language];
+  const [showScanner, setShowScanner] = useState(false);
+  const [serviceName, setServiceName] = useState("");
+  const [servicePrice, setServicePrice] = useState("");
+  const [consultationFee, setConsultationFee] = useState(100);
+  const [visitId, setVisitId] = useState("");
+  const [requestedPetId, setRequestedPetId] = useState("");
 
   useEffect(() => {
-    const savedLanguage = window.localStorage.getItem(
-      "vetra-language"
-    ) as Language | null;
-
-    const savedDarkMode =
-      window.localStorage.getItem("vetra-dark-mode") === "true";
-
-    if (savedLanguage === "en" || savedLanguage === "ar") {
-      setLanguage(savedLanguage);
-    }
-
-    setDarkMode(savedDarkMode);
-
+    const savedTheme = localStorage.getItem("vetra-theme");
+    const savedLanguage = localStorage.getItem("vetra-language");
     const params = new URLSearchParams(window.location.search);
-    setPetFromUrl(params.get("pet"));
+
+    setDarkMode(savedTheme !== "light");
+    setLanguage(savedLanguage === "en" ? "en" : "ar");
+    setClientId(params.get("client") || "");
+    const requestedPet = params.get("pet") || "";
+    setPetId(requestedPet);
+    setRequestedPetId(requestedPet);
+    setVisitId(params.get("visit") || "");
+    setReady(true);
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem("vetra-language", language);
+    if (!ready) return;
+    localStorage.setItem("vetra-theme", darkMode ? "dark" : "light");
+    localStorage.setItem("vetra-language", language);
+  }, [darkMode, language, ready]);
 
-    document.documentElement.lang = language;
-    document.documentElement.dir =
-      language === "ar" ? "rtl" : "ltr";
-  }, [language]);
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      "vetra-dark-mode",
-      darkMode ? "true" : "false"
-    );
-
-    document.documentElement.classList.toggle("dark", darkMode);
-  }, [darkMode]);
-
-  useEffect(() => {
-    loadClients();
-    loadMedications();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedClientId) {
-      setPets([]);
-      setSelectedPetId("");
-      return;
-    }
-
-    loadPets(selectedClientId);
-  }, [selectedClientId]);
-
-  useEffect(() => {
-    if (!petFromUrl) return;
-
-    loadPetFromUrl(petFromUrl);
-  }, [petFromUrl]);
-
-  async function loadClients() {
-    setLoadingClients(true);
-
-    try {
-      const db = await getClinicDb();
-
-      const { data, error } = await db
-        .from("clients")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("LOAD CLIENTS ERROR:", error);
-        setMessage(error.message);
-      } else {
-        setClients(data || []);
-      }
-    } catch (error) {
-      console.error("LOAD CLIENTS ERROR:", error);
-      setMessage(error instanceof Error ? error.message : t.loadError);
-    } finally {
-      setLoadingClients(false);
-    }
-  }
-
-  async function loadPets(clientId: string) {
-    setLoadingPets(true);
-
-    try {
-      const db = await getClinicDb();
-
-      const { data, error } = await db
-        .from("pets")
-        .select("*")
-        .eq("client_id", clientId)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("LOAD PETS ERROR:", error);
-        setMessage(error.message);
-      } else {
-        setPets(data || []);
-      }
-    } catch (error) {
-      console.error("LOAD PETS ERROR:", error);
-      setMessage(error instanceof Error ? error.message : t.loadError);
-    } finally {
-      setLoadingPets(false);
-    }
-  }
-
-  async function loadPetFromUrl(petId: string) {
-    setLoadingDetails(true);
-
-    try {
-      const db = await getClinicDb();
-
-      const { data, error } = await db
-        .from("pets")
-        .select(`
-          *,
-          client:clients (
-            id,
-            name,
-            phone,
-            email
-          )
-        `)
-        .eq("id", petId)
-        .single();
-
-      if (error || !data) {
-        setMessage(t.loadError);
-        return;
-      }
-
-      if (data.is_deceased) {
-        setPetDetails(data as PetDetails);
-        setSelectedPetId(data.id);
-        setSelectedClientId(data.client_id);
-        await loadVisits(data.id);
-        setMessage(t.deceasedPet);
-        setStarted(false);
-        return;
-      }
-
-      setPetDetails(data as PetDetails);
-      setSelectedPetId(data.id);
-      setSelectedClientId(data.client_id);
-
-      await loadVisits(data.id);
-      setStarted(true);
-    } catch (error) {
-      console.error("LOAD PET FROM URL ERROR:", error);
-      setMessage(error instanceof Error ? error.message : t.loadError);
-    } finally {
-      setLoadingDetails(false);
-    }
-  }
-
-  async function loadVisits(petId: string) {
-    try {
-      const db = await getClinicDb();
-
-      const { data, error } = await db
-        .from("visits")
-        .select("*")
-        .eq("pet_id", petId)
-        .order("visit_date", { ascending: false });
-
-      if (error) {
-        console.error("LOAD VISITS ERROR:", error);
-        setMessage(error.message);
-        return;
-      }
-
-      setVisits(data || []);
-    } catch (error) {
-      console.error("LOAD VISITS ERROR:", error);
-    }
-  }
-
-  async function startExamination() {
+  async function loadPage() {
+    setLoading(true);
     setMessage("");
 
-    if (!selectedClientId || !selectedPetId) {
-      setMessage(t.requiredFields);
+    const {
+      data: { user },
+    } = await vetraCore.auth.getUser();
+
+    if (!user) {
+      router.replace("/login");
       return;
     }
 
-    setLoadingDetails(true);
+    const context = await getClinicContext();
+    const db = await getClinicDb();
 
-    try {
-      const db = await getClinicDb();
+    if (!["owner", "admin"].includes(context.role)) {
+      setAuthorized(false);
+      setLoading(false);
+      return;
+    }
 
-      const {
-        data: selectedPet,
-        error: selectedPetError,
-      } = await db
-        .from("pets")
-        .select("*")
-        .eq("id", selectedPetId)
-        .single();
+    setAuthorized(true);
 
-      if (selectedPetError || !selectedPet) {
-        setMessage(t.loadError);
-        return;
-      }
-
-      if (selectedPet.is_deceased) {
-        setMessage(t.deceasedPet);
-        setPetDetails(selectedPet as PetDetails);
-        setStarted(false);
-        return;
-      }
-
-      const { data, error } = await db
-        .from("pets")
-        .select(`
-          *,
-          client:clients (
+    const [clientsResult, productsResult, settingsResult] =
+      await Promise.all([
+        db
+          .from("clients")
+          .select("id, name, phone")
+          .eq("clinic_id", context.clinic_id)
+          .order("name"),
+        db
+          .from("products")
+          .select(`
             id,
             name,
-            phone,
-            email
-          )
-        `)
-        .eq("id", selectedPetId)
-        .single();
+            barcode,
+            unit,
+            quantity,
+            retail_price,
+            category:product_categories(name)
+          `)
+          .eq("clinic_id", context.clinic_id)
+          .order("name"),
+        db
+          .from("billing_settings")
+          .select("consultation_fee")
+          .eq("clinic_id", context.clinic_id)
+          .limit(1)
+          .maybeSingle(),
+      ]);
 
-      if (error || !data) {
-        setMessage(t.loadError);
-        return;
-      }
-
-      setPetDetails(data as PetDetails);
-
-      await loadVisits(selectedPetId);
-      setStarted(true);
-    } catch (error) {
-      console.error("START EXAMINATION ERROR:", error);
-      setMessage(error instanceof Error ? error.message : t.loadError);
-    } finally {
-      setLoadingDetails(false);
+    if (clientsResult.error) {
+      setMessage(clientsResult.error.message);
+    } else {
+      setClients((clientsResult.data || []) as Client[]);
     }
+
+    if (productsResult.error) {
+      setMessage(productsResult.error.message);
+    } else {
+      setProducts((productsResult.data || []) as unknown as Product[]);
+    }
+
+    if (settingsResult.data?.consultation_fee != null) {
+      setConsultationFee(Number(settingsResult.data.consultation_fee));
+    }
+
+    setLoading(false);
   }
 
-  async function loadMedications() {
-    try {
-      const db = await getClinicDb();
-      const { data, error } = await db
-        .from("medications")
-        .select(`
-          id, name, active_ingredient, species, concentration, concentration_unit,
-          dose_type, dose_value, dose_min, dose_max, dose_unit, route, frequency,
-          duration_days, instructions
-        `)
-        .eq("active", true)
-        .order("name");
-      if (error) throw error;
-      setMedications((data || []) as Medication[]);
-    } catch (error) {
-      console.error("LOAD MEDICATIONS ERROR:", error);
-    }
-  }
+  useEffect(() => {
+    if (ready) loadPage();
+  }, [ready]);
 
-  const filteredMedications = useMemo(() => {
-    const species = (petDetails?.species || "").toLowerCase();
-    const q = medicationSearch.trim().toLowerCase();
-    return medications.filter((med) => {
-      const speciesOk = !med.species?.length || med.species.some((x) => String(x).toLowerCase() === species);
-      const searchOk = !q || med.name.toLowerCase().includes(q) || (med.active_ingredient || "").toLowerCase().includes(q);
-      return speciesOk && searchOk;
-    });
-  }, [medications, medicationSearch, petDetails?.species]);
-
-  function calculateMedicationDraft(med: Medication): MedicationDraft | null {
-    const w = Number(weight);
-    if (!Number.isFinite(w) || w <= 0 || med.dose_value == null) return null;
-
-    const doseType = (med.dose_type || "mg_kg").toLowerCase();
-    let dose = Number(med.dose_value);
-    let unit = med.dose_unit || "mg";
-    let dosePerKg: number | null = null;
-
-    if (doseType === "mg_kg" || doseType === "mg/kg") {
-      dosePerKg = dose;
-      dose = dose * w;
-      unit = med.dose_unit || "mg";
-    } else if (doseType === "ml_kg" || doseType === "ml/kg") {
-      dosePerKg = dose;
-      dose = dose * w;
-      unit = med.dose_unit || "mL";
-    }
-
-    let volume: number | null = null;
-    let volumeUnit: string | null = null;
-    const concentration = med.concentration != null ? Number(med.concentration) : null;
-    const concentrationUnit = med.concentration_unit || null;
-    if (concentration && concentration > 0 && /mg/i.test(unit) && /mg\s*\/?\s*ml|mg\/ml/i.test(concentrationUnit || "")) {
-      volume = dose / concentration;
-      volumeUnit = "mL";
-    } else if (concentration && concentration > 0 && /mcg/i.test(unit) && /mg\s*\/?\s*ml|mg\/ml/i.test(concentrationUnit || "")) {
-      volume = (dose / 1000) / concentration;
-      volumeUnit = "mL";
-    }
-
-    return {
-      id: crypto.randomUUID(),
-      medication_id: med.id,
-      weight_kg: w,
-      calculated_dose: Number(dose.toFixed(3)),
-      calculated_dose_unit: unit,
-      dose_per_kg: dosePerKg,
-      concentration,
-      concentration_unit: concentrationUnit,
-      calculated_volume: volume == null ? null : Number(volume.toFixed(3)),
-      volume_unit: volumeUnit,
-      route: med.route,
-      frequency: med.frequency,
-      duration_days: med.duration_days,
-      instructions: med.instructions,
-    };
-  }
-
-  function addMedication() {
-    const med = medications.find((item) => item.id === selectedMedicationId);
-    if (!med) return;
-    const draft = calculateMedicationDraft(med);
-    if (!draft) {
-      setMessage(language === "ar" ? "أدخل وزن الحيوان أولًا وتأكد أن الدواء له جرعة مسجلة." : "Enter the pet weight and make sure the medication has a configured dose.");
+  useEffect(() => {
+    if (!clientId) {
+      setPets([]);
+      setPetId("");
       return;
     }
-    setMedicationDrafts((current) => [...current, draft]);
-    setSelectedMedicationId("");
+
+    async function loadPets() {
+      const db = await getClinicDb();
+      const context = await getClinicContext();
+
+      const { data, error } = await db
+        .from("pets")
+        .select("id, client_id, name, species")
+        .eq("clinic_id", context.clinic_id)
+        .eq("client_id", clientId)
+        .eq("is_deceased", false)
+        .order("name");
+
+      if (!error) {
+        setPets((data || []) as Pet[]);
+        if (requestedPetId && (data || []).some((pet) => pet.id === requestedPetId)) {
+          setPetId(requestedPetId);
+        }
+      }
+    }
+
+    loadPets();
+  }, [clientId]);
+
+  const selectedClient = clients.find((client) => client.id === clientId);
+
+  const filteredProducts = useMemo(() => {
+    const query = productSearch.trim().toLowerCase();
+    if (!query) return products.slice(0, 12);
+
+    return products
+      .filter(
+        (product) =>
+          product.name.toLowerCase().includes(query) ||
+          (product.barcode || "").toLowerCase().includes(query)
+      )
+      .slice(0, 12);
+  }, [products, productSearch]);
+
+  const subtotal = useMemo(
+    () =>
+      lines.reduce(
+        (sum, line) =>
+          sum +
+          Math.max(
+            0,
+            Number(line.quantity) * Number(line.unit_price) -
+              Number(line.discount)
+          ),
+        0
+      ),
+    [lines]
+  );
+
+  const invoiceDiscount = Math.max(0, Number(discount) || 0);
+  const total = Math.max(0, subtotal - invoiceDiscount);
+  const paid = Math.max(0, Number(paidAmount) || 0);
+  const remaining = Math.max(0, total - paid);
+
+  function addProduct(product: Product) {
+    setMessage("");
+    setSuccess("");
+
+    if (Number(product.quantity) <= 0) {
+      setMessage(
+        language === "ar"
+          ? "المنتج ده رصيده الحالي صفر."
+          : "This product is currently out of stock."
+      );
+      return;
+    }
+
+    const existing = lines.find(
+      (line) =>
+        line.item_type === "product" && line.product_id === product.id
+    );
+
+    if (existing) {
+      setLines((current) =>
+        current.map((line) =>
+          line.key === existing.key
+            ? {
+                ...line,
+                quantity: Math.min(
+                  Number(product.quantity),
+                  Number(line.quantity) + 1
+                ),
+                available_quantity: Number(product.quantity),
+              }
+            : line
+        )
+      );
+    } else {
+      setLines((current) => [
+        ...current,
+        {
+          key: crypto.randomUUID(),
+          item_type: "product",
+          product_id: product.id,
+          service_name: "",
+          description: product.name,
+          quantity: 1,
+          unit_price: Number(product.retail_price) || 0,
+          discount: 0,
+          available_quantity: Number(product.quantity),
+        },
+      ]);
+    }
+
+    setProductSearch("");
   }
 
-  function removeMedication(id: string) {
-    setMedicationDrafts((current) => current.filter((item) => item.id !== id));
-  }
+  function addService() {
+    const name = serviceName.trim();
+    const price = Number(servicePrice);
 
-  function addVaccination() {
-    setVaccinations((current) => [
+    if (!name) {
+      setMessage(language === "ar" ? "اكتب اسم الخدمة." : "Enter the service name.");
+      return;
+    }
+
+    if (price < 0 || Number.isNaN(price)) {
+      setMessage(language === "ar" ? "اكتب سعرًا صحيحًا." : "Enter a valid price.");
+      return;
+    }
+
+    setLines((current) => [
       ...current,
       {
-        id: crypto.randomUUID(),
-        vaccine_name: "",
-        vaccine_type: "",
-        administered_at: new Date().toISOString().slice(0, 16),
-        next_dose_at: "",
-        dose: "",
-        route: "",
-        batch_number: "",
-        manufacturer: "",
-        notes: "",
+        key: crypto.randomUUID(),
+        item_type: "service",
+        product_id: null,
+        service_name: name,
+        description: name,
+        quantity: 1,
+        unit_price: price,
+        discount: 0,
+        available_quantity: null,
+      },
+    ]);
+
+    setServiceName("");
+    setServicePrice("");
+  }
+
+  function addConsultation() {
+    const alreadyAdded = lines.some(
+      (line) =>
+        line.item_type === "service" &&
+        line.service_name.trim().toLowerCase() === "consultation"
+    );
+
+    if (alreadyAdded) {
+      setMessage(
+        language === "ar"
+          ? "رسوم الكشف مضافة بالفعل."
+          : "Consultation fee is already added."
+      );
+      return;
+    }
+
+    setLines((current) => [
+      ...current,
+      {
+        key: crypto.randomUUID(),
+        item_type: "service",
+        product_id: null,
+        service_name: "Consultation",
+        description:
+          language === "ar" ? "كشف / استشارة بيطرية" : "Veterinary consultation",
+        quantity: 1,
+        unit_price: consultationFee,
+        discount: 0,
+        available_quantity: null,
       },
     ]);
   }
 
-  function updateVaccination(id: string, patch: Partial<VaccinationDraft>) {
-    setVaccinations((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
-  }
+  async function findProductByBarcode(barcode: string) {
+    const clean = barcode.trim();
+    if (!clean) return;
 
-  function removeVaccination(id: string) {
-    setVaccinations((current) => current.filter((item) => item.id !== id));
-  }
-
-  function buildPrescriptionText() {
-    const lines = medicationDrafts.map((draft) => {
-      const med = medications.find((item) => item.id === draft.medication_id);
-      const name = med?.name || "Medication";
-      const dose = `${draft.calculated_dose} ${draft.calculated_dose_unit}`;
-      const volume = draft.calculated_volume != null ? ` (${draft.calculated_volume} ${draft.volume_unit})` : "";
-      const route = draft.route ? ` • ${draft.route}` : "";
-      const frequency = draft.frequency ? ` • ${draft.frequency}` : "";
-      const duration = draft.duration_days ? ` • ${draft.duration_days} days` : "";
-      return `• ${name}: ${dose}${volume}${route}${frequency}${duration}`;
-    });
-    const vaccineLines = vaccinations.filter((v) => v.vaccine_name.trim()).map((v) => `• Vaccine: ${v.vaccine_name}${v.next_dose_at ? ` — next dose ${v.next_dose_at}` : ""}`);
-    const parts = [
-      `VETRA — ${petDetails?.name || "Pet"}`,
-      diagnosis.trim() ? `Diagnosis: ${diagnosis.trim()}` : "",
-      lines.length ? `Treatment:\n${lines.join("\n")}` : treatment.trim() ? `Treatment:\n${treatment.trim()}` : "",
-      vaccineLines.length ? `Vaccination:\n${vaccineLines.join("\n")}` : "",
-      visitNotes.trim() ? `Notes:\n${visitNotes.trim()}` : "",
-    ].filter(Boolean);
-    return parts.join("\n\n");
-  }
-
-  function openWhatsAppPrescription() {
-    const phone = petDetails?.client?.phone || "";
-    const digits = phone.replace(/\D/g, "");
-    if (!digits) return false;
-    const normalized = digits.startsWith("0") ? `20${digits.slice(1)}` : digits;
-    const url = `https://wa.me/${normalized}?text=${encodeURIComponent(buildPrescriptionText())}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-    return true;
-  }
-
-  async function saveVisit() {
+    setShowScanner(false);
+    setProductSearch(clean);
     setMessage("");
+    setSuccess("");
 
-    if (!selectedPetId || !selectedClientId) {
-      setMessage(t.requiredFields);
+    const localProduct = products.find(
+      (product) => product.barcode?.trim() === clean
+    );
+
+    if (localProduct) {
+      addProduct(localProduct);
       return;
     }
 
-    if (petDetails?.is_deceased) {
-      setMessage(t.deceasedPet);
+    const db = await getClinicDb();
+    const context = await getClinicContext();
+
+    const { data, error } = await db
+      .from("products")
+      .select(`
+        id,
+        name,
+        barcode,
+        unit,
+        quantity,
+        retail_price,
+        category:product_categories(name)
+      `)
+      .eq("clinic_id", context.clinic_id)
+      .eq("barcode", clean)
+      .maybeSingle();
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    if (!data) {
+      setMessage(
+        language === "ar"
+          ? `الباركود ${clean} مش موجود في المخزون.`
+          : `Barcode ${clean} was not found in inventory.`
+      );
+      return;
+    }
+
+    const product = data as unknown as Product;
+    setProducts((current) => {
+      const exists = current.some((item) => item.id === product.id);
+      return exists ? current : [...current, product];
+    });
+    addProduct(product);
+  }
+
+  function updateLine(key: string, patch: Partial<InvoiceLine>) {
+    setLines((current) =>
+      current.map((line) =>
+        line.key === key ? { ...line, ...patch } : line
+      )
+    );
+  }
+
+  function removeLine(key: string) {
+    setLines((current) => current.filter((line) => line.key !== key));
+  }
+
+  async function saveInvoice(issueAfterSave = false) {
+    setMessage("");
+    setSuccess("");
+
+    if (!clientId) {
+      setMessage(language === "ar" ? "اختار العميل أولًا." : "Select a client first.");
+      return;
+    }
+
+    if (!lines.length) {
+      setMessage(
+        language === "ar"
+          ? "أضف منتج أو خدمة واحدة على الأقل."
+          : "Add at least one product or service."
+      );
+      return;
+    }
+
+    for (const line of lines) {
+      if (line.quantity <= 0) {
+        setMessage(
+          language === "ar"
+            ? "الكمية لازم تكون أكبر من صفر."
+            : "Quantity must be greater than zero."
+        );
+        return;
+      }
+
+      if (
+        line.item_type === "product" &&
+        line.available_quantity != null &&
+        line.quantity > line.available_quantity
+      ) {
+        setMessage(
+          language === "ar"
+            ? `الكمية المطلوبة من ${line.description} أكبر من الرصيد الحالي.`
+            : `Requested quantity for ${line.description} exceeds current stock.`
+        );
+        return;
+      }
+    }
+
+    if (paid > total) {
+      setMessage(
+        language === "ar"
+          ? "المبلغ المدفوع لا يمكن أن يكون أكبر من الإجمالي."
+          : "Paid amount cannot exceed the invoice total."
+      );
       return;
     }
 
     setSaving(true);
 
-    try {
-      const db = await getClinicDb();
-      const clinicContext = await getClinicContext();
-      const { data: currentPet, error: currentPetError } = await db
-        .from("pets")
-        .select("is_deceased")
-        .eq("id", selectedPetId)
-        .single();
+    const {
+      data: { user },
+    } = await vetraCore.auth.getUser();
 
-      if (currentPetError || !currentPet) throw currentPetError || new Error(t.loadError);
-      if (currentPet.is_deceased) {
-        setMessage(t.deceasedPet);
-        setStarted(false);
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+
+    const context = await getClinicContext();
+    const db = await getClinicDb();
+
+    if (!["owner", "admin"].includes(context.role)) {
+      setAuthorized(false);
+      setSaving(false);
+      return;
+    }
+
+    const { data: invoice, error: invoiceError } = await db
+      .from("invoices")
+      .insert({
+        clinic_id: context.clinic_id,
+        client_id: clientId,
+        pet_id: petId || null,
+        visit_id: visitId || null,
+        status: "draft",
+        payment_method: paymentMethod || null,
+        subtotal,
+        discount: invoiceDiscount,
+        total,
+        paid_amount: paid,
+        notes: notes.trim() || null,
+        issued_at: issueAfterSave ? new Date().toISOString() : null,
+        paid_at:
+          issueAfterSave && paid >= total && total > 0
+            ? new Date().toISOString()
+            : null,
+        created_by: user.id,
+        updated_by: user.id,
+      })
+      .select("id")
+      .single();
+
+    if (invoiceError || !invoice) {
+      setMessage(invoiceError?.message || "Could not create invoice.");
+      setSaving(false);
+      return;
+    }
+
+    const itemRows = lines.map((line) => ({
+      invoice_id: invoice.id,
+      item_type: line.item_type,
+      product_id: line.product_id,
+      service_name:
+        line.item_type === "service" ? line.service_name.trim() : null,
+      description: line.description.trim() || null,
+      quantity: Number(line.quantity),
+      unit_price: Number(line.unit_price),
+      discount: Number(line.discount) || 0,
+      total: Math.max(
+        0,
+        Number(line.quantity) * Number(line.unit_price) -
+          Number(line.discount || 0)
+      ),
+    }));
+
+    const tenantItemRows = itemRows.map((row) => ({
+      ...row,
+      clinic_id: context.clinic_id,
+    }));
+
+    const { error: itemsError } = await db
+      .from("invoice_items")
+      .insert(tenantItemRows);
+
+    if (itemsError) {
+      await db.from("invoices").delete().eq("id", invoice.id).eq("clinic_id", context.clinic_id);
+      setMessage(itemsError.message);
+      setSaving(false);
+      return;
+    }
+
+    if (issueAfterSave) {
+      const { error: issueError } = await db.rpc("issue_invoice", {
+        p_invoice_id: invoice.id,
+      });
+
+      if (issueError) {
+        setMessage(
+          issueError.message ||
+            (language === "ar"
+              ? "تعذر إصدار الفاتورة."
+              : "Could not issue invoice.")
+        );
+        setSaving(false);
         return;
       }
-
-      const medicationText = medicationDrafts.map((draft) => {
-        const med = medications.find((item) => item.id === draft.medication_id);
-        const dose = `${draft.calculated_dose} ${draft.calculated_dose_unit}`;
-        const volume = draft.calculated_volume != null ? ` (${draft.calculated_volume} ${draft.volume_unit})` : "";
-        return `${med?.name || "Medication"}: ${dose}${volume}${draft.route ? `, ${draft.route}` : ""}${draft.frequency ? `, ${draft.frequency}` : ""}${draft.duration_days ? ` for ${draft.duration_days} days` : ""}`;
-      }).join("\n");
-      const finalTreatment = [treatment.trim(), medicationText].filter(Boolean).join("\n\n");
-
-      const { data: visit, error: visitError } = await db
-        .from("visits")
-        .insert({
-          client_id: selectedClientId,
-          pet_id: selectedPetId,
-          reason: reason.trim() || null,
-          examination: examination.trim() || null,
-          diagnosis: diagnosis.trim() || null,
-          treatment: finalTreatment || null,
-          weight: weight ? Number(weight) : null,
-          temperature: temperature ? Number(temperature) : null,
-          heart_rate: heartRate ? Number(heartRate) : null,
-          respiratory_rate: respiratoryRate ? Number(respiratoryRate) : null,
-          notes: visitNotes.trim() || null,
-        })
-        .select("id")
-        .single();
-
-      if (visitError || !visit) throw visitError || new Error(t.saveError);
-
-      if (medicationDrafts.length) {
-        const medicationRows = medicationDrafts.map((draft) => ({
-          clinic_id: clinicContext.clinic_id,
-          visit_id: visit.id,
-          medication_id: draft.medication_id,
-          weight_kg: draft.weight_kg,
-          calculated_dose: draft.calculated_dose,
-          calculated_dose_unit: draft.calculated_dose_unit,
-          dose_per_kg: draft.dose_per_kg,
-          concentration: draft.concentration,
-          concentration_unit: draft.concentration_unit,
-          calculated_volume: draft.calculated_volume,
-          volume_unit: draft.volume_unit,
-          route: draft.route,
-          frequency: draft.frequency,
-          duration_days: draft.duration_days,
-          instructions: draft.instructions,
-        }));
-        const { error: medError } = await db.from("visit_medications").insert(medicationRows);
-        if (medError) throw medError;
-      }
-
-      const validVaccinations = vaccinations.filter((v) => v.vaccine_name.trim());
-      if (validVaccinations.length) {
-        const vaccineRows = validVaccinations.map((v) => ({
-          clinic_id: clinicContext.clinic_id,
-          visit_id: visit.id,
-          pet_id: selectedPetId,
-          client_id: selectedClientId,
-          vaccine_name: v.vaccine_name.trim(),
-          vaccine_type: v.vaccine_type.trim() || null,
-          administered_at: v.administered_at ? new Date(v.administered_at).toISOString() : new Date().toISOString(),
-          next_dose_at: v.next_dose_at ? new Date(v.next_dose_at).toISOString() : null,
-          dose: v.dose.trim() || null,
-          route: v.route.trim() || null,
-          batch_number: v.batch_number.trim() || null,
-          manufacturer: v.manufacturer.trim() || null,
-          notes: v.notes.trim() || null,
-        }));
-        const { error: vaccineError } = await db.from("vaccinations").insert(vaccineRows);
-        if (vaccineError) throw vaccineError;
-      }
-
-      if (whatsappEnabled && petDetails?.client?.phone) {
-        openWhatsAppPrescription();
-      }
-
-      setMessage(t.visitSaved);
-
-      setReason("");
-      setExamination("");
-      setDiagnosis("");
-      setTreatment("");
-      setVisitNotes("");
-      setWeight("");
-      setTemperature("");
-      setHeartRate("");
-      setRespiratoryRate("");
-      setMedicationDrafts([]);
-      setVaccinations([]);
-
-      await loadVisits(selectedPetId);
-
-      router.push(
-        `/invoices/new?client=${encodeURIComponent(selectedClientId)}&pet=${encodeURIComponent(selectedPetId)}&visit=${encodeURIComponent(visit.id)}`
-      );
-    } catch (error) {
-      console.error("SAVE VISIT ERROR:", error);
-      setMessage(error instanceof Error ? error.message : t.saveError);
-    } finally {
-      setSaving(false);
     }
+
+    setSuccess(
+      language === "ar"
+        ? issueAfterSave
+          ? "تم إصدار الفاتورة بنجاح."
+          : "تم حفظ الفاتورة كمسودة."
+        : issueAfterSave
+          ? "Invoice issued successfully."
+          : "Invoice saved as draft."
+    );
+
+    setSaving(false);
+
+    setTimeout(() => {
+      router.push(`/invoices/${invoice.id}`);
+    }, 400);
   }
 
-  function resetSelection() {
-    setStarted(false);
-    setPetDetails(null);
-    setVisits([]);
-    setSelectedPetId("");
-    setMessage("");
+  if (!ready || loading) {
+    return (
+      <main
+        className={`flex min-h-screen items-center justify-center ${
+          darkMode ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"
+        }`}
+      >
+        <div className="text-center">
+          <div className="mb-3 text-4xl">🧾</div>
+          <p className="text-sm text-slate-500">Loading...</p>
+        </div>
+      </main>
+    );
   }
 
-  const filteredClients = useMemo(() => {
-    const query = clientSearch.trim().toLowerCase();
-
-    if (!query) return clients;
-
-    return clients.filter(
-      (client) =>
-        client.name?.toLowerCase().includes(query) ||
-        client.phone?.toLowerCase().includes(query) ||
-        client.email?.toLowerCase().includes(query)
+  if (authorized === false) {
+    return (
+      <main
+        dir={language === "ar" ? "rtl" : "ltr"}
+        className={`flex min-h-screen items-center justify-center px-6 ${
+          darkMode ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"
+        }`}
+      >
+        <div
+          className={`w-full max-w-md rounded-3xl border p-8 text-center ${
+            darkMode
+              ? "border-white/[0.06] bg-[#13161B]"
+              : "border-slate-100 bg-white"
+          }`}
+        >
+          <div className="mb-4 text-5xl">🔒</div>
+          <h1 className="text-2xl font-bold">
+            {language === "ar" ? "غير مصرح بالدخول" : "Access restricted"}
+          </h1>
+          <p className="mt-3 text-sm text-slate-500">
+            {language === "ar"
+              ? "إنشاء الفواتير متاح للـ Owner و Admin فقط."
+              : "Invoice creation is available to Owner and Admin users only."}
+          </p>
+          <button
+            onClick={() => router.push("/")}
+            className="mt-6 rounded-2xl bg-blue-600 px-6 py-3 font-semibold text-white"
+          >
+            {language === "ar" ? "العودة للرئيسية" : "Back to dashboard"}
+          </button>
+        </div>
+      </main>
     );
-  }, [clients, clientSearch]);
-
-  const filteredPets = useMemo(() => {
-    const query = petSearch.trim().toLowerCase();
-
-    if (!query) return pets;
-
-    return pets.filter(
-      (pet) =>
-        pet.name?.toLowerCase().includes(query) ||
-        pet.species?.toLowerCase().includes(query) ||
-        pet.breed?.toLowerCase().includes(query) ||
-        pet.microchip?.toLowerCase().includes(query)
-    );
-  }, [pets, petSearch]);
-
-  const latestVisit = visits[0] || null;
-
-  const vitalData = useMemo(
-    () => ({
-      weight: visits
-        .filter((visit) => visit.weight !== null)
-        .map((visit) => ({
-          value: Number(visit.weight),
-          visit,
-        })),
-
-      temperature: visits
-        .filter((visit) => visit.temperature !== null)
-        .map((visit) => ({
-          value: Number(visit.temperature),
-          visit,
-        })),
-
-      heartRate: visits
-        .filter((visit) => visit.heart_rate !== null)
-        .map((visit) => ({
-          value: Number(visit.heart_rate),
-          visit,
-        })),
-
-      respiratoryRate: visits
-        .filter((visit) => visit.respiratory_rate !== null)
-        .map((visit) => ({
-          value: Number(visit.respiratory_rate),
-          visit,
-        })),
-    }),
-    [visits]
-  );
-
-  const latestWeight = vitalData.weight[0]?.value ?? null;
-  const previousWeight = vitalData.weight[1]?.value ?? null;
-
-  const latestTemperature =
-    vitalData.temperature[0]?.value ?? null;
-
-  const previousTemperature =
-    vitalData.temperature[1]?.value ?? null;
-
-  const latestHeartRate =
-    vitalData.heartRate[0]?.value ?? null;
-
-  const previousHeartRate =
-    vitalData.heartRate[1]?.value ?? null;
-
-  const latestRespiratoryRate =
-    vitalData.respiratoryRate[0]?.value ?? null;
-
-  const previousRespiratoryRate =
-    vitalData.respiratoryRate[1]?.value ?? null;
-
-  const pageClasses = darkMode
-    ? "min-h-screen bg-slate-950 text-slate-100"
-    : "min-h-screen bg-slate-50 text-slate-900";
+  }
 
   return (
     <main
       dir={language === "ar" ? "rtl" : "ltr"}
-      className={pageClasses}
+      className={`min-h-screen ${
+        darkMode ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"
+      }`}
     >
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* HEADER */}
-        <header
-          className={`mb-8 flex flex-col gap-4 rounded-3xl border p-5 shadow-sm transition-colors duration-300 sm:flex-row sm:items-center sm:justify-between ${
-            darkMode
-              ? "border-slate-800 bg-slate-900"
-              : "border-slate-200 bg-white"
-          }`}
-        >
+      <div className="mx-auto max-w-[1500px] px-5 py-6 sm:px-8 lg:px-10">
+        <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-xl text-white shadow-lg shadow-blue-600/20">
-                🩺
-              </div>
-
-              <div>
-                <h1
-                  className={`text-2xl font-bold tracking-tight ${
-                    darkMode ? "text-white" : "text-slate-900"
-                  }`}
-                >
-                  {t.title}
-                </h1>
-
-                <p
-                  className={`text-sm ${
-                    darkMode ? "text-slate-400" : "text-slate-500"
-                  }`}
-                >
-                  {t.subtitle}
-                </p>
-              </div>
-            </div>
+            <button
+              onClick={() => router.push("/invoices")}
+              className="mb-3 text-sm text-slate-500 hover:text-blue-600"
+            >
+              ← {language === "ar" ? "الفواتير" : "Invoices"}
+            </button>
+            <h1 className="text-3xl font-black">
+              {language === "ar" ? "فاتورة جديدة" : "New Invoice"}
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              {language === "ar"
+                ? "منتجات + خدمات في فاتورة واحدة"
+                : "Products + services in one invoice"}
+            </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                darkMode
-                  ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              🏠 {t.dashboard}
-            </Link>
-
+          <div className="flex gap-3">
             <button
-              type="button"
-              onClick={() =>
-                setLanguage(language === "en" ? "ar" : "en")
-              }
-              className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+              onClick={() => setDarkMode((v) => !v)}
+              className={`rounded-2xl border px-4 py-3 ${
                 darkMode
-                  ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              🌐 {t.language}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setDarkMode(!darkMode)}
-              aria-label={darkMode ? t.light : t.dark}
-              className={`flex h-11 w-11 items-center justify-center rounded-xl border text-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                darkMode
-                  ? "border-slate-700 bg-slate-800 hover:bg-slate-700"
-                  : "border-slate-200 bg-white hover:bg-slate-50"
+                  ? "border-white/10 bg-[#171A20]"
+                  : "border-slate-200 bg-white"
               }`}
             >
               {darkMode ? "☀️" : "🌙"}
             </button>
+            <button
+              onClick={() => setLanguage((v) => (v === "ar" ? "en" : "ar"))}
+              className={`rounded-2xl border px-4 py-3 text-sm font-semibold ${
+                darkMode
+                  ? "border-white/10 bg-[#171A20]"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              {language === "ar" ? "English" : "عربي"}
+            </button>
           </div>
         </header>
 
-        {/* MESSAGE */}
-        {message && (
+        {(message || success) && (
           <div
-            className={`mb-6 rounded-2xl border px-4 py-3 text-sm font-medium transition-all duration-300 ${
-              message.includes("success") || message.includes("تم")
-                ? darkMode
-                  ? "border-emerald-900 bg-emerald-950/50 text-emerald-300"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : darkMode
-                ? "border-rose-900 bg-rose-950/50 text-rose-300"
-                : "border-rose-200 bg-rose-50 text-rose-700"
+            className={`mb-5 rounded-2xl border px-4 py-3 text-sm ${
+              message
+                ? "border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
             }`}
           >
-            {message}
+            {message || success}
           </div>
         )}
 
-        {/* SELECTION */}
-        {!started && (
-          <section className="grid gap-6 lg:grid-cols-2">
-            {/* CLIENT */}
-            <div
-              className={`rounded-3xl border p-6 shadow-sm transition-all duration-300 ${
-                darkMode
-                  ? "border-slate-800 bg-slate-900"
-                  : "border-slate-200 bg-white"
-              }`}
-            >
-              <div className="mb-5 flex items-start justify-between gap-4">
-                <div>
-                  <h2
-                    className={`text-lg font-bold ${
-                      darkMode ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    👤 {t.selectClient}
-                  </h2>
-
-                  <p
-                    className={`mt-1 text-sm ${
-                      darkMode ? "text-slate-400" : "text-slate-500"
-                    }`}
-                  >
-                    {t.selectClientHint}
-                  </p>
-                </div>
-
-                <Link
-                  href="/clients/new"
-                  className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg"
-                >
-                  + {t.addClient}
-                </Link>
-              </div>
-
-              <input
-                value={clientSearch}
-                onChange={(e) => setClientSearch(e.target.value)}
-                placeholder={t.searchClient}
-                className={`mb-4 w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                  darkMode
-                    ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                    : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                }`}
-              />
-
-              <div className="max-h-80 space-y-2 overflow-y-auto">
-                {loadingClients ? (
-                  <div
-                    className={`rounded-xl p-4 text-center text-sm ${
-                      darkMode
-                        ? "bg-slate-800 text-slate-400"
-                        : "bg-slate-50 text-slate-500"
-                    }`}
-                  >
-                    Loading...
-                  </div>
-                ) : filteredClients.length === 0 ? (
-                  <div
-                    className={`rounded-xl p-4 text-center text-sm ${
-                      darkMode
-                        ? "bg-slate-800 text-slate-400"
-                        : "bg-slate-50 text-slate-500"
-                    }`}
-                  >
-                    {t.noClients}
-                  </div>
-                ) : (
-                  filteredClients.map((client) => {
-                    const active =
-                      selectedClientId === client.id;
-
-                    return (
-                      <button
-                        key={client.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedClientId(client.id);
-                          setSelectedPetId("");
-                          setPetSearch("");
-                        }}
-                        className={`w-full rounded-2xl border p-4 text-start transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                          active
-                            ? "border-blue-500 bg-blue-50 shadow-md dark:border-blue-500 dark:bg-blue-950/40"
-                            : darkMode
-                            ? "border-slate-800 bg-slate-950 hover:border-slate-700"
-                            : "border-slate-200 bg-white hover:border-slate-300"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div
-                              className={`font-semibold ${
-                                darkMode
-                                  ? "text-white"
-                                  : "text-slate-900"
-                              }`}
-                            >
-                              {client.name}
-                            </div>
-
-                            {client.phone && (
-                              <div
-                                className={`mt-1 text-xs ${
-                                  darkMode
-                                    ? "text-slate-500"
-                                    : "text-slate-500"
-                                }`}
-                              >
-                                {client.phone}
-                              </div>
-                            )}
-                          </div>
-
-                          {active && (
-                            <span className="rounded-full bg-blue-600 px-2.5 py-1 text-[10px] font-bold text-white">
-                              ✓
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            {/* PET */}
-            <div
-              className={`rounded-3xl border p-6 shadow-sm transition-all duration-300 ${
-                darkMode
-                  ? "border-slate-800 bg-slate-900"
-                  : "border-slate-200 bg-white"
-              }`}
-            >
-              <div className="mb-5 flex items-start justify-between gap-4">
-                <div>
-                  <h2
-                    className={`text-lg font-bold ${
-                      darkMode ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    🐾 {t.selectPet}
-                  </h2>
-
-                  <p
-                    className={`mt-1 text-sm ${
-                      darkMode ? "text-slate-400" : "text-slate-500"
-                    }`}
-                  >
-                    {t.selectPetHint}
-                  </p>
-                </div>
-
-                <Link
-                  href={
-                    selectedClientId
-                      ? `/clients/${selectedClientId}`
-                      : "/clients"
-                  }
-                  className={`rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                    darkMode
-                      ? "bg-slate-800 text-slate-200 hover:bg-slate-700"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  + {t.addPet}
-                </Link>
-              </div>
-
-              <input
-                value={petSearch}
-                onChange={(e) => setPetSearch(e.target.value)}
-                disabled={!selectedClientId}
-                placeholder={t.searchPet}
-                className={`mb-4 w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50 ${
-                  darkMode
-                    ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                    : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                }`}
-              />
-
-              <div className="max-h-80 space-y-2 overflow-y-auto">
-                {!selectedClientId ? (
-                  <div
-                    className={`rounded-xl p-5 text-center text-sm ${
-                      darkMode
-                        ? "bg-slate-800 text-slate-500"
-                        : "bg-slate-50 text-slate-400"
-                    }`}
-                  >
-                    {t.selectClientHint}
-                  </div>
-                ) : loadingPets ? (
-                  <div
-                    className={`rounded-xl p-4 text-center text-sm ${
-                      darkMode
-                        ? "bg-slate-800 text-slate-400"
-                        : "bg-slate-50 text-slate-500"
-                    }`}
-                  >
-                    Loading...
-                  </div>
-                ) : filteredPets.length === 0 ? (
-                  <div
-                    className={`rounded-xl p-4 text-center text-sm ${
-                      darkMode
-                        ? "bg-slate-800 text-slate-400"
-                        : "bg-slate-50 text-slate-500"
-                    }`}
-                  >
-                    {t.noPets}
-                  </div>
-                ) : (
-                  filteredPets.map((pet) => {
-                    const active = selectedPetId === pet.id;
-
-                    return (
-                      <button
-                        key={pet.id}
-                        type="button"
-                        onClick={() => setSelectedPetId(pet.id)}
-                        className={`w-full rounded-2xl border p-4 text-start transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                          active
-                            ? "border-emerald-500 bg-emerald-50 shadow-md dark:border-emerald-500 dark:bg-emerald-950/40"
-                            : darkMode
-                            ? "border-slate-800 bg-slate-950 hover:border-slate-700"
-                            : "border-slate-200 bg-white hover:border-slate-300"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-xl">
-                              {pet.species?.toLowerCase() === "cat"
-                                ? "🐱"
-                                : pet.species?.toLowerCase() ===
-                                  "dog"
-                                ? "🐶"
-                                : "🐾"}
-                            </div>
-
-                            <div>
-                              <div
-                                className={`font-semibold ${
-                                  darkMode
-                                    ? "text-white"
-                                    : "text-slate-900"
-                                }`}
-                              >
-                                {pet.name}
-                              </div>
-
-                              <div
-                                className={`mt-1 text-xs ${
-                                  darkMode
-                                    ? "text-slate-500"
-                                    : "text-slate-500"
-                                }`}
-                              >
-                                {speciesLabel(pet.species, t)}
-                                {pet.breed
-                                  ? ` • ${pet.breed}`
-                                  : ""}
-                              </div>
-                            </div>
-                          </div>
-
-                          {active && (
-                            <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white">
-                              ✓
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* START BUTTON */}
-        {!started && (
-          <div className="mt-6 flex justify-center">
-            <button
-              type="button"
-              onClick={startExamination}
-              disabled={!selectedClientId || !selectedPetId || loadingDetails}
-              className="rounded-2xl bg-slate-900 px-8 py-4 text-sm font-bold text-white shadow-lg shadow-slate-900/20 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40 dark:bg-blue-600 dark:shadow-blue-600/20"
-            >
-              {loadingDetails
-                ? "Loading..."
-                : `🩺 ${t.startExam}`}
-            </button>
-          </div>
-        )}
-
-        {/* EXAMINATION */}
-        {started && petDetails && (
+        <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
           <div className="space-y-6">
-            {/* PATIENT HEADER */}
             <section
-              className={`overflow-hidden rounded-3xl border shadow-sm transition-all duration-300 ${
+              className={`rounded-3xl border p-5 ${
                 darkMode
-                  ? "border-slate-800 bg-slate-900"
-                  : "border-slate-200 bg-white"
+                  ? "border-white/[0.06] bg-[#13161B]"
+                  : "border-slate-100 bg-white"
               }`}
             >
-              <div className="flex flex-col gap-5 p-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-3xl text-white shadow-lg shadow-blue-500/20">
-                    {petDetails.species?.toLowerCase() === "cat"
-                      ? "🐱"
-                      : petDetails.species?.toLowerCase() ===
-                        "dog"
-                      ? "🐶"
-                      : "🐾"}
-                  </div>
+              <h2 className="mb-4 text-lg font-bold">
+                {language === "ar" ? "بيانات العميل" : "Customer"}
+              </h2>
 
-                  <div>
-                    <div
-                      className={`mb-1 text-2xl font-bold ${
-                        darkMode ? "text-white" : "text-slate-900"
-                      }`}
-                    >
-                      {petDetails.name}
-                    </div>
-
-                    <div
-                      className={`text-sm ${
-                        darkMode
-                          ? "text-slate-400"
-                          : "text-slate-500"
-                      }`}
-                    >
-                      {speciesLabel(petDetails.species, t)}
-                      {petDetails.breed
-                        ? ` • ${petDetails.breed}`
-                        : ""}
-                      {petDetails.gender
-                        ? ` • ${genderLabel(
-                            petDetails.gender,
-                            t
-                          )}`
-                        : ""}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={resetSelection}
-                  className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                    darkMode
-                      ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  ← {t.changeSelection}
-                </button>
-              </div>
-            </section>
-
-            {/* PATIENT SUMMARY */}
-            <section>
-              <div className="mb-4 flex items-center justify-between">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <h2
-                    className={`text-xl font-bold ${
-                      darkMode ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    {t.patientSummary}
-                  </h2>
-
-                  <p
-                    className={`mt-1 text-sm ${
-                      darkMode
-                        ? "text-slate-500"
-                        : "text-slate-500"
-                    }`}
-                  >
-                    {t.previousVisits}: {visits.length}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div
-                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-                    darkMode
-                      ? "border-slate-800 bg-slate-900"
-                      : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <div className="mb-3 text-xl">👤</div>
-
-                  <div
-                    className={`text-xs ${
-                      darkMode
-                        ? "text-slate-500"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    {t.owner}
-                  </div>
-
-                  <div
-                    className={`mt-1 font-semibold ${
-                      darkMode ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    {petDetails.client?.name || "—"}
-                  </div>
-
-                  {petDetails.client?.phone && (
-                    <div
-                      className={`mt-1 text-xs ${
-                        darkMode
-                          ? "text-slate-500"
-                          : "text-slate-500"
-                      }`}
-                    >
-                      {petDetails.client.phone}
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-                    darkMode
-                      ? "border-slate-800 bg-slate-900"
-                      : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <div className="mb-3 text-xl">🐾</div>
-
-                  <div
-                    className={`text-xs ${
-                      darkMode
-                        ? "text-slate-500"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    {t.breed}
-                  </div>
-
-                  <div
-                    className={`mt-1 font-semibold ${
-                      darkMode ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    {petDetails.breed || "—"}
-                  </div>
-                </div>
-
-                <div
-                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-                    darkMode
-                      ? "border-slate-800 bg-slate-900"
-                      : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <div className="mb-3 text-xl">🎂</div>
-
-                  <div
-                    className={`text-xs ${
-                      darkMode
-                        ? "text-slate-500"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    {t.birthDate}
-                  </div>
-
-                  <div
-                    className={`mt-1 font-semibold ${
-                      darkMode ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    {petDetails.birth_date
-                      ? calculateAge(
-                          petDetails.birth_date,
-                          language
-                        )
-                      : "—"}
-                  </div>
-
-                  {petDetails.birth_date && (
-                    <div
-                      className={`mt-1 text-xs ${
-                        darkMode
-                          ? "text-slate-500"
-                          : "text-slate-500"
-                      }`}
-                    >
-                      {formatDate(
-                        petDetails.birth_date,
-                        language
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-                    darkMode
-                      ? "border-slate-800 bg-slate-900"
-                      : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <div className="mb-3 text-xl">🆔</div>
-
-                  <div
-                    className={`text-xs ${
-                      darkMode
-                        ? "text-slate-500"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    {t.microchip}
-                  </div>
-
-                  <div
-                    className={`mt-1 break-all font-semibold ${
-                      darkMode ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    {petDetails.microchip || "—"}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* IMPORTANT NOTES */}
-            <section
-              className={`rounded-2xl border p-5 transition-all duration-300 ${
-                darkMode
-                  ? "border-amber-900/50 bg-amber-950/20"
-                  : "border-amber-200 bg-amber-50"
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <div className="text-xl">⚠️</div>
-
-                <div>
-                  <h3
-                    className={`font-bold ${
-                      darkMode
-                        ? "text-amber-300"
-                        : "text-amber-900"
-                    }`}
-                  >
-                    {t.importantNotes}
-                  </h3>
-
-                  <p
-                    className={`mt-1 whitespace-pre-wrap text-sm ${
-                      darkMode
-                        ? "text-amber-200/70"
-                        : "text-amber-800/80"
-                    }`}
-                  >
-                    {petDetails.notes || t.noNotes}
-                  </p>
-                </div>
-              </div>
-            </section>
-
-            {/* LAST VISIT SUMMARY */}
-            <section className="grid gap-4 lg:grid-cols-3">
-              <div
-                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-                  darkMode
-                    ? "border-slate-800 bg-slate-900"
-                    : "border-slate-200 bg-white"
-                }`}
-              >
-                <div className="mb-3 flex items-center gap-2">
-                  <span>📅</span>
-
-                  <h3
-                    className={`font-bold ${
-                      darkMode ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    {t.lastVisit}
-                  </h3>
-                </div>
-
-                <div
-                  className={`text-sm ${
-                    darkMode
-                      ? "text-slate-400"
-                      : "text-slate-600"
-                  }`}
-                >
-                  {latestVisit
-                    ? formatDate(
-                        latestVisit.visit_date,
-                        language
-                      )
-                    : t.noPreviousVisits}
-                </div>
-              </div>
-
-              <div
-                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-                  darkMode
-                    ? "border-slate-800 bg-slate-900"
-                    : "border-slate-200 bg-white"
-                }`}
-              >
-                <div className="mb-3 flex items-center gap-2">
-                  <span>🩺</span>
-
-                  <h3
-                    className={`font-bold ${
-                      darkMode ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    {t.lastDiagnosis}
-                  </h3>
-                </div>
-
-                <div
-                  className={`line-clamp-3 text-sm ${
-                    darkMode
-                      ? "text-slate-400"
-                      : "text-slate-600"
-                  }`}
-                >
-                  {latestVisit?.diagnosis ||
-                    t.noDiagnosis}
-                </div>
-              </div>
-
-              <div
-                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-                  darkMode
-                    ? "border-slate-800 bg-slate-900"
-                    : "border-slate-200 bg-white"
-                }`}
-              >
-                <div className="mb-3 flex items-center gap-2">
-                  <span>💊</span>
-
-                  <h3
-                    className={`font-bold ${
-                      darkMode ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    {t.lastTreatment}
-                  </h3>
-                </div>
-
-                <div
-                  className={`line-clamp-3 text-sm ${
-                    darkMode
-                      ? "text-slate-400"
-                      : "text-slate-600"
-                  }`}
-                >
-                  {latestVisit?.treatment ||
-                    t.noTreatment}
-                </div>
-              </div>
-            </section>
-
-            {/* VITAL GRAPHS */}
-            <section>
-              <div className="mb-4">
-                <h2
-                  className={`text-xl font-bold ${
-                    darkMode ? "text-white" : "text-slate-900"
-                  }`}
-                >
-                  📈 {t.trends}
-                </h2>
-
-                <p
-                  className={`mt-1 text-sm ${
-                    darkMode
-                      ? "text-slate-500"
-                      : "text-slate-500"
-                  }`}
-                >
-                  Click any point to open that examination.
-                </p>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <VitalCard
-                  title={t.weight}
-                  icon="⚖️"
-                  latest={latestWeight}
-                  previous={previousWeight}
-                  unit={t.kg}
-                  color="#3b82f6"
-                  values={vitalData.weight}
-                  onPointClick={setSelectedOldVisit}
-                  darkMode={darkMode}
-                />
-
-                <VitalCard
-                  title={t.temperature}
-                  icon="🌡️"
-                  latest={latestTemperature}
-                  previous={previousTemperature}
-                  unit={t.celsius}
-                  color="#f97316"
-                  values={vitalData.temperature}
-                  onPointClick={setSelectedOldVisit}
-                  darkMode={darkMode}
-                />
-
-                <VitalCard
-                  title={t.heartRate}
-                  icon="❤️"
-                  latest={latestHeartRate}
-                  previous={previousHeartRate}
-                  unit={t.bpm}
-                  color="#ef4444"
-                  values={vitalData.heartRate}
-                  onPointClick={setSelectedOldVisit}
-                  darkMode={darkMode}
-                />
-
-                <VitalCard
-                  title={t.respiratoryRate}
-                  icon="🫁"
-                  latest={latestRespiratoryRate}
-                  previous={previousRespiratoryRate}
-                  unit={t.rpm}
-                  color="#8b5cf6"
-                  values={vitalData.respiratoryRate}
-                  onPointClick={setSelectedOldVisit}
-                  darkMode={darkMode}
-                />
-              </div>
-            </section>
-
-            {/* CURRENT EXAM */}
-            <section
-              className={`rounded-3xl border p-6 shadow-sm transition-colors duration-300 ${
-                darkMode
-                  ? "border-slate-800 bg-slate-900"
-                  : "border-slate-200 bg-white"
-              }`}
-            >
-              <div className="mb-6">
-                <h2
-                  className={`text-xl font-bold ${
-                    darkMode ? "text-white" : "text-slate-900"
-                  }`}
-                >
-                  🩺 {t.examination}
-                </h2>
-              </div>
-
-              <div className="grid gap-5 lg:grid-cols-2">
-                <div className="lg:col-span-2">
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {t.reason}
+                  <label className="mb-2 block text-sm font-semibold text-slate-500">
+                    {language === "ar" ? "العميل *" : "Client *"}
                   </label>
-
-                  <input
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder={t.reasonPlaceholder}
-                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                  <select
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    className={`w-full rounded-2xl border px-4 py-3.5 outline-none focus:border-blue-500 ${
                       darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                        ? "border-white/[0.07] bg-[#0F1115]"
+                        : "border-slate-200 bg-slate-50"
                     }`}
-                  />
+                  >
+                    <option value="">
+                      {language === "ar" ? "اختار العميل" : "Select client"}
+                    </option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                        {client.phone ? ` — ${client.phone}` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
+                  <label className="mb-2 block text-sm font-semibold text-slate-500">
+                    {language === "ar" ? "الحيوان — اختياري" : "Pet — optional"}
+                  </label>
+                  <select
+                    value={petId}
+                    onChange={(e) => setPetId(e.target.value)}
+                    disabled={!clientId}
+                    className={`w-full rounded-2xl border px-4 py-3.5 outline-none focus:border-blue-500 disabled:opacity-50 ${
                       darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
+                        ? "border-white/[0.07] bg-[#0F1115]"
+                        : "border-slate-200 bg-slate-50"
                     }`}
                   >
-                    {t.weight}
-                  </label>
-
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={weight}
-                    onChange={(e) => setWeight(e.target.value)}
-                    placeholder="0.00"
-                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {t.temperature}
-                  </label>
-
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={temperature}
-                    onChange={(e) =>
-                      setTemperature(e.target.value)
-                    }
-                    placeholder="38.5"
-                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {t.heartRate}
-                  </label>
-
-                  <input
-                    type="number"
-                    value={heartRate}
-                    onChange={(e) =>
-                      setHeartRate(e.target.value)
-                    }
-                    placeholder="120"
-                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {t.respiratoryRate}
-                  </label>
-
-                  <input
-                    type="number"
-                    value={respiratoryRate}
-                    onChange={(e) =>
-                      setRespiratoryRate(e.target.value)
-                    }
-                    placeholder="30"
-                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
-                  />
-                </div>
-
-                <div className="lg:col-span-2">
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {t.examinationNotes}
-                  </label>
-
-                  <textarea
-                    rows={5}
-                    value={examination}
-                    onChange={(e) =>
-                      setExamination(e.target.value)
-                    }
-                    placeholder={t.examinationPlaceholder}
-                    className={`w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {t.diagnosis}
-                  </label>
-
-                  <textarea
-                    rows={4}
-                    value={diagnosis}
-                    onChange={(e) =>
-                      setDiagnosis(e.target.value)
-                    }
-                    placeholder={t.diagnosisPlaceholder}
-                    className={`w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
-                  />
-                </div>
-
-                <div className="lg:col-span-2">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <label className={`block text-sm font-semibold ${darkMode ? "text-slate-300" : "text-slate-700"}`}>{t.treatment}</label>
-                    <span className="rounded-full bg-blue-500/10 px-3 py-1 text-[11px] font-bold text-blue-600 dark:text-blue-300">Medication Library + dose calculator</span>
-                  </div>
-
-                  <div className={`rounded-2xl border p-4 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-slate-50"}`}>
-                    <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                      <div>
-                        <input value={medicationSearch} onChange={(e) => setMedicationSearch(e.target.value)} placeholder={language === "ar" ? "ابحث عن دواء..." : "Search medication..."} className={`mb-2 w-full rounded-xl border px-3 py-2 text-sm outline-none ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`} />
-                        <select value={selectedMedicationId} onChange={(e) => setSelectedMedicationId(e.target.value)} className={`w-full rounded-xl border px-3 py-3 text-sm outline-none ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`}>
-                          <option value="">{language === "ar" ? "اختار دواء من المكتبة" : "Select medication from library"}</option>
-                          {filteredMedications.map((med) => (
-                            <option key={med.id} value={med.id}>{med.name}{med.active_ingredient ? ` — ${med.active_ingredient}` : ""}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <button type="button" onClick={addMedication} className="self-end rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700">+ {language === "ar" ? "إضافة دواء" : "Add medication"}</button>
-                    </div>
-
-                    {medicationDrafts.length > 0 && (
-                      <div className="mt-4 space-y-2">
-                        {medicationDrafts.map((draft) => {
-                          const med = medications.find((item) => item.id === draft.medication_id);
-                          const outside = (med?.dose_min != null && draft.dose_per_kg != null && draft.dose_per_kg < Number(med.dose_min)) || (med?.dose_max != null && draft.dose_per_kg != null && draft.dose_per_kg > Number(med.dose_max));
-                          return (
-                            <div key={draft.id} className={`rounded-xl border p-3 ${darkMode ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"}`}>
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="font-bold">{med?.name || "Medication"}</div>
-                                  <div className="mt-1 text-xs text-slate-500">Dose: {draft.calculated_dose} {draft.calculated_dose_unit}{draft.calculated_volume != null ? ` • ${draft.calculated_volume} ${draft.volume_unit}` : ""} {draft.route ? ` • ${draft.route}` : ""} {draft.frequency ? ` • ${draft.frequency}` : ""} {draft.duration_days ? ` • ${draft.duration_days} days` : ""}</div>
-                                  {outside && <div className="mt-1 text-xs font-bold text-amber-600">⚠ Dose is outside the configured protocol range.</div>}
-                                </div>
-                                <button type="button" onClick={() => removeMedication(draft.id)} className="rounded-lg px-2 py-1 text-rose-500 hover:bg-rose-50">✕</button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    <textarea rows={4} value={treatment} onChange={(e) => setTreatment(e.target.value)} placeholder={t.treatmentPlaceholder} className={`mt-4 w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${darkMode ? "border-slate-700 bg-slate-900 text-white placeholder:text-slate-500" : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"}`} />
-                  </div>
-                </div>
-
-                <div className="lg:col-span-2">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <label className={`block text-sm font-semibold ${darkMode ? "text-slate-300" : "text-slate-700"}`}>{language === "ar" ? "التطعيمات" : "Vaccinations"}</label>
-                    <button type="button" onClick={addVaccination} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700">+ {language === "ar" ? "إضافة تطعيم" : "Add vaccine"}</button>
-                  </div>
-                  {vaccinations.length === 0 ? (
-                    <div className={`rounded-2xl border border-dashed p-4 text-xs text-slate-500 ${darkMode ? "border-slate-700" : "border-slate-200"}`}>{language === "ar" ? "لا يوجد تطعيم مضاف لهذه الزيارة." : "No vaccination added to this visit."}</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {vaccinations.map((v) => (
-                        <div key={v.id} className={`rounded-2xl border p-4 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-slate-50"}`}>
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <input value={v.vaccine_name} onChange={(e) => updateVaccination(v.id,{vaccine_name:e.target.value})} placeholder={language === "ar" ? "اسم التطعيم" : "Vaccine name"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <input value={v.vaccine_type} onChange={(e) => updateVaccination(v.id,{vaccine_type:e.target.value})} placeholder={language === "ar" ? "النوع" : "Type"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <input type="datetime-local" value={v.administered_at} onChange={(e) => updateVaccination(v.id,{administered_at:e.target.value})} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <input type="datetime-local" value={v.next_dose_at} onChange={(e) => updateVaccination(v.id,{next_dose_at:e.target.value})} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <input value={v.dose} onChange={(e) => updateVaccination(v.id,{dose:e.target.value})} placeholder={language === "ar" ? "الجرعة" : "Dose"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <input value={v.route} onChange={(e) => updateVaccination(v.id,{route:e.target.value})} placeholder={language === "ar" ? "طريقة الإعطاء" : "Route"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <input value={v.batch_number} onChange={(e) => updateVaccination(v.id,{batch_number:e.target.value})} placeholder={language === "ar" ? "رقم التشغيلة" : "Batch number"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <input value={v.manufacturer} onChange={(e) => updateVaccination(v.id,{manufacturer:e.target.value})} placeholder={language === "ar" ? "الشركة المصنعة" : "Manufacturer"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <textarea value={v.notes} onChange={(e) => updateVaccination(v.id,{notes:e.target.value})} placeholder={language === "ar" ? "ملاحظات التطعيم" : "Vaccination notes"} className={`md:col-span-2 rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                          </div>
-                          <button type="button" onClick={() => removeVaccination(v.id)} className="mt-3 text-xs font-bold text-rose-500">{language === "ar" ? "حذف التطعيم" : "Remove vaccine"}</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-
-                <div className="lg:col-span-2">
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {t.visitNotes}
-                  </label>
-
-                  <textarea
-                    rows={3}
-                    value={visitNotes}
-                    onChange={(e) =>
-                      setVisitNotes(e.target.value)
-                    }
-                    placeholder={t.visitNotesPlaceholder}
-                    className={`w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
-                  />
+                    <option value="">
+                      {language === "ar" ? "بدون حيوان" : "No pet"}
+                    </option>
+                    {pets.map((pet) => (
+                      <option key={pet.id} value={pet.id}>
+                        {pet.name} — {pet.species}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-                <label className={`flex items-center gap-2 text-xs font-bold ${darkMode ? "text-slate-300" : "text-slate-600"}`}>
-                  <input type="checkbox" checked={whatsappEnabled} onChange={(e) => setWhatsappEnabled(e.target.checked)} />
-                  {language === "ar" ? "فتح وصفة العلاج على WhatsApp بعد الحفظ" : "Open treatment prescription in WhatsApp after saving"}
-                </label>
-
-                <button
-                  type="button"
-                  onClick={saveVisit}
-                  disabled={saving}
-                  className="rounded-2xl bg-blue-600 px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all duration-300 hover:-translate-y-1 hover:bg-blue-700 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {saving ? t.saving : `✓ ${t.saveVisit}`}
-                </button>
-              </div>
-            </section>
-
-            {/* VISIT HISTORY */}
-            <section>
-              <div className="mb-4">
-                <h2
-                  className={`text-xl font-bold ${
-                    darkMode ? "text-white" : "text-slate-900"
-                  }`}
-                >
-                  📋 {t.visitHistory}
-                </h2>
-              </div>
-
-              {visits.length === 0 ? (
-                <div
-                  className={`rounded-2xl border p-8 text-center ${
-                    darkMode
-                      ? "border-slate-800 bg-slate-900 text-slate-500"
-                      : "border-slate-200 bg-white text-slate-400"
-                  }`}
-                >
-                  {t.noHistory}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {visits.map((visit, index) => (
-                    <div
-                      key={visit.id}
-                      className={`group rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
-                        darkMode
-                          ? "border-slate-800 bg-slate-900 hover:border-slate-700"
-                          : "border-slate-200 bg-white hover:border-slate-300"
-                      }`}
-                    >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex items-start gap-4">
-                          <div
-                            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl font-bold ${
-                              index === 0
-                                ? "bg-blue-600 text-white"
-                                : darkMode
-                                ? "bg-slate-800 text-slate-400"
-                                : "bg-slate-100 text-slate-500"
-                            }`}
-                          >
-                            {index === 0 ? "★" : index + 1}
-                          </div>
-
-                          <div>
-                            <div
-                              className={`font-semibold ${
-                                darkMode
-                                  ? "text-white"
-                                  : "text-slate-900"
-                              }`}
-                            >
-                              {formatDate(
-                                visit.visit_date,
-                                language
-                              )}
-                            </div>
-
-                            <div
-                              className={`mt-1 text-xs ${
-                                darkMode
-                                  ? "text-slate-500"
-                                  : "text-slate-500"
-                              }`}
-                            >
-                              {formatTime(
-                                visit.visit_date,
-                                language
-                              )}
-                            </div>
-
-                            {visit.reason && (
-                              <div
-                                className={`mt-3 text-sm ${
-                                  darkMode
-                                    ? "text-slate-300"
-                                    : "text-slate-600"
-                                }`}
-                              >
-                                {visit.reason}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          {visit.weight !== null && (
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                                darkMode
-                                  ? "bg-blue-950 text-blue-300"
-                                  : "bg-blue-50 text-blue-700"
-                              }`}
-                            >
-                              ⚖️ {visit.weight} {t.kg}
-                            </span>
-                          )}
-
-                          {visit.temperature !== null && (
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                                darkMode
-                                  ? "bg-orange-950 text-orange-300"
-                                  : "bg-orange-50 text-orange-700"
-                              }`}
-                            >
-                              🌡️ {visit.temperature}
-                              {t.celsius}
-                            </span>
-                          )}
-
-                          {visit.heart_rate !== null && (
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                                darkMode
-                                  ? "bg-rose-950 text-rose-300"
-                                  : "bg-rose-50 text-rose-700"
-                              }`}
-                            >
-                              ❤️ {visit.heart_rate} {t.bpm}
-                            </span>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSelectedOldVisit(visit)
-                            }
-                            className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md"
-                          >
-                            {t.viewExamination}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+              {selectedClient && (
+                <div className="mt-4 rounded-2xl bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:bg-blue-500/10 dark:text-blue-200">
+                  👤 {selectedClient.name}
+                  {selectedClient.phone ? ` — ${selectedClient.phone}` : ""}
                 </div>
               )}
             </section>
-          </div>
-        )}
 
-        {/* OLD VISIT MODAL */}
-        {selectedOldVisit && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
-            onClick={() => setSelectedOldVisit(null)}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className={`max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border p-6 shadow-2xl ${
+            <section
+              className={`rounded-3xl border p-5 ${
                 darkMode
-                  ? "border-slate-800 bg-slate-900"
-                  : "border-slate-200 bg-white"
+                  ? "border-white/[0.06] bg-[#13161B]"
+                  : "border-slate-100 bg-white"
               }`}
             >
-              <div className="mb-6 flex items-start justify-between gap-4">
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <h2
-                    className={`text-xl font-bold ${
-                      darkMode ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    🩺 {t.visitDetails}
+                  <h2 className="text-lg font-bold">
+                    {language === "ar" ? "المنتجات" : "Products"}
                   </h2>
-
-                  <p
-                    className={`mt-1 text-sm ${
-                      darkMode
-                        ? "text-slate-500"
-                        : "text-slate-500"
-                    }`}
-                  >
-                    {formatDate(
-                      selectedOldVisit.visit_date,
-                      language
-                    )}{" "}
-                    •{" "}
-                    {formatTime(
-                      selectedOldVisit.visit_date,
-                      language
-                    )}
+                  <p className="mt-1 text-xs text-slate-500">
+                    {language === "ar"
+                      ? "ابحث بالاسم أو الباركود أو استخدم الكاميرا"
+                      : "Search by name/barcode or use the camera"}
                   </p>
                 </div>
 
                 <button
-                  type="button"
-                  onClick={() => setSelectedOldVisit(null)}
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 hover:scale-105 ${
-                    darkMode
-                      ? "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
+                  onClick={() => setShowScanner(true)}
+                  className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
                 >
-                  ✕
+                  📷 {language === "ar" ? "مسح باركود" : "Scan barcode"}
                 </button>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div
-                  className={`rounded-2xl p-4 ${
+              <div className="relative mb-4">
+                <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center">
+                  🔎
+                </span>
+                <input
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  placeholder={
+                    language === "ar"
+                      ? "اسم المنتج أو الباركود..."
+                      : "Product name or barcode..."
+                  }
+                  className={`w-full rounded-2xl border px-12 py-3.5 outline-none focus:border-blue-500 ${
                     darkMode
-                      ? "bg-slate-800/70"
-                      : "bg-slate-50"
+                      ? "border-white/[0.07] bg-[#0F1115]"
+                      : "border-slate-200 bg-slate-50"
                   }`}
-                >
-                  <div className="mb-1 text-xs text-slate-500">
-                    {t.reason}
-                  </div>
-
-                  <div
-                    className={`whitespace-pre-wrap text-sm font-medium ${
-                      darkMode
-                        ? "text-slate-200"
-                        : "text-slate-800"
-                    }`}
-                  >
-                    {selectedOldVisit.reason || "—"}
-                  </div>
-                </div>
-
-                <div
-                  className={`rounded-2xl p-4 ${
-                    darkMode
-                      ? "bg-slate-800/70"
-                      : "bg-slate-50"
-                  }`}
-                >
-                  <div className="mb-1 text-xs text-slate-500">
-                    {t.weight}
-                  </div>
-
-                  <div
-                    className={`text-sm font-medium ${
-                      darkMode
-                        ? "text-slate-200"
-                        : "text-slate-800"
-                    }`}
-                  >
-                    {selectedOldVisit.weight !== null
-                      ? `${selectedOldVisit.weight} ${t.kg}`
-                      : "—"}
-                  </div>
-                </div>
-
-                <div
-                  className={`rounded-2xl p-4 ${
-                    darkMode
-                      ? "bg-slate-800/70"
-                      : "bg-slate-50"
-                  }`}
-                >
-                  <div className="mb-1 text-xs text-slate-500">
-                    {t.temperature}
-                  </div>
-
-                  <div
-                    className={`text-sm font-medium ${
-                      darkMode
-                        ? "text-slate-200"
-                        : "text-slate-800"
-                    }`}
-                  >
-                    {selectedOldVisit.temperature !== null
-                      ? `${selectedOldVisit.temperature}${t.celsius}`
-                      : "—"}
-                  </div>
-                </div>
-
-                <div
-                  className={`rounded-2xl p-4 ${
-                    darkMode
-                      ? "bg-slate-800/70"
-                      : "bg-slate-50"
-                  }`}
-                >
-                  <div className="mb-1 text-xs text-slate-500">
-                    {t.heartRate}
-                  </div>
-
-                  <div
-                    className={`text-sm font-medium ${
-                      darkMode
-                        ? "text-slate-200"
-                        : "text-slate-800"
-                    }`}
-                  >
-                    {selectedOldVisit.heart_rate !== null
-                      ? `${selectedOldVisit.heart_rate} ${t.bpm}`
-                      : "—"}
-                  </div>
-                </div>
-
-                <div
-                  className={`rounded-2xl p-4 ${
-                    darkMode
-                      ? "bg-slate-800/70"
-                      : "bg-slate-50"
-                  }`}
-                >
-                  <div className="mb-1 text-xs text-slate-500">
-                    {t.respiratoryRate}
-                  </div>
-
-                  <div
-                    className={`text-sm font-medium ${
-                      darkMode
-                        ? "text-slate-200"
-                        : "text-slate-800"
-                    }`}
-                  >
-                    {selectedOldVisit.respiratory_rate !==
-                    null
-                      ? `${selectedOldVisit.respiratory_rate} ${t.rpm}`
-                      : "—"}
-                  </div>
-                </div>
+                />
               </div>
 
-              <div className="mt-5 space-y-4">
-                <div>
-                  <div
-                    className={`mb-2 text-sm font-bold ${
+              <div className="grid gap-2 md:grid-cols-2">
+                {filteredProducts.map((product) => (
+                  <button
+                    key={product.id}
+                    onClick={() => addProduct(product)}
+                    className={`flex items-center justify-between rounded-2xl border p-4 text-right transition hover:-translate-y-0.5 ${
                       darkMode
-                        ? "text-slate-200"
-                        : "text-slate-800"
+                        ? "border-white/[0.06] bg-[#0F1115] hover:bg-[#171A20]"
+                        : "border-slate-100 bg-slate-50 hover:bg-white hover:shadow-sm"
                     }`}
                   >
-                    {t.examinationNotes}
-                  </div>
-
-                  <div
-                    className={`whitespace-pre-wrap rounded-2xl p-4 text-sm leading-7 ${
-                      darkMode
-                        ? "bg-slate-800/70 text-slate-300"
-                        : "bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    {selectedOldVisit.examination || "—"}
-                  </div>
-                </div>
-
-                <div>
-                  <div
-                    className={`mb-2 text-sm font-bold ${
-                      darkMode
-                        ? "text-slate-200"
-                        : "text-slate-800"
-                    }`}
-                  >
-                    {t.diagnosis}
-                  </div>
-
-                  <div
-                    className={`whitespace-pre-wrap rounded-2xl p-4 text-sm leading-7 ${
-                      darkMode
-                        ? "bg-slate-800/70 text-slate-300"
-                        : "bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    {selectedOldVisit.diagnosis || "—"}
-                  </div>
-                </div>
-
-                <div>
-                  <div
-                    className={`mb-2 text-sm font-bold ${
-                      darkMode
-                        ? "text-slate-200"
-                        : "text-slate-800"
-                    }`}
-                  >
-                    {t.treatment}
-                  </div>
-
-                  <div
-                    className={`whitespace-pre-wrap rounded-2xl p-4 text-sm leading-7 ${
-                      darkMode
-                        ? "bg-slate-800/70 text-slate-300"
-                        : "bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    {selectedOldVisit.treatment || "—"}
-                  </div>
-                </div>
-
-                <div>
-                  <div
-                    className={`mb-2 text-sm font-bold ${
-                      darkMode
-                        ? "text-slate-200"
-                        : "text-slate-800"
-                    }`}
-                  >
-                    {t.visitNotes}
-                  </div>
-
-                  <div
-                    className={`whitespace-pre-wrap rounded-2xl p-4 text-sm leading-7 ${
-                      darkMode
-                        ? "bg-slate-800/70 text-slate-300"
-                        : "bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    {selectedOldVisit.notes || "—"}
-                  </div>
-                </div>
+                    <div>
+                      <p className="font-bold">{product.name}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {product.barcode || "No barcode"} · {product.unit} ·{" "}
+                        {product.quantity} available
+                      </p>
+                    </div>
+                    <span className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">
+                      + {money(Number(product.retail_price))}
+                    </span>
+                  </button>
+                ))}
               </div>
+            </section>
 
-              <div className="mt-6 flex justify-end">
+            <section
+              className={`rounded-3xl border p-5 ${
+                darkMode
+                  ? "border-white/[0.06] bg-[#13161B]"
+                  : "border-slate-100 bg-white"
+              }`}
+            >
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="text-lg font-bold">
+                    {language === "ar" ? "الخدمات" : "Services"}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {language === "ar"
+                      ? "أضف الكشف أو أي خدمة أخرى"
+                      : "Add consultation or another service"}
+                  </p>
+                </div>
+
                 <button
-                  type="button"
-                  onClick={() => setSelectedOldVisit(null)}
-                  className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                    darkMode
-                      ? "bg-slate-800 text-slate-200 hover:bg-slate-700"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
+                  onClick={addConsultation}
+                  className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300"
                 >
-                  {t.close}
+                  + {language === "ar" ? "رسوم الكشف" : "Consultation"} (
+                  {money(consultationFee)} EGP)
                 </button>
               </div>
-            </div>
+
+              <div className="grid gap-3 md:grid-cols-[1fr_180px_auto]">
+                <input
+                  value={serviceName}
+                  onChange={(e) => setServiceName(e.target.value)}
+                  placeholder={language === "ar" ? "اسم الخدمة" : "Service name"}
+                  className={`rounded-2xl border px-4 py-3.5 outline-none focus:border-blue-500 ${
+                    darkMode
+                      ? "border-white/[0.07] bg-[#0F1115]"
+                      : "border-slate-200 bg-slate-50"
+                  }`}
+                />
+                <input
+                  value={servicePrice}
+                  onChange={(e) => setServicePrice(e.target.value)}
+                  type="number"
+                  min="0"
+                  placeholder={language === "ar" ? "السعر" : "Price"}
+                  className={`rounded-2xl border px-4 py-3.5 outline-none focus:border-blue-500 ${
+                    darkMode
+                      ? "border-white/[0.07] bg-[#0F1115]"
+                      : "border-slate-200 bg-slate-50"
+                  }`}
+                />
+                <button
+                  onClick={addService}
+                  className="rounded-2xl bg-slate-900 px-5 py-3.5 font-bold text-white dark:bg-white dark:text-slate-900"
+                >
+                  + {language === "ar" ? "إضافة" : "Add"}
+                </button>
+              </div>
+            </section>
+
+            <section
+              className={`overflow-hidden rounded-3xl border ${
+                darkMode
+                  ? "border-white/[0.06] bg-[#13161B]"
+                  : "border-slate-100 bg-white"
+              }`}
+            >
+              <div className="border-b px-5 py-4 text-lg font-bold">
+                {language === "ar" ? "بنود الفاتورة" : "Invoice items"}
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[850px] text-sm">
+                  <thead>
+                    <tr className="border-b text-right text-xs text-slate-500">
+                      <th className="px-5 py-4">
+                        {language === "ar" ? "البند" : "Item"}
+                      </th>
+                      <th className="px-5 py-4">
+                        {language === "ar" ? "الكمية" : "Qty"}
+                      </th>
+                      <th className="px-5 py-4">
+                        {language === "ar" ? "السعر" : "Price"}
+                      </th>
+                      <th className="px-5 py-4">
+                        {language === "ar" ? "خصم" : "Discount"}
+                      </th>
+                      <th className="px-5 py-4">
+                        {language === "ar" ? "الإجمالي" : "Total"}
+                      </th>
+                      <th />
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {lines.map((line) => {
+                      const lineTotal = Math.max(
+                        0,
+                        line.quantity * line.unit_price - line.discount
+                      );
+
+                      return (
+                        <tr key={line.key} className="border-b last:border-b-0">
+                          <td className="px-5 py-4">
+                            <p className="font-bold">{line.description || line.service_name}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {line.item_type === "product"
+                                ? "📦 Product"
+                                : "🩺 Service"}
+                            </p>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <input
+                              type="number"
+                              min="0.001"
+                              max={
+                                line.item_type === "product"
+                                  ? line.available_quantity ?? undefined
+                                  : undefined
+                              }
+                              step="1"
+                              value={line.quantity}
+                              onChange={(e) =>
+                                updateLine(line.key, {
+                                  quantity: Number(e.target.value) || 0,
+                                })
+                              }
+                              className={`w-24 rounded-xl border px-3 py-2 outline-none focus:border-blue-500 ${
+                                darkMode
+                                  ? "border-white/[0.07] bg-[#0F1115]"
+                                  : "border-slate-200 bg-slate-50"
+                              }`}
+                            />
+                            {line.available_quantity != null && (
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                Stock: {line.available_quantity}
+                              </p>
+                            )}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={line.unit_price}
+                              onChange={(e) =>
+                                updateLine(line.key, {
+                                  unit_price: Number(e.target.value) || 0,
+                                })
+                              }
+                              className={`w-32 rounded-xl border px-3 py-2 outline-none focus:border-blue-500 ${
+                                darkMode
+                                  ? "border-white/[0.07] bg-[#0F1115]"
+                                  : "border-slate-200 bg-slate-50"
+                              }`}
+                            />
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={line.discount}
+                              onChange={(e) =>
+                                updateLine(line.key, {
+                                  discount: Number(e.target.value) || 0,
+                                })
+                              }
+                              className={`w-28 rounded-xl border px-3 py-2 outline-none focus:border-blue-500 ${
+                                darkMode
+                                  ? "border-white/[0.07] bg-[#0F1115]"
+                                  : "border-slate-200 bg-slate-50"
+                              }`}
+                            />
+                          </td>
+
+                          <td className="px-5 py-4 font-bold">
+                            {money(lineTotal)} EGP
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <button
+                              onClick={() => removeLine(line.key)}
+                              className="rounded-xl px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
+                            >
+                              🗑️
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {!lines.length && (
+                      <tr>
+                        <td colSpan={6} className="px-5 py-14 text-center text-slate-500">
+                          🧾
+                          <p className="mt-2 font-semibold">
+                            {language === "ar"
+                              ? "لسه مفيش بنود في الفاتورة"
+                              : "No invoice items yet"}
+                          </p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
-        )}
+
+          <aside className="space-y-6">
+            <section
+              className={`sticky top-5 rounded-3xl border p-5 ${
+                darkMode
+                  ? "border-white/[0.06] bg-[#13161B]"
+                  : "border-slate-100 bg-white"
+              }`}
+            >
+              <h2 className="mb-5 text-lg font-bold">
+                {language === "ar" ? "ملخص الفاتورة" : "Invoice summary"}
+              </h2>
+
+              <div className="space-y-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Subtotal</span>
+                  <strong>{money(subtotal)} EGP</strong>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-500">
+                    {language === "ar" ? "خصم الفاتورة" : "Invoice discount"}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={discount}
+                    onChange={(e) => setDiscount(e.target.value)}
+                    className={`w-full rounded-2xl border px-4 py-3 outline-none focus:border-blue-500 ${
+                      darkMode
+                        ? "border-white/[0.07] bg-[#0F1115]"
+                        : "border-slate-200 bg-slate-50"
+                    }`}
+                  />
+                </div>
+
+                <div className="border-t pt-4">
+                  <div className="flex justify-between">
+                    <span className="font-bold">
+                      {language === "ar" ? "الإجمالي" : "Total"}
+                    </span>
+                    <strong className="text-2xl">{money(total)} EGP</strong>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-500">
+                    {language === "ar" ? "طريقة الدفع" : "Payment method"}
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className={`w-full rounded-2xl border px-4 py-3 outline-none ${
+                      darkMode
+                        ? "border-white/[0.07] bg-[#0F1115]"
+                        : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <option value="">
+                      {language === "ar" ? "لم يتم تحديدها" : "Not specified"}
+                    </option>
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="wallet">Wallet</option>
+                    <option value="bank_transfer">Bank transfer</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-500">
+                    {language === "ar" ? "المدفوع" : "Paid amount"}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    className={`w-full rounded-2xl border px-4 py-3 outline-none focus:border-blue-500 ${
+                      darkMode
+                        ? "border-white/[0.07] bg-[#0F1115]"
+                        : "border-slate-200 bg-slate-50"
+                    }`}
+                  />
+                </div>
+
+                <div className="rounded-2xl bg-slate-50 p-4 dark:bg-[#0F1115]">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">
+                      {language === "ar" ? "المتبقي" : "Remaining"}
+                    </span>
+                    <strong>{money(remaining)} EGP</strong>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-500">
+                    {language === "ar" ? "ملاحظات" : "Notes"}
+                  </label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={4}
+                    className={`w-full rounded-2xl border px-4 py-3 outline-none focus:border-blue-500 ${
+                      darkMode
+                        ? "border-white/[0.07] bg-[#0F1115]"
+                        : "border-slate-200 bg-slate-50"
+                    }`}
+                  />
+                </div>
+
+                <button
+                  disabled={saving}
+                  onClick={() => saveInvoice(false)}
+                  className="w-full rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300"
+                >
+                  {saving
+                    ? "Saving..."
+                    : language === "ar"
+                      ? "حفظ كمسودة"
+                      : "Save as draft"}
+                </button>
+
+                <button
+                  disabled={saving}
+                  onClick={() => saveInvoice(true)}
+                  className="w-full rounded-2xl bg-blue-600 px-5 py-4 font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {saving
+                    ? "Saving..."
+                    : language === "ar"
+                      ? "إصدار الفاتورة"
+                      : "Issue invoice"}
+                </button>
+              </div>
+            </section>
+          </aside>
+        </div>
       </div>
+
+      {showScanner && (
+        <BarcodeScanner
+          onScan={findProductByBarcode}
+          onClose={() => setShowScanner(false)}
+          darkMode={darkMode}
+          language={language}
+        />
+      )}
     </main>
+  );
+}
+
+function BarcodeScanner({
+  onScan,
+  onClose,
+  darkMode,
+  language,
+}: {
+  onScan: (barcode: string) => void;
+  onClose: () => void;
+  darkMode: boolean;
+  language: "ar" | "en";
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+
+  useEffect(() => {
+    let stopped = false;
+    let animationFrame = 0;
+    let lastDetect = 0;
+    let stream: MediaStream | null = null;
+    let controls: { stop: () => void } | null = null;
+    let zxingStarted = false;
+
+    const sourceCanvas = document.createElement("canvas");
+
+    const stop = () => {
+      stopped = true;
+
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+        animationFrame = 0;
+      }
+
+      try {
+        controls?.stop();
+      } catch {}
+
+      controls = null;
+
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+        stream = null;
+      }
+
+      if (videoRef.current?.srcObject) {
+        const current = videoRef.current.srcObject as MediaStream;
+        current.getTracks().forEach((track) => track.stop());
+        videoRef.current.srcObject = null;
+      }
+
+      // Camera tracks and ZXing controls are stopped above.
+      // BrowserMultiFormatReader in the installed @zxing/browser version
+      // does not expose reset() in its TypeScript API.
+    };
+
+    const enhanceCamera = async (currentStream: MediaStream) => {
+      const track = currentStream.getVideoTracks()[0];
+      if (!track) return;
+
+      try {
+        const capabilities = track.getCapabilities() as MediaTrackCapabilities & {
+          focusMode?: string[];
+          zoom?: { min: number; max: number; step?: number };
+        };
+
+        const advanced: MediaTrackConstraintSet[] = [];
+
+        if (capabilities.focusMode?.includes("continuous")) {
+          advanced.push({ focusMode: "continuous" } as MediaTrackConstraintSet);
+        }
+
+        if (capabilities.zoom) {
+          const target = Math.min(
+            capabilities.zoom.max,
+            capabilities.zoom.min + Math.max(capabilities.zoom.step || 0.1, 0.5)
+          );
+          if (target > capabilities.zoom.min) {
+            advanced.push({ zoom: target } as MediaTrackConstraintSet);
+          }
+        }
+
+        if (advanced.length) {
+          await track.applyConstraints({ advanced });
+        }
+      } catch {}
+    };
+
+    const nativeDetector = () => {
+      const browserWindow = window as unknown as {
+        BarcodeDetector?: new (options?: {
+          formats?: string[];
+        }) => {
+          detect: (
+            source: CanvasImageSource
+          ) => Promise<Array<{ rawValue?: string }>>;
+        };
+      };
+
+      if (!browserWindow.BarcodeDetector) return null;
+
+      try {
+        return new browserWindow.BarcodeDetector({
+          formats: [
+            "ean_13",
+            "ean_8",
+            "upc_a",
+            "upc_e",
+            "code_128",
+            "code_39",
+            "itf",
+            "codabar",
+          ],
+        });
+      } catch {
+        return null;
+      }
+    };
+
+    const start = async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia || !videoRef.current) {
+          throw new Error("Camera is not supported.");
+        }
+
+        const detector = nativeDetector();
+
+        if (detector) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              frameRate: { ideal: 30, max: 60 },
+            },
+          });
+
+          if (stopped || !videoRef.current) {
+            stop();
+            return;
+          }
+
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+          await enhanceCamera(stream);
+
+          const detectLoop = async (timestamp: number) => {
+            if (stopped || !videoRef.current) return;
+
+            animationFrame = requestAnimationFrame(detectLoop);
+
+            if (timestamp - lastDetect < 50) return;
+            lastDetect = timestamp;
+
+            if (videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+              return;
+            }
+
+            try {
+              const width = videoRef.current.videoWidth || 1920;
+              const height = videoRef.current.videoHeight || 1080;
+
+              const cropWidth = Math.floor(width * 0.86);
+              const cropHeight = Math.floor(height * 0.62);
+              const sx = Math.floor((width - cropWidth) / 2);
+              const sy = Math.floor((height - cropHeight) / 2);
+
+              sourceCanvas.width = Math.min(1800, cropWidth * 2);
+              sourceCanvas.height = Math.min(1200, cropHeight * 2);
+
+              const context = sourceCanvas.getContext("2d");
+              if (!context) return;
+
+              context.drawImage(
+                videoRef.current,
+                sx,
+                sy,
+                cropWidth,
+                cropHeight,
+                0,
+                0,
+                sourceCanvas.width,
+                sourceCanvas.height
+              );
+
+              const result = await detector.detect(sourceCanvas);
+              const value = result
+                .map((item) => item.rawValue?.trim() || "")
+                .find(Boolean);
+
+              if (value && !stopped) {
+                stop();
+                onScan(value);
+              }
+            } catch {}
+          };
+
+          animationFrame = requestAnimationFrame(detectLoop);
+          return;
+        }
+
+        await startZXing();
+      } catch (error) {
+        console.error(error);
+        await startZXing();
+      }
+    };
+
+    const startZXing = async () => {
+      if (zxingStarted || stopped || !videoRef.current) return;
+      zxingStarted = true;
+
+      try {
+        const reader = new BrowserMultiFormatReader(undefined, {
+          delayBetweenScanAttempts: 40,
+          delayBetweenScanSuccess: 200,
+          tryPlayVideoTimeout: 5000,
+        });
+
+        readerRef.current = reader;
+
+        const resultControls = await reader.decodeFromConstraints(
+          {
+            audio: false,
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              frameRate: { ideal: 30, max: 60 },
+            },
+          },
+          videoRef.current,
+          (result) => {
+            if (!result || stopped) return;
+
+            const value = result.getText().trim();
+            if (!value) return;
+
+            stop();
+            onScan(value);
+          }
+        );
+
+        controls = resultControls;
+      } catch (error) {
+        console.error(error);
+        onClose();
+      }
+    };
+
+    start();
+
+    return stop;
+  }, [onScan, onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+      <div
+        dir={language === "ar" ? "rtl" : "ltr"}
+        className={`w-full max-w-2xl overflow-hidden rounded-3xl ${
+          darkMode ? "bg-[#13161B] text-white" : "bg-white text-slate-800"
+        }`}
+      >
+        <div className="flex items-center justify-between px-5 py-4">
+          <div>
+            <h3 className="font-bold">
+              {language === "ar" ? "مسح باركود المنتج" : "Scan product barcode"}
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">
+              {language === "ar"
+                ? "وجّه الكاميرا ناحية الباركود"
+                : "Point the camera at the barcode"}
+            </p>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="rounded-xl px-3 py-2 text-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="relative aspect-video bg-black">
+          <video
+            ref={videoRef}
+            muted
+            playsInline
+            autoPlay
+            className="h-full w-full object-cover"
+          />
+
+          <div className="pointer-events-none absolute left-1/2 top-1/2 h-32 w-[78%] -translate-x-1/2 -translate-y-1/2 rounded-2xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]" />
+        </div>
+
+        <div className="px-5 py-4 text-center text-xs text-slate-500">
+          {language === "ar"
+            ? "يدعم EAN-13 و EAN-8 و UPC و Code 128 وغيرها."
+            : "Supports EAN-13, EAN-8, UPC, Code 128 and more."}
+        </div>
+      </div>
+    </div>
   );
 }
