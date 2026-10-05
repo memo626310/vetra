@@ -1,670 +1,81 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getClientPortalDb } from "@/lib/client-portal-db";
 
-type Client = {
-  id: string;
-  name: string;
-  phone: string | null;
-  email: string | null;
-};
-
-type Pet = {
-  id: string;
-  name: string;
-  species: string;
-  breed: string | null;
-  gender: string | null;
-  birth_date: string | null;
-  is_deceased: boolean;
-};
-
-const cards = [
-  ["🐾", "Your Pets", "Everything about their care"],
-  ["💉", "Vaccines", "Never miss an important dose"],
-  ["📅", "Appointments", "Your next visit, one tap away"],
-  ["🧾", "Invoices", "Your records, always with you"],
-];
-
-export default function ClientInterfaceIdPage() {
-  const params = useParams<{ id: string }>();
-  const router = useRouter();
-  const clientId = params.id;
-
-  const [client, setClient] = useState<Client | null>(null);
-  const [pets, setPets] = useState<Pet[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [authorized, setAuthorized] = useState(false);
-  const [language, setLanguage] = useState<"en" | "ar">("en");
-  const [dark, setDark] = useState(false);
-  const [message, setMessage] = useState("");
-  const [showDeviceSetup, setShowDeviceSetup] = useState(false);
-  const [notificationState, setNotificationState] = useState<
-    "default" | "granted" | "denied" | "unsupported"
-  >("default");
-  const [deferredInstallPrompt, setDeferredInstallPrompt] =
-    useState<any>(null);
-  const [canInstall, setCanInstall] = useState(false);
-  const [installDone, setInstallDone] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
-
-  useEffect(() => {
-    const savedLanguage = window.localStorage.getItem("vetra-language");
-    const savedTheme = window.localStorage.getItem("vetra-theme");
-
-    if (savedLanguage === "ar") setLanguage("ar");
-    if (savedTheme === "dark") setDark(true);
-  }, []);
-
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-
-      const savedClientId =
-        window.sessionStorage.getItem("vetra-client-id");
-
-      const savedClientCode =
-        window.sessionStorage.getItem("vetra-client-code");
-
-      const savedClientPhone =
-        window.sessionStorage.getItem("vetra-client-phone");
-
-      if (
-        !savedClientId ||
-        savedClientId !== clientId ||
-        !savedClientCode ||
-        !savedClientPhone
-      ) {
-        router.replace("/client-interface/login");
-        return;
-      }
-
-      try {
-        const db = await getClientPortalDb(
-          savedClientCode,
-          savedClientPhone
-        );
-
-        const {
-          data: clientData,
-          error: clientError,
-        } = await db
-          .from("clients")
-          .select("id, name, phone, email")
-          .eq("id", clientId)
-          .maybeSingle();
-
-        if (clientError || !clientData) {
-          setMessage("ملف العميل غير موجود.");
-          setLoading(false);
-          return;
-        }
-
-        const {
-          data: petsData,
-          error: petsError,
-        } = await db
-          .from("pets")
-          .select(
-            "id, name, species, breed, gender, birth_date, is_deceased"
-          )
-          .eq("client_id", clientId)
-          .order("created_at", { ascending: false });
-
-        if (petsError) {
-          setMessage(petsError.message);
-        }
-
-        setClient(clientData);
-        setPets((petsData || []) as Pet[]);
-        setAuthorized(true);
-        setLoading(false);
-      } catch (error) {
-        console.error(
-          "PET OWNER PROFILE ERROR:",
-          error
-        );
-
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : "حصل خطأ أثناء تحميل ملف العميل."
-        );
-
-        setLoading(false);
-      }
-    }
-
-    if (clientId) load();
-  }, [clientId, router]);
-
-  function signOut() {
-    window.sessionStorage.removeItem("vetra-client-id");
-    window.sessionStorage.removeItem("vetra-client-code");
-    window.sessionStorage.removeItem("vetra-client-phone");
-    router.replace("/client-interface/login");
-  }
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-
-    // Device type is informational only. The actual notification flow is
-    // controlled by whether VETRA is running as an installed web app.
-    const nav = window.navigator;
-    const ios =
-      /iPhone|iPad|iPod/i.test(nav.userAgent || "") ||
-      (nav.platform === "MacIntel" && (nav.maxTouchPoints || 0) > 1);
-
-    setIsIOS(ios);
-    setIsStandalone(standalone);
-
-    if ("Notification" in window) {
-      const permission = window.Notification.permission;
-      setNotificationState(
-        permission === "granted"
-          ? "granted"
-          : permission === "denied"
-            ? "denied"
-            : "default"
-      );
-    } else {
-      setNotificationState("unsupported");
-    }
-
-    const handler = (event: Event) => {
-      event.preventDefault();
-      setDeferredInstallPrompt(event);
-      setCanInstall(true);
-    };
-
-    const installed = () => {
-      setCanInstall(false);
-      setInstallDone(true);
-      window.localStorage.setItem("vetra-pwa-installed", "true");
-    };
-
-    window.addEventListener("beforeinstallprompt", handler);
-    window.addEventListener("appinstalled", installed);
-
-    if (standalone) {
-      setInstallDone(true);
-    }
-
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch((error) => {
-        console.error("VETRA SERVICE WORKER ERROR:", error);
-      });
-    }
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
-      window.removeEventListener("appinstalled", installed);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!authorized) return;
-
-    if (
-      window.localStorage.getItem("vetra-device-setup-seen-v2") ===
-      "true"
-    ) {
-      return;
-    }
-
-    const timer = window.setTimeout(
-      () => setShowDeviceSetup(true),
-      700
-    );
-
-    return () => window.clearTimeout(timer);
-  }, [authorized]);
-
-  async function enableNotifications() {
-    if (isIOS && !isStandalone) {
-      return;
-    }
-
-    if (!("Notification" in window)) {
-      setNotificationState("unsupported");
-      return;
-    }
-
-    const permission =
-      await window.Notification.requestPermission();
-
-    setNotificationState(
-      permission === "granted"
-        ? "granted"
-        : permission === "denied"
-          ? "denied"
-          : "default"
-    );
-
-    if (permission === "granted") {
-      try {
-        const registration =
-          await navigator.serviceWorker.ready;
-
-        await registration.showNotification(
-          "VETRA 🐾",
-          {
-            body: "تم تفعيل إشعارات VETRA بنجاح. هتوصلك التنبيهات المهمة هنا.",
-            icon: "/icon-192.png",
-            badge: "/icon-192.png",
-          }
-        );
-      } catch (error) {
-        console.error(
-          "VETRA NOTIFICATION ERROR:",
-          error
-        );
-      }
-    }
-  }
-
-  async function installWebsite() {
-    if (!deferredInstallPrompt) return;
-
-    try {
-      await deferredInstallPrompt.prompt();
-
-      const result =
-        await deferredInstallPrompt.userChoice;
-
-      if (result?.outcome === "accepted") {
-        setInstallDone(true);
-      }
-    } finally {
-      setDeferredInstallPrompt(null);
-      setCanInstall(false);
-    }
-  }
-
-  function finishDeviceSetup() {
-    window.localStorage.setItem(
-      "vetra-device-setup-seen-v2",
-      "true"
-    );
-
-    setShowDeviceSetup(false);
-  }
-
-  const ar = language === "ar";
-  const heroPet =
-    pets.find((pet) => !pet.is_deceased) || pets[0];
-
-  if (loading) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#F8FBFF] dark:bg-[#07111C]">
-        <div className="text-center">
-          <div className="text-6xl animate-pulse">🐾</div>
-          <p className="mt-4 text-sm font-bold text-slate-500">
-            Loading VETRA...
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  if (!authorized) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#F8FBFF] px-6 dark:bg-[#07111C]">
-        <div className="max-w-md rounded-[2rem] bg-white p-8 text-center shadow-2xl dark:bg-[#101923]">
-          <div className="text-5xl">🐾</div>
-
-          <h1 className="mt-4 text-2xl font-black">
-            VETRA
-          </h1>
-
-          <p className="mt-3 text-sm text-slate-500 dark:text-slate-300">
-            {message}
-          </p>
-
-          <button
-            onClick={() =>
-              router.replace("/client-interface/login")
-            }
-            className="mt-6 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-black text-white dark:bg-white dark:text-slate-900"
-          >
-            Back to Login
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  const setupModal = showDeviceSetup ? (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/45 p-4 backdrop-blur-sm sm:items-center">
-      <div
-        dir="rtl"
-        className="w-full max-w-md rounded-[2rem] border border-white/70 bg-white p-6 text-slate-900 shadow-2xl dark:border-white/10 dark:bg-[#101923] dark:text-white"
-      >
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-100 text-3xl dark:bg-cyan-400/10">
-          🐾
-        </div>
-
-        <h2 className="mt-5 text-center text-2xl font-black">
-          خلي VETRA معاك دايمًا 🐾
-        </h2>
-
-        <div className="mt-3 text-center text-xs font-bold text-cyan-600 dark:text-cyan-300">
-          {isStandalone
-            ? "✓ VETRA تعمل الآن كتطبيق على جهازك"
-            : "📱 ثبّت VETRA على الشاشة الرئيسية أولًا لتفعيل أفضل تجربة وإشعارات الهاتف"}
-        </div>
-
-        <p className="mt-2 text-center text-sm leading-7 text-slate-500 dark:text-slate-300">
-          فعّل الإشعارات واحفظ VETRA على موبايلك عشان توصلك التنبيهات المهمة بسهولة.
-        </p>
-
-        <div className="mt-6 space-y-3">
-          <button
-            type="button"
-            onClick={enableNotifications}
-            disabled={
-              notificationState === "granted" ||
-              !isStandalone
-            }
-            className="flex w-full items-center justify-between rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-90 dark:border-cyan-400/10 dark:bg-cyan-400/10"
-          >
-            <span>
-              <span className="block font-black">
-                {notificationState === "granted"
-                  ? "الإشعارات مفعّلة ✓"
-                  : !isStandalone
-                    ? "ثبّت VETRA أولًا لتفعيل الإشعارات"
-                    : "السماح بإشعارات VETRA"}
-              </span>
-
-              <span className="mt-1 block text-xs leading-6 text-slate-500 dark:text-slate-300">
-                {notificationState === "denied"
-                  ? "الإشعارات مرفوضة من إعدادات الجهاز."
-                  : !isStandalone
-                    ? "أضف VETRA للشاشة الرئيسية وافتحها من الأيقونة، وبعدها فعّل الإشعارات."
-                    : "استقبل تنبيهات المواعيد والتطعيمات والتحديثات المهمة."}
-              </span>
-            </span>
-
-            <span className="text-2xl">🔔</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={
-              isIOS ? undefined : installWebsite
-            }
-            disabled={
-              isIOS ? false : !canInstall
-            }
-            className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-90 dark:border-emerald-400/10 dark:bg-emerald-400/10"
-          >
-            <span>
-              <span className="block font-black">
-                {installDone
-                  ? "VETRA محفوظة على الموبايل ✓"
-                  : "احفظ VETRA على موبايلك"}
-              </span>
-
-              <span className="mt-1 block text-xs leading-6 text-slate-500 dark:text-slate-300">
-                {!isStandalone && isIOS
-                  ? "اضغط مشاركة ↑ ثم إضافة إلى الشاشة الرئيسية، وبعدها افتح VETRA من الأيقونة."
-                  : !isStandalone && canInstall
-                    ? "أضف VETRA للشاشة الرئيسية بضغطة واحدة."
-                    : isStandalone
-                      ? "VETRA تعمل الآن كتطبيق على جهازك."
-                      : "من المتصفح اختار إضافة إلى الشاشة الرئيسية."}
-              </span>
-            </span>
-
-            <span className="text-2xl">📲</span>
-          </button>
-        </div>
-
-        <button
-          type="button"
-          onClick={finishDeviceSetup}
-          className="mt-5 w-full rounded-2xl px-4 py-3 text-sm font-bold text-slate-400 transition hover:text-slate-700 dark:hover:text-white"
-        >
-          لاحقًا
-        </button>
+type Lang = "ar" | "en";
+type Client = { id: string; name: string; phone: string | null; email: string | null };
+type Pet = { id: string; name: string; species: string; breed: string | null; gender: string | null; birth_date: string | null; color: string | null; is_deceased: boolean | null };
+type Visit = { id: string; pet_id: string; visit_date: string; reason: string | null; examination: string | null; diagnosis: string | null; treatment: string | null; weight: number | null; temperature: number | null; heart_rate: number | null; respiratory_rate: number | null; notes: string | null };
+type Vaccine = { id: string; pet_id: string; vaccine_name: string | null; vaccine_type: string | null; administered_at: string | null; next_dose_at: string | null; notes: string | null };
+
+const T = {
+  ar: { home:"الرئيسية", pets:"حيواناتي", more:"المزيد", welcome:"مساء الخير", allCare:"كل رعاية حيواناتك في مكان واحد", selected:"الحيوان المختار", count:"حيوانات", add:"إضافة حيوان", care:"حالة المتابعة", good:"المتابعة جيدة", needs:"يحتاج متابعة", old:"يستحسن المتابعة", careNote:"ده ملخص للمتابعة المسجلة في VETRA، مش تشخيص طبي.", next:"التطعيم القادم", none:"مفيش تطعيمات قادمة", overdue:"متأخر", day:"يوم", daysLeft:"متبقي", reminder:"فعّل تذكير", trends:"المؤشرات الحيوية", sixMonths:"آخر 6 شهور", noData:"بيانات غير كافية", weight:"الوزن", temp:"الحرارة", heart:"نبض القلب", resp:"معدل التنفس", history:"التاريخ الطبي", vaccineHistory:"سجل التطعيمات", completed:"مكتمل", soon:"قريبًا", noVaccines:"مفيش تطعيمات مسجلة", noVisits:"مفيش زيارات مسجلة", timelineNote:"التاريخ الطبي هيظهر هنا مع أول زيارة أو تطعيم.", settings:"الإعدادات", light:"الوضع الفاتح", dark:"الوضع الداكن", language:"English", logout:"تسجيل الخروج", secure:"حساب آمن", phone:"الهاتف", email:"البريد الإلكتروني", addTitle:"إضافة حيوان جديد", addNote:"تقدر يكون عندك أكتر من حيوان على نفس الحساب. إضافة الحيوان الجديدة بتتم من خلال العيادة حاليًا للحفاظ على السجل الطبي بشكل آمن.", close:"إغلاق", error:"تعذر تحميل بياناتك", login:"العودة لتسجيل الدخول", loading:"جاري تحميل VETRA...", age:"العمر", male:"ذكر", female:"أنثى", unknown:"غير محدد" },
+  en: { home:"Home", pets:"My Pets", more:"More", welcome:"Good evening", allCare:"All your pets' care in one place", selected:"Selected pet", count:"pets", add:"Add Pet", care:"Care status", good:"Follow-up looks good", needs:"Needs follow-up", old:"Follow-up recommended", careNote:"This is a follow-up summary, not a medical diagnosis.", next:"Next vaccine", none:"No upcoming vaccines", overdue:"Overdue", day:"day", daysLeft:"left", reminder:"Set reminder", trends:"Health trends", sixMonths:"Last 6 months", noData:"Not enough data", weight:"Weight", temp:"Temperature", heart:"Heart rate", resp:"Respiratory rate", history:"Medical history", vaccineHistory:"Vaccination history", completed:"Completed", soon:"Due soon", noVaccines:"No vaccinations recorded", noVisits:"No visits recorded", timelineNote:"Medical history will appear here after the first visit or vaccination.", settings:"Settings", light:"Light mode", dark:"Dark mode", language:"العربية", logout:"Sign out", secure:"Secure account", phone:"Phone", email:"Email", addTitle:"Add a new pet", addNote:"You can keep multiple pets on the same account. New pet registration is currently handled by the clinic to keep the medical record secure.", close:"Close", error:"We couldn't load your data", login:"Back to login", loading:"Loading VETRA...", age:"Age", male:"Male", female:"Female", unknown:"Not specified" }
+} as const;
+
+const icon = (s:string) => s.toLowerCase().includes("cat") || s.includes("قط") ? "🐱" : s.toLowerCase().includes("dog") || s.includes("كلب") ? "🐶" : "🐾";
+const species = (s:string, l:Lang) => s.toLowerCase().includes("cat") || s.includes("قط") ? (l === "ar" ? "قطة" : "Cat") : s.toLowerCase().includes("dog") || s.includes("كلب") ? (l === "ar" ? "كلب" : "Dog") : s;
+const dateText = (d:string, l:Lang) => new Date(d).toLocaleDateString(l === "ar" ? "ar-EG" : "en-US", {day:"numeric", month:"short", year:"numeric"});
+const daysUntil = (d:string) => Math.ceil((new Date(new Date(d).getFullYear(), new Date(d).getMonth(), new Date(d).getDate()).getTime() - new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()).getTime()) / 86400000);
+const age = (d:string|null,l:Lang) => { if(!d) return T[l].unknown; const b=new Date(d), n=new Date(); let y=n.getFullYear()-b.getFullYear(), m=n.getMonth()-b.getMonth(); if(n.getDate()<b.getDate()) m--; if(m<0){y--;m+=12;} if(y>0) return l==='ar'?`${y} سنة`:`${y} ${y===1?'year':'years'}`; return l==='ar'?`${Math.max(m,0)} شهر`:`${Math.max(m,0)} ${m===1?'month':'months'}`; };
+
+function Chart({ values, unit, empty }: { values:number[]; unit:string; empty:string }) {
+  if(values.length < 2) return <div className="flex h-24 items-center justify-center rounded-2xl border border-dashed border-white/10 text-[11px] text-slate-500">{empty}</div>;
+  const min=Math.min(...values), max=Math.max(...values), spread=Math.max(max-min,.1), w=240,h=78;
+  const points=values.map((v,i)=>`${i/(values.length-1)*w},${h-8-((v-min)/spread)*(h-16)}`).join(" ");
+  return <div><div className="mb-1 text-end text-[10px] font-bold text-slate-500">{values.at(-1)} {unit}</div><svg viewBox={`0 0 ${w} ${h}`} className="h-20 w-full"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stopColor="#22d3ee"/><stop offset="1" stopColor="#8b5cf6"/></linearGradient></defs><polyline points={points} fill="none" stroke="url(#g)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />{values.map((v,i)=>{const [x,y]=points.split(" ")[i].split(",");return <circle key={i} cx={x} cy={y} r="3" fill="#08131f" stroke="#67e8f9" strokeWidth="2"/>})}</svg></div>;
+}
+
+function Countdown({ days, lang }:{days:number|null;lang:Lang}) {
+  const c=2*Math.PI*42, progress=days===null?.05:days<=0?1:Math.min(1,Math.max(.08,1-days/30));
+  return <div className="relative h-28 w-28 shrink-0"><svg viewBox="0 0 100 100" className="h-full w-full -rotate-90"><circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,.07)" strokeWidth="6"/><circle cx="50" cy="50" r="42" fill="none" stroke="url(#ring)" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${c*progress} ${c}`}/><defs><linearGradient id="ring"><stop offset="0" stopColor="#22d3ee"/><stop offset="1" stopColor="#8b5cf6"/></linearGradient></defs></svg><div className="absolute inset-0 flex flex-col items-center justify-center"><b className="text-xl">{days===null?"—":Math.max(days,0)}</b><span className="text-[9px] font-bold text-slate-500">{days!==null&&days<0?T[lang].overdue:T[lang].day}</span></div></div>;
+}
+
+export default function ClientInterfaceIdPage(){
+  const params=useParams<{id:string}>(); const router=useRouter(); const clientId=params.id;
+  const [lang,setLang]=useState<Lang>("ar"); const [dark,setDark]=useState(true); const [client,setClient]=useState<Client|null>(null); const [pets,setPets]=useState<Pet[]>([]); const [visits,setVisits]=useState<Visit[]>([]); const [vaccines,setVaccines]=useState<Vaccine[]>([]); const [selected,setSelected]=useState(""); const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [settings,setSettings]=useState(false); const [addPet,setAddPet]=useState(false);
+
+  useEffect(()=>{const l=localStorage.getItem("vetra-language"); const th=localStorage.getItem("vetra-theme"); if(l==="ar"||l==="en")setLang(l); setDark(th==="dark");},[]);
+  useEffect(()=>{async function load(){const id=sessionStorage.getItem("vetra-client-id"), code=sessionStorage.getItem("vetra-client-code"), phone=sessionStorage.getItem("vetra-client-phone"); if(!id||id!==clientId||!code||!phone){router.replace("/client-interface/login");return;} try{const db=await getClientPortalDb(code,phone); const c=await db.from("clients").select("id,name,phone,email").eq("id",clientId).maybeSingle(); if(c.error||!c.data)throw new Error(c.error?.message||"Client not found"); const p=await db.from("pets").select("id,name,species,breed,gender,birth_date,color,is_deceased,created_at").eq("client_id",clientId).order("created_at",{ascending:false}); if(p.error)throw new Error(p.error.message); const ids=(p.data||[]).map(x=>x.id); let v:Visit[]=[];let vx:Vaccine[]=[]; if(ids.length){const vr=await db.from("visits").select("id,pet_id,visit_date,reason,examination,diagnosis,treatment,weight,temperature,heart_rate,respiratory_rate,notes").in("pet_id",ids).order("visit_date",{ascending:false}); if(vr.error)throw new Error(vr.error.message); v=(vr.data||[]) as Visit[]; const xr=await db.from("vaccinations").select("id,pet_id,vaccine_name,vaccine_type,administered_at,next_dose_at,notes").in("pet_id",ids).order("next_dose_at",{ascending:true}); if(xr.error)throw new Error(xr.error.message); vx=(xr.data||[]) as Vaccine[];} setClient(c.data as Client);setPets((p.data||[]) as Pet[]);setVisits(v);setVaccines(vx);setSelected((p.data?.[0]?.id as string)||""); }catch(e){console.error(e);setError(e instanceof Error?e.message:"Failed to load");}finally{setLoading(false);}} if(clientId)void load();},[clientId,router]);
+
+  const t=T[lang], pet=pets.find(x=>x.id===selected)||pets[0]||null;
+  const pv=useMemo(()=>pet?visits.filter(x=>x.pet_id===pet.id).sort((a,b)=>+new Date(b.visit_date)-+new Date(a.visit_date)):[],[pet,visits]);
+  const px=useMemo(()=>pet?vaccines.filter(x=>x.pet_id===pet.id).sort((a,b)=>(a.next_dose_at?+new Date(a.next_dose_at):9e15)-(b.next_dose_at?+new Date(b.next_dose_at):9e15)):[],[pet,vaccines]);
+  const next=px.find(x=>x.next_dose_at&&daysUntil(x.next_dose_at)>=0)||px.find(x=>x.next_dose_at)||null; const due=next?.next_dose_at?daysUntil(next.next_dose_at):null; const last=pv[0]||null;
+  const care=due!==null&&due<0?"needs":last&&Date.now()-+new Date(last.visit_date)<120*86400000?"good":"old";
+  const careLabel=care==="good"?t.good:care==="needs"?t.needs:t.old;
+  const metrics=[{n:t.weight,u:"kg",i:"⚖️",v:pv.filter(x=>x.weight!==null).slice(0,6).reverse().map(x=>Number(x.weight))},{n:t.temp,u:"°م",i:"🌡️",v:pv.filter(x=>x.temperature!==null).slice(0,6).reverse().map(x=>Number(x.temperature))},{n:t.heart,u:"bpm",i:"❤️",v:pv.filter(x=>x.heart_rate!==null).slice(0,6).reverse().map(x=>Number(x.heart_rate))},{n:t.resp,u:"/min",i:"🫁",v:pv.filter(x=>x.respiratory_rate!==null).slice(0,6).reverse().map(x=>Number(x.respiratory_rate))}];
+  const timeline=[...pv.map(x=>({id:`v${x.id}`,date:x.visit_date,type:"visit",title:x.reason|| (lang==="ar"?"زيارة":"Visit"),sub:x.diagnosis||x.examination||x.notes||""})),...px.filter(x=>x.administered_at).map(x=>({id:`x${x.id}`,date:x.administered_at!,type:"vaccine",title:x.vaccine_name||x.vaccine_type||(lang==="ar"?"تطعيم":"Vaccination"),sub:x.next_dose_at?`${t.next}: ${dateText(x.next_dose_at,lang)}`:t.completed}))].sort((a,b)=>+new Date(b.date)-+new Date(a.date)).slice(0,8);
+
+  const toggleTheme=()=>{const n=!dark;setDark(n);localStorage.setItem("vetra-theme",n?"dark":"light")}; const toggleLang=()=>{const n=lang==="ar"?"en":"ar";setLang(n);localStorage.setItem("vetra-language",n)}; const logout=()=>{sessionStorage.removeItem("vetra-client-id");sessionStorage.removeItem("vetra-client-code");sessionStorage.removeItem("vetra-client-phone");router.replace("/client-interface/login")};
+
+  if(loading)return <main dir={lang==="ar"?"rtl":"ltr"} className="flex min-h-screen items-center justify-center bg-[#06101a] text-white"><div className="text-center"><div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-cyan-400/10 text-3xl">🐾</div><p className="text-sm font-bold text-slate-400">{t.loading}</p></div></main>;
+  if(error&&!client)return <main dir={lang==="ar"?"rtl":"ltr"} className="flex min-h-screen items-center justify-center bg-[#06101a] px-6 text-white"><div className="max-w-md rounded-[2rem] border border-white/10 bg-white/[.04] p-8 text-center"><div className="text-5xl">🐾</div><h1 className="mt-4 text-2xl font-black">{t.error}</h1><p className="mt-3 text-sm text-slate-400">{error}</p><button onClick={()=>router.replace("/client-interface/login")} className="mt-6 rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-black text-slate-950">{t.login}</button></div></main>;
+
+  return <main id="home" dir={lang==="ar"?"rtl":"ltr"} className={dark?"min-h-screen overflow-x-hidden bg-[#06101a] text-white":"min-h-screen overflow-x-hidden bg-[#f5f9fc] text-slate-900"}>
+    <div className="pointer-events-none fixed inset-0 overflow-hidden"><div className={dark?"absolute -right-24 -top-24 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl":"absolute -right-24 -top-24 h-80 w-80 rounded-full bg-cyan-300/25 blur-3xl"}/><div className={dark?"absolute -left-24 top-1/3 h-96 w-96 rounded-full bg-violet-500/10 blur-3xl":"absolute -left-24 top-1/3 h-96 w-96 rounded-full bg-violet-300/20 blur-3xl"}/></div>
+    <div className="relative z-10 mx-auto max-w-7xl px-4 pb-28 pt-4 sm:px-6 lg:px-8">
+      <header className="sticky top-0 z-40 mb-6 flex items-center justify-between py-3 backdrop-blur-xl"><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-500 text-xl shadow-lg">🐾</div><div><div className="font-black tracking-[.18em]">VETRA</div><div className="text-[10px] font-bold tracking-[.18em] text-slate-500">PET CARE</div></div></div><div className="flex items-center gap-2"><button onClick={toggleLang} className={dark?"rounded-full border border-white/10 bg-white/[.05] px-3 py-2 text-xs font-bold":"rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold"}>{t.language}</button><button onClick={toggleTheme} className={dark?"flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[.05]":"flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white"}>{dark?"☀️":"🌙"}</button><button onClick={()=>setSettings(true)} className={dark?"flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[.05]":"flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white"}>⚙️</button></div></header>
+
+      <section className="grid gap-5 lg:grid-cols-[1fr_360px]"><div className={dark?"rounded-[2rem] border border-white/[.07] bg-gradient-to-br from-white/[.08] to-white/[.03] p-5 shadow-2xl sm:p-7":"rounded-[2rem] border border-slate-100 bg-white p-5 shadow-2xl sm:p-7"}><p className="text-sm font-bold text-cyan-400">{t.welcome}</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">{client?.name||"VETRA"} 👋</h1><p className="mt-3 text-sm leading-7 text-slate-400">{t.allCare}</p>
+        {pet&&<div className="mt-6 grid gap-4 md:grid-cols-[1.1fr_.9fr]"><div className="rounded-[1.7rem] bg-gradient-to-br from-[#0e2330] to-[#10142a] p-4 sm:p-5"><div className="flex items-center gap-4"><div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-[1.5rem] bg-white/10 text-6xl">{icon(pet.species)}</div><div className="min-w-0"><div className="text-xs font-bold text-cyan-300">{t.selected}</div><div className="mt-1 truncate text-2xl font-black">{pet.name}</div><div className="mt-1 text-xs text-slate-400">{species(pet.species,lang)} • {pet.gender==="Male"?t.male:pet.gender==="Female"?t.female:pet.gender||t.unknown} • {age(pet.birth_date,lang)}</div></div></div><div className="mt-5 rounded-2xl border border-emerald-400/10 bg-emerald-400/[.06] p-4"><div className="flex gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10">{care==="good"?"💚":"⚠️"}</div><div><div className="text-xs font-bold text-slate-500">{t.care}</div><div className="mt-1 font-black">{careLabel}</div><p className="mt-1 text-[11px] leading-5 text-slate-500">{t.careNote}</p></div></div></div></div>
+        <div className="rounded-[1.7rem] border border-white/[.06] bg-white/[.035] p-5"><div className="flex items-center justify-between gap-4"><div><div className="text-xs font-bold text-cyan-300">{t.next}</div><div className="mt-2 text-lg font-black">{next?.vaccine_name||next?.vaccine_type||t.none}</div>{next?.next_dose_at&&<div className="mt-1 text-xs text-slate-500">{dateText(next.next_dose_at,lang)}</div>}</div><Countdown days={due} lang={lang}/></div><button onClick={()=>next?.next_dose_at&&alert(lang==="ar"?"التذكير هيتوصل بنظام الإشعارات في الخطوة التالية.":"Reminder notifications will be connected in the next step.")} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-xs font-black text-slate-950">🔔 {t.reminder}</button></div></div>}
       </div>
+      <div id="pets-section" className={dark?"rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5":"rounded-[2rem] border border-slate-100 bg-white p-5"}><div className="flex items-center justify-between"><div><h2 className="text-lg font-black">{t.pets}</h2><p className="mt-1 text-xs text-slate-500">{pets.length} {t.count}</p></div><button onClick={()=>setAddPet(true)} className="rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2.5 text-xs font-black text-slate-950">+ {t.add}</button></div><div className="mt-4 max-h-[330px] space-y-2 overflow-y-auto pe-1">{pets.map(p=><button key={p.id} onClick={()=>setSelected(p.id)} className={p.id===pet?.id?"flex w-full items-center gap-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/[.08] p-3 text-start":"flex w-full items-center gap-3 rounded-2xl border border-white/[.05] bg-white/[.025] p-3 text-start transition hover:bg-white/[.05]"}><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-3xl">{icon(p.species)}</div><div className="min-w-0 flex-1"><div className="truncate font-black">{p.name}</div><div className="mt-1 text-[11px] text-slate-500">{species(p.species,lang)} • {age(p.birth_date,lang)}</div></div><span className="text-slate-500">‹</span></button>)}<button onClick={()=>setAddPet(true)} className="w-full rounded-2xl border border-dashed border-cyan-400/20 bg-cyan-400/[.03] p-4 text-xs font-black text-cyan-300">+ {t.add}</button></div></div></section>
+
+      {pet&&<><section className="mt-5 grid gap-5 lg:grid-cols-[1.1fr_.9fr]"><div className={dark?"rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5 sm:p-6":"rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6"}><div className="flex items-end justify-between"><div><p className="text-xs font-bold text-cyan-300">{t.trends}</p><h2 className="mt-1 text-2xl font-black">{pet.name}</h2></div><span className="rounded-full border border-white/[.06] bg-white/[.03] px-3 py-1.5 text-[10px] font-bold text-slate-400">{t.sixMonths}</span></div><div className="mt-5 grid gap-3 sm:grid-cols-2">{metrics.map(m=><div key={m.n} className={dark?"rounded-[1.5rem] border border-white/[.05] bg-white/[.025] p-4":"rounded-[1.5rem] border border-slate-100 bg-slate-50 p-4"}><div className="flex items-center gap-2"><span>{m.i}</span><span className="text-xs font-black">{m.n}</span></div><Chart values={m.v} unit={m.u} empty={t.noData}/></div>)}</div></div>
+        <div className={dark?"rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5 sm:p-6":"rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6"}><div className="flex items-center justify-between"><div><p className="text-xs font-bold text-cyan-300">{t.next}</p><h2 className="mt-1 text-2xl font-black">{t.vaccineHistory}</h2></div><span className="rounded-full bg-cyan-400/10 px-3 py-1.5 text-[10px] font-black text-cyan-300">{px.length}</span></div><div className="mt-5 space-y-2">{px.slice(0,5).map(x=>{const d=x.next_dose_at?daysUntil(x.next_dose_at):null;return <div key={x.id} className={dark?"rounded-2xl border border-white/[.05] bg-white/[.025] p-3.5":"rounded-2xl border border-slate-100 bg-slate-50 p-3.5"}><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-400/10">💉</div><div className="min-w-0 flex-1"><div className="truncate text-sm font-black">{x.vaccine_name||x.vaccine_type||"Vaccination"}</div><div className="mt-1 text-[10px] text-slate-500">{x.administered_at?dateText(x.administered_at,lang):"—"}</div></div><span className={d!==null&&d<0?"rounded-full bg-rose-400/10 px-2 py-1 text-[9px] font-black text-rose-300":"rounded-full bg-emerald-400/10 px-2 py-1 text-[9px] font-black text-emerald-300"}>{d!==null&&d<0?t.overdue:d!==null&&d<=30?t.soon:t.completed}</span></div></div>})}{px.length===0&&<div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">{t.noVaccines}</div>}</div></div></section>
+
+        <section className={dark?"mt-5 rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5 sm:p-6":"mt-5 rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6"}><div className="flex items-end justify-between"><div><p className="text-xs font-bold text-cyan-300">{t.history}</p><h2 className="mt-1 text-2xl font-black">{pet.name}</h2></div>{last&&<div className="hidden text-start sm:block"><div className="text-[10px] font-bold text-slate-500">{lang==="ar"?"آخر زيارة":"Last visit"}</div><div className="mt-1 text-xs font-black">{dateText(last.visit_date,lang)}</div></div>}</div><div className="mt-6">{timeline.length===0?<div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500"><div className="mb-2 text-3xl">🩺</div>{pv.length===0?t.noVisits:t.timelineNote}</div>:<div className="relative space-y-5"><div className={lang==="ar"?"absolute bottom-4 right-5 top-4 w-px bg-gradient-to-b from-cyan-400 via-violet-500 to-transparent":"absolute bottom-4 left-5 top-4 w-px bg-gradient-to-b from-cyan-400 via-violet-500 to-transparent"}/>{timeline.map(e=><div key={e.id} className="relative flex gap-4"><div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#0b1622]">{e.type==="vaccine"?"💉":"🩺"}</div><div className={dark?"flex-1 rounded-2xl border border-white/[.05] bg-white/[.025] p-4":"flex-1 rounded-2xl border border-slate-100 bg-slate-50 p-4"}><div className="flex flex-wrap items-center justify-between gap-2"><div className="font-black">{e.title}</div><div className="text-[10px] font-bold text-slate-500">{dateText(e.date,lang)}</div></div>{e.sub&&<div className="mt-2 text-xs leading-6 text-slate-500">{e.sub}</div>}</div></div>)}</div>}</div></section></>}
+
+      <section className={dark?"mt-5 rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5":"mt-5 rounded-[2rem] border border-slate-100 bg-white p-5"}><div className="flex items-center justify-between"><div><div className="text-xs font-bold text-cyan-300">{t.settings}</div><div className="mt-1 text-lg font-black">{client?.name}</div></div><span className="rounded-full bg-emerald-400/10 px-3 py-1.5 text-[10px] font-black text-emerald-300">🔐 {t.secure}</span></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><div className={dark?"rounded-2xl border border-white/[.05] bg-white/[.025] p-4":"rounded-2xl border border-slate-100 bg-slate-50 p-4"}><div className="text-[10px] font-bold text-slate-500">{t.phone}</div><div dir="ltr" className="mt-1 text-sm font-black">{client?.phone||"—"}</div></div><div className={dark?"rounded-2xl border border-white/[.05] bg-white/[.025] p-4":"rounded-2xl border border-slate-100 bg-slate-50 p-4"}><div className="text-[10px] font-bold text-slate-500">{t.email}</div><div className="mt-1 truncate text-sm font-black">{client?.email||"—"}</div></div></div></section>
     </div>
-  ) : null;
 
-  return (
-    <>
-      {setupModal}
+    <nav className="fixed bottom-0 left-0 right-0 z-50 p-3"><div className={dark?"mx-auto flex max-w-md items-center justify-around rounded-3xl border border-white/10 bg-[#0a1520]/95 px-3 py-2 shadow-2xl backdrop-blur-xl":"mx-auto flex max-w-md items-center justify-around rounded-3xl border border-slate-200 bg-white/95 px-3 py-2 shadow-2xl backdrop-blur-xl"}><button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})} className="flex min-w-20 flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-black text-cyan-300"><span className="text-lg">⌂</span>{t.home}</button><button onClick={()=>document.getElementById("pets-section")?.scrollIntoView({behavior:"smooth"})} className="flex min-w-20 flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-black text-slate-500"><span className="text-lg">🐾</span>{t.pets}</button><button onClick={()=>setSettings(true)} className="flex min-w-20 flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-black text-slate-500"><span className="text-lg">☰</span>{t.more}</button></div></nav>
 
-      <main
-        dir={ar ? "rtl" : "ltr"}
-        className={`min-h-screen overflow-hidden transition-colors duration-700 ${
-          dark
-            ? "bg-[#07111C] text-white"
-            : "bg-[#F8FBFF] text-slate-900"
-        }`}
-      >
-        <div className="pointer-events-none fixed inset-0 overflow-hidden">
-          <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-cyan-300/20 blur-3xl" />
-          <div className="absolute -right-32 top-1/4 h-[30rem] w-[30rem] rounded-full bg-blue-300/20 blur-3xl" />
-          <div className="absolute bottom-[-10rem] left-1/3 h-96 w-96 rounded-full bg-emerald-300/15 blur-3xl" />
-          <div className="absolute left-[5%] top-[35%] rotate-[-18deg] text-8xl opacity-10">
-            🐾
-          </div>
-          <div className="absolute right-[5%] bottom-[20%] rotate-[18deg] text-8xl opacity-10">
-            🐾
-          </div>
-        </div>
-
-        <header className="relative z-10 flex items-center justify-between px-5 py-5 sm:px-10">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-2xl text-white shadow-xl dark:bg-white dark:text-slate-900">
-              🐾
-            </div>
-
-            <div>
-              <div className="font-black tracking-[0.2em]">
-                VETRA
-              </div>
-
-              <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400">
-                Pet Care Portal
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() =>
-                setLanguage(ar ? "en" : "ar")
-              }
-              className="rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-xs font-bold backdrop-blur dark:border-white/10 dark:bg-white/5"
-            >
-              {ar ? "English" : "العربية"}
-            </button>
-
-            <button
-              onClick={() => setDark((v) => !v)}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/70 backdrop-blur dark:border-white/10 dark:bg-white/5"
-            >
-              {dark ? "☀️" : "🌙"}
-            </button>
-
-            <button
-              onClick={signOut}
-              className="rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-xs font-bold backdrop-blur dark:border-white/10 dark:bg-white/5"
-            >
-              {ar ? "خروج" : "Sign out"}
-            </button>
-          </div>
-        </header>
-
-        <section className="relative z-10 mx-auto max-w-7xl px-5 pb-12 sm:px-10">
-          <div className="grid items-center gap-10 rounded-[3rem] border border-white/70 bg-white/65 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5 sm:p-10 lg:grid-cols-[1.05fr_.95fr]">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white/80 px-4 py-2 text-xs font-bold text-cyan-700 dark:border-cyan-300/10 dark:bg-white/5 dark:text-cyan-300">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-
-                {ar
-                  ? "رعاية حيوانك في مكان واحد"
-                  : "Your pet care, all in one place"}
-              </div>
-
-              <h1 className="mt-6 text-5xl font-black leading-[1.02] tracking-tight sm:text-6xl">
-                {ar
-                  ? "Welcome back، "
-                  : "Welcome back, "}
-
-                <span className="text-cyan-500">
-                  {client?.name || "Pet Owner"}
-                </span>{" "}
-                👋
-              </h1>
-
-              <p className="mt-5 max-w-xl text-lg leading-8 text-slate-500 dark:text-slate-300">
-                {ar
-                  ? "كل تفاصيل حيواناتك، مواعيدك وتطعيماتك وفواتيرك هنا."
-                  : "Your pets, appointments, vaccines and invoices — all in one place."}
-              </p>
-
-              <div className="mt-7 flex flex-wrap gap-3">
-                <div className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white dark:bg-white dark:text-slate-900">
-                  {pets.length}{" "}
-                  {ar
-                    ? "حيوان"
-                    : pets.length === 1
-                      ? "Pet"
-                      : "Pets"}
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white/70 px-5 py-3 text-sm font-bold dark:border-white/10 dark:bg-white/5">
-                  {ar
-                    ? "حساب آمن"
-                    : "Secure account"}{" "}
-                  🔐
-                </div>
-              </div>
-            </div>
-
-            <div className="relative mx-auto h-[360px] w-full max-w-[430px]">
-              <div className="absolute inset-5 rounded-[3rem] bg-gradient-to-br from-cyan-100 via-white to-blue-100 shadow-2xl dark:from-cyan-500/10 dark:via-slate-900 dark:to-blue-500/10" />
-
-              <div className="absolute left-1/2 top-5 flex h-56 w-56 -translate-x-1/2 items-center justify-center rounded-full bg-white/80 text-[8rem] shadow-2xl backdrop-blur-xl dark:bg-white/5">
-                {heroPet?.species
-                  ?.toLowerCase()
-                  .includes("cat")
-                  ? "🐱"
-                  : "🐶"}
-              </div>
-
-              <div className="absolute bottom-0 left-4 right-4 rounded-[2rem] border border-white/70 bg-white/90 p-5 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#101923]/90">
-                <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  {ar
-                    ? "حيوانك المميز"
-                    : "Your Hero Pet"}
-                </div>
-
-                <div className="mt-1 text-2xl font-black">
-                  {heroPet?.name || "Your Hero Pet"} 🐾
-                </div>
-
-                <div className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-                  {heroPet
-                    ? `${heroPet.species}${
-                        heroPet.breed
-                          ? ` • ${heroPet.breed}`
-                          : ""
-                      }`
-                    : ar
-                      ? "لم تضف حيوانًا بعد"
-                      : "No pet added yet"}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {cards.map(([icon, title, subtitle]) => (
-              <button
-                key={title}
-                className="group rounded-[2rem] border border-white/70 bg-white/70 p-6 text-left shadow-lg backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:shadow-2xl dark:border-white/10 dark:bg-white/5"
-              >
-                <div className="text-3xl transition duration-300 group-hover:scale-110">
-                  {icon}
-                </div>
-
-                <div className="mt-5 text-lg font-black">
-                  {title}
-                </div>
-
-                <div className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-300">
-                  {subtitle}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-8">
-            <h2 className="text-2xl font-black">
-              {ar ? "حيواناتك" : "Your Pets"}
-            </h2>
-
-            {pets.length === 0 ? (
-              <div className="mt-4 rounded-[2rem] border border-dashed border-slate-300 bg-white/50 p-8 text-center text-sm text-slate-500 dark:border-white/10 dark:bg-white/5">
-                {ar
-                  ? "لا توجد حيوانات مرتبطة بهذا الحساب حتى الآن."
-                  : "No pets are linked to this account yet."}
-              </div>
-            ) : (
-              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {pets.map((pet) => (
-                  <button
-                    key={pet.id}
-                    onClick={() =>
-                      router.push(
-                        `/client-interface/${clientId}?pet=${pet.id}`
-                      )
-                    }
-                    className="rounded-[2rem] border border-white/70 bg-white/70 p-5 text-left shadow-lg backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-2xl dark:border-white/10 dark:bg-white/5"
-                  >
-                    <div className="text-4xl">
-                      {pet.species
-                        .toLowerCase()
-                        .includes("cat")
-                        ? "🐱"
-                        : "🐶"}
-                    </div>
-
-                    <div className="mt-3 text-xl font-black">
-                      {pet.name}
-                    </div>
-
-                    <div className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-                      {pet.species}
-                      {pet.breed
-                        ? ` • ${pet.breed}`
-                        : ""}
-                    </div>
-
-                    {pet.is_deceased && (
-                      <div className="mt-3 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-white/10">
-                        {ar ? "متوفى" : "Deceased"}
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      </main>
-    </>
-  );
+    {settings&&<div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center"><div className={dark?"w-full max-w-md rounded-[2rem] border border-white/10 bg-[#0b1622] p-5 text-white shadow-2xl":"w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl"}><div className="flex items-center justify-between"><h2 className="text-xl font-black">{t.settings}</h2><button onClick={()=>setSettings(false)} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5">✕</button></div><div className="mt-5 space-y-2"><button onClick={toggleTheme} className="flex w-full items-center justify-between rounded-2xl border border-white/5 bg-white/[.03] p-4"><span className="font-black">{dark?t.dark:t.light}</span><span>{dark?"☀️":"🌙"}</span></button><button onClick={toggleLang} className="flex w-full items-center justify-between rounded-2xl border border-white/5 bg-white/[.03] p-4"><span className="font-black">Language / اللغة</span><span className="text-cyan-300">{lang==="ar"?"عربي":"English"}</span></button><button onClick={logout} className="flex w-full items-center justify-between rounded-2xl border border-rose-400/10 bg-rose-400/[.05] p-4 text-rose-300"><span className="font-black">{t.logout}</span><span>↪</span></button></div></div></div>}
+    {addPet&&<div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center"><div className={dark?"w-full max-w-md rounded-[2rem] border border-white/10 bg-[#0b1622] p-6 text-white shadow-2xl":"w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl"}><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-400/10 text-3xl">🐾</div><h2 className="mt-4 text-center text-2xl font-black">{t.addTitle}</h2><p className="mt-3 text-center text-sm leading-7 text-slate-500">{t.addNote}</p><button onClick={()=>setAddPet(false)} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3.5 text-sm font-black text-slate-950">{t.close}</button></div></div>}
+  </main>;
 }
