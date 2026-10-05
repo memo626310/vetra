@@ -63,7 +63,61 @@ export default function LoginPage() {
     }
 
     // ==========================================
-    // 3. Continue to Dashboard
+    // 3. Check clinic BEFORE entering Dashboard
+    // ==========================================
+
+    const {
+      data: clinicData,
+      error: clinicContextError,
+    } = await vetraCore.rpc(
+      "get_my_clinic_context"
+    );
+
+    if (clinicContextError) {
+      console.error(
+        "VETRA CORE CLINIC CONTEXT ERROR:",
+        clinicContextError
+      );
+
+      await Promise.all([
+        vetraCore.auth.signOut(),
+        supabase.auth.signOut(),
+      ]);
+
+      setError(
+        "We could not verify your clinic. Please try again."
+      );
+
+      setLoading(false);
+      return;
+    }
+
+    const clinicContext = Array.isArray(clinicData)
+      ? clinicData[0] ?? null
+      : null;
+
+    console.log(
+      "LOGIN CLINIC CHECK:",
+      clinicContext
+    );
+
+    // ==========================================
+    // 4. No active clinic → Clinic Setup
+    // ==========================================
+
+    if (
+      !clinicContext ||
+      !clinicContext.clinic_id ||
+      clinicContext.clinic_status !== "active" ||
+      clinicContext.member_status !== "active"
+    ) {
+      router.replace("/clinic-setup");
+      router.refresh();
+      return;
+    }
+
+    // ==========================================
+    // 5. Active clinic → Dashboard
     // ==========================================
 
     router.replace("/dashboard");

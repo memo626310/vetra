@@ -249,6 +249,27 @@ export default function Home() {
         context
       );
 
+      // =====================================================
+      // CLINIC ACCESS GUARD
+      // User cannot access the dashboard without an active
+      // clinic and an active clinic membership.
+      // =====================================================
+
+      if (
+        !context ||
+        !context.clinic_id ||
+        context.clinic_status !== "active" ||
+        context.member_status !== "active"
+      ) {
+        if (mounted) {
+          setClinicContext(null);
+          setClinicLoading(false);
+          window.location.replace("/clinic-setup");
+        }
+
+        return;
+      }
+
       if (mounted) {
         setClinicContext(context);
         setClinicLoading(false);
