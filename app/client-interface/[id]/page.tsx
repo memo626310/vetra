@@ -11,8 +11,8 @@ type Visit = { id: string; pet_id: string; visit_date: string; reason: string | 
 type Vaccine = { id: string; pet_id: string; vaccine_name: string | null; vaccine_type: string | null; administered_at: string | null; next_dose_at: string | null; notes: string | null };
 
 const T = {
-  ar: { home:"الرئيسية", pets:"حيواناتي", more:"المزيد", welcome:"مساء الخير", allCare:"كل رعاية حيواناتك في مكان واحد", selected:"الحيوان المختار", count:"حيوانات", add:"إضافة حيوان", score:"نقاط VETRA", scorePerfect:"10/10 🎉 ممتاز!", scoreAlmost:"قربت توصل 10/10!", scoreGood:"أنت على الطريق الصح", scoreStart:"خلّينا نكملها سوا", scoreNote:"ده مقياس تفاعلي لاكتمال متابعة الحيوان داخل VETRA، مش تقييمًا طبيًا.", scoreMissing:"متبقي", scoreProfile:"بيانات الحيوان", scoreVaccines:"متابعة التطعيمات", scoreFollowUp:"المتابعة الدورية", scoreMonthly:"زيارة العيادة الشهرية", scoreViral:"الفيروسي", scoreRabies:"السعار", scoreDeworm:"الديدان", scoreParasite:"الحشرات", next:"التطعيم القادم", none:"مفيش تطعيمات قادمة", overdue:"متأخر", day:"يوم", daysLeft:"متبقي", reminder:"فعّل تذكير", trends:"المؤشرات الحيوية", sixMonths:"آخر 6 شهور", noData:"بيانات غير كافية", weight:"الوزن", temp:"الحرارة", heart:"نبض القلب", resp:"معدل التنفس", history:"التاريخ الطبي", vaccineHistory:"سجل التطعيمات", completed:"مكتمل", soon:"قريبًا", noVaccines:"مفيش تطعيمات مسجلة", noVisits:"مفيش زيارات مسجلة", timelineNote:"التاريخ الطبي هيظهر هنا مع أول زيارة أو تطعيم.", settings:"الإعدادات", light:"الوضع الفاتح", dark:"الوضع الداكن", language:"English", logout:"تسجيل الخروج", secure:"حساب آمن", phone:"الهاتف", email:"البريد الإلكتروني", addTitle:"إضافة حيوان جديد", addNote:"تقدر تضيف أكتر من حيوان لنفس الحساب. اكتب البيانات الأساسية، وVETRA هتربط الحيوان بحسابك بشكل آمن.", name:"اسم الحيوان", species:"النوع", cat:"قطة", dog:"كلب", other:"أخرى", gender:"النوع", female:"أنثى", male:"ذكر", birth:"تاريخ الميلاد", breed:"السلالة", color:"اللون", save:"حفظ الحيوان", saving:"جاري الحفظ...", cancel:"إلغاء", required:"اكتب اسم الحيوان", created:"تمت إضافة الحيوان بنجاح", close:"إغلاق", error:"تعذر تحميل بياناتك", login:"العودة لتسجيل الدخول", loading:"جاري تحميل VETRA...", age:"العمر", male:"ذكر", female:"أنثى", unknown:"غير محدد" },
-  en: { home:"Home", pets:"My Pets", more:"More", welcome:"Good evening", allCare:"All your pets' care in one place", selected:"Selected pet", count:"pets", add:"Add Pet", score:"VETRA Score", scorePerfect:"10/10 🎉 Excellent!", scoreAlmost:"You are almost at 10/10!", scoreGood:"You are on the right track", scoreStart:"Let's complete it together", scoreNote:"This is an interactive care-completeness indicator inside VETRA, not a medical score.", scoreMissing:"remaining", scoreProfile:"Pet profile", scoreVaccines:"Vaccination tracking", scoreFollowUp:"Regular follow-up", scoreMonthly:"Monthly clinic visit", scoreViral:"Core viral vaccine", scoreRabies:"Rabies", scoreDeworm:"Deworming", scoreParasite:"Parasite control", next:"Next vaccine", none:"No upcoming vaccines", overdue:"Overdue", day:"day", daysLeft:"left", reminder:"Set reminder", trends:"Health trends", sixMonths:"Last 6 months", noData:"Not enough data", weight:"Weight", temp:"Temperature", heart:"Heart rate", resp:"Respiratory rate", history:"Medical history", vaccineHistory:"Vaccination history", completed:"Completed", soon:"Due soon", noVaccines:"No vaccinations recorded", noVisits:"No visits recorded", timelineNote:"Medical history will appear here after the first visit or vaccination.", settings:"Settings", light:"Light mode", dark:"Dark mode", language:"العربية", logout:"Sign out", secure:"Secure account", phone:"Phone", email:"Email", addTitle:"Add a new pet", addNote:"You can keep multiple pets on the same account. Add the basics here and VETRA will link the pet to your account securely.", name:"Pet name", species:"Species", cat:"Cat", dog:"Dog", other:"Other", gender:"Gender", female:"Female", male:"Male", birth:"Date of birth", breed:"Breed", color:"Color", save:"Save pet", saving:"Saving...", cancel:"Cancel", required:"Enter the pet name", created:"Pet added successfully", close:"Close", error:"We couldn't load your data", login:"Back to login", loading:"Loading VETRA...", age:"Age", male:"Male", female:"Female", unknown:"Not specified" }
+  ar: { home:"الرئيسية", pets:"حيواناتي", more:"المزيد", welcome:"مساء الخير", allCare:"كل رعاية حيواناتك في مكان واحد", selected:"الحيوان المختار", count:"حيوانات", add:"إضافة حيوان", score:"نقاط VETRA", scorePerfect:"10/10 🎉 ممتاز!", scoreAlmost:"قربت توصل 10/10!", scoreGood:"أنت على الطريق الصح", scoreStart:"خلّينا نكملها سوا", scoreNote:"ده مقياس تفاعلي لاكتمال متابعة الحيوان داخل VETRA، مش تقييمًا طبيًا.", scoreMissing:"متبقي", scoreProfile:"بيانات الحيوان", scoreVaccines:"متابعة التطعيمات", scoreFollowUp:"المتابعة الدورية", scoreMonthly:"زيارة العيادة الشهرية", scoreViral:"الفيروسي", scoreRabies:"السعار", scoreDeworm:"الديدان", scoreParasite:"الحشرات", next:"التطعيم القادم", none:"مفيش تطعيمات قادمة", overdue:"متأخر", day:"يوم", daysLeft:"متبقي", reminder:"فعّل تذكير", trends:"المؤشرات الحيوية", sixMonths:"آخر 6 شهور", noData:"بيانات غير كافية", weight:"الوزن", temp:"الحرارة", heart:"نبض القلب", resp:"معدل التنفس", history:"التاريخ الطبي", vaccineHistory:"سجل التطعيمات", completed:"مكتمل", soon:"قريبًا", noVaccines:"مفيش تطعيمات مسجلة", noVisits:"مفيش زيارات مسجلة", timelineNote:"التاريخ الطبي هيظهر هنا مع أول زيارة أو تطعيم.", settings:"الإعدادات", light:"الوضع الفاتح", dark:"الوضع الداكن", language:"English", logout:"تسجيل الخروج", secure:"حساب آمن", phone:"الهاتف", email:"البريد الإلكتروني", addTitle:"إضافة حيوان جديد", addNote:"تقدر تضيف أكتر من حيوان لنفس الحساب. اكتب البيانات الأساسية، وVETRA هتربط الحيوان بحسابك بشكل آمن.", name:"اسم الحيوان", species:"النوع", cat:"قطة", dog:"كلب", other:"أخرى", gender:"النوع", female:"أنثى", male:"ذكر", birth:"تاريخ الميلاد", breed:"السلالة", color:"اللون", save:"حفظ الحيوان", saving:"جاري الحفظ...", cancel:"إلغاء", required:"اكتب اسم الحيوان", created:"تمت إضافة الحيوان بنجاح", close:"إغلاق", error:"تعذر تحميل بياناتك", login:"العودة لتسجيل الدخول", loading:"جاري تحميل VETRA...", age:"العمر", unknown:"غير محدد" },
+  en: { home:"Home", pets:"My Pets", more:"More", welcome:"Good evening", allCare:"All your pets' care in one place", selected:"Selected pet", count:"pets", add:"Add Pet", score:"VETRA Score", scorePerfect:"10/10 🎉 Excellent!", scoreAlmost:"You are almost at 10/10!", scoreGood:"You are on the right track", scoreStart:"Let's complete it together", scoreNote:"This is an interactive care-completeness indicator inside VETRA, not a medical score.", scoreMissing:"remaining", scoreProfile:"Pet profile", scoreVaccines:"Vaccination tracking", scoreFollowUp:"Regular follow-up", scoreMonthly:"Monthly clinic visit", scoreViral:"Core viral vaccine", scoreRabies:"Rabies", scoreDeworm:"Deworming", scoreParasite:"Parasite control", next:"Next vaccine", none:"No upcoming vaccines", overdue:"Overdue", day:"day", daysLeft:"left", reminder:"Set reminder", trends:"Health trends", sixMonths:"Last 6 months", noData:"Not enough data", weight:"Weight", temp:"Temperature", heart:"Heart rate", resp:"Respiratory rate", history:"Medical history", vaccineHistory:"Vaccination history", completed:"Completed", soon:"Due soon", noVaccines:"No vaccinations recorded", noVisits:"No visits recorded", timelineNote:"Medical history will appear here after the first visit or vaccination.", settings:"Settings", light:"Light mode", dark:"Dark mode", language:"العربية", logout:"Sign out", secure:"Secure account", phone:"Phone", email:"Email", addTitle:"Add a new pet", addNote:"You can keep multiple pets on the same account. Add the basics here and VETRA will link the pet to your account securely.", name:"Pet name", species:"Species", cat:"Cat", dog:"Dog", other:"Other", gender:"Gender", female:"Female", male:"Male", birth:"Date of birth", breed:"Breed", color:"Color", save:"Save pet", saving:"Saving...", cancel:"Cancel", required:"Enter the pet name", created:"Pet added successfully", close:"Close", error:"We couldn't load your data", login:"Back to login", loading:"Loading VETRA...", age:"Age", unknown:"Not specified" }
 } as const;
 
 const icon = (s:string) => s.toLowerCase().includes("cat") || s.includes("قط") ? "🐱" : s.toLowerCase().includes("dog") || s.includes("كلب") ? "🐶" : "🐾";
@@ -44,6 +44,30 @@ function careState(nextDue: string | null): "not_due" | "current" | "grace" | "o
   if (d > 0) return "current";
   if (d >= -GRACE_DAYS) return "grace";
   return "overdue";
+}
+
+function getOwnerSession() {
+  const read = (storage: Storage) => ({
+    id: storage.getItem("vetra-client-id"),
+    code: storage.getItem("vetra-client-code"),
+    phone: storage.getItem("vetra-client-phone"),
+  });
+
+  const persistent = read(window.localStorage);
+  if (persistent.id && persistent.code && persistent.phone) {
+    return persistent;
+  }
+
+  // One-time migration for owners who logged in before persistent sessions.
+  const legacy = read(window.sessionStorage);
+  if (legacy.id && legacy.code && legacy.phone) {
+    window.localStorage.setItem("vetra-client-id", legacy.id);
+    window.localStorage.setItem("vetra-client-code", legacy.code);
+    window.localStorage.setItem("vetra-client-phone", legacy.phone);
+    return legacy;
+  }
+
+  return { id: null, code: null, phone: null };
 }
 
 function recordText(v: Vaccine) {
@@ -276,7 +300,8 @@ export default function ClientInterfaceIdPage(){
     if (showLoader) setLoading(true);
     setError("");
 
-    const id=sessionStorage.getItem("vetra-client-id"), code=sessionStorage.getItem("vetra-client-code"), phone=sessionStorage.getItem("vetra-client-phone");
+    const ownerSession=getOwnerSession();
+    const id=ownerSession.id, code=ownerSession.code, phone=ownerSession.phone;
     if(!id||id!==clientId||!code||!phone){router.replace("/client-interface/login");return;}
 
     try{
@@ -325,14 +350,28 @@ export default function ClientInterfaceIdPage(){
       if (document.visibilityState === "visible") void loadDashboard(false);
     };
 
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "vetra-data-version") refresh();
+    };
+
     window.addEventListener("focus", refresh);
     window.addEventListener("pageshow", refresh);
+    window.addEventListener("storage", onStorage);
     document.addEventListener("visibilitychange", refresh);
+
+    // Keep the owner dashboard in sync with new visits made in another tab
+    // or from the doctor interface. This runs only while the page is visible
+    // and never shows the global loading state.
+    const syncTimer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadDashboard(false);
+    }, 10000);
 
     return () => {
       window.removeEventListener("focus", refresh);
       window.removeEventListener("pageshow", refresh);
+      window.removeEventListener("storage", onStorage);
       document.removeEventListener("visibilitychange", refresh);
+      window.clearInterval(syncTimer);
     };
   },[clientId,router]);
 
@@ -403,15 +442,16 @@ export default function ClientInterfaceIdPage(){
   const due = next ? daysUntil(next.due) : null;
   const timeline=[...pv.map(x=>({id:`v${x.id}`,date:x.visit_date,type:"visit",title:x.reason|| (lang==="ar"?"زيارة":"Visit"),sub:x.diagnosis||x.examination||x.notes||""})),...px.filter(x=>x.administered_at).map(x=>({id:`x${x.id}`,date:x.administered_at!,type:"vaccine",title:x.vaccine_name||x.vaccine_type||(lang==="ar"?"تطعيم":"Vaccination"),sub:x.next_dose_at?`${t.next}: ${dateText(x.next_dose_at,lang)}`:t.completed}))].sort((a,b)=>+new Date(b.date)-+new Date(a.date)).slice(0,8);
 
-  const toggleTheme=()=>{const n=!dark;setDark(n);localStorage.setItem("vetra-theme",n?"dark":"light")}; const toggleLang=()=>{const n=lang==="ar"?"en":"ar";setLang(n);localStorage.setItem("vetra-language",n)}; const logout=()=>{sessionStorage.removeItem("vetra-client-id");sessionStorage.removeItem("vetra-client-code");sessionStorage.removeItem("vetra-client-phone");router.replace("/client-interface/login")};
+  const toggleTheme=()=>{const n=!dark;setDark(n);localStorage.setItem("vetra-theme",n?"dark":"light")}; const toggleLang=()=>{const n=lang==="ar"?"en":"ar";setLang(n);localStorage.setItem("vetra-language",n)}; const logout=()=>{localStorage.removeItem("vetra-client-id");localStorage.removeItem("vetra-client-code");localStorage.removeItem("vetra-client-phone");sessionStorage.removeItem("vetra-client-id");sessionStorage.removeItem("vetra-client-code");sessionStorage.removeItem("vetra-client-phone");router.replace("/client-interface/login")};
 
   async function createPet(){
     setError("");
     if(!petForm.name.trim()){setError(t.required);return;}
     setSavingPet(true);
     try{
-      const code=sessionStorage.getItem("vetra-client-code");
-      const phone=sessionStorage.getItem("vetra-client-phone");
+      const ownerSession=getOwnerSession();
+      const code=ownerSession.code;
+      const phone=ownerSession.phone;
       if(!code||!phone) throw new Error("Session expired.");
       const db=await getClientPortalDb(code,phone);
       const result=await db.rpc("vetra_add_pet_for_owner",{
