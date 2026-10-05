@@ -11,8 +11,8 @@ type Visit = { id: string; pet_id: string; visit_date: string; reason: string | 
 type Vaccine = { id: string; pet_id: string; vaccine_name: string | null; vaccine_type: string | null; administered_at: string | null; next_dose_at: string | null; notes: string | null };
 
 const T = {
-  ar: { home:"الرئيسية", pets:"حيواناتي", more:"المزيد", welcome:"مساء الخير", allCare:"كل رعاية حيواناتك في مكان واحد", selected:"الحيوان المختار", count:"حيوانات", add:"إضافة حيوان", score:"نقاط VETRA", scorePerfect:"10/10 🎉 ممتاز!", scoreAlmost:"قربت توصل 10/10!", scoreGood:"أنت على الطريق الصح", scoreStart:"خلّينا نكملها سوا", scoreNote:"ده مقياس تفاعلي لاكتمال متابعة الحيوان داخل VETRA، مش تقييمًا طبيًا.", scoreMissing:"متبقي", scoreProfile:"بيانات الحيوان", scoreVaccines:"متابعة التطعيمات", scoreFollowUp:"المتابعة الدورية", scoreMonthly:"زيارة العيادة الشهرية", scoreViral:"الفيروسي", scoreRabies:"السعار", scoreDeworm:"الديدان", scoreParasite:"الحشرات", next:"التطعيم القادم", none:"مفيش تطعيمات قادمة", overdue:"متأخر", day:"يوم", daysLeft:"متبقي", reminder:"فعّل تذكير", trends:"المؤشرات الحيوية", sixMonths:"آخر 6 شهور", noData:"بيانات غير كافية", weight:"الوزن", temp:"الحرارة", heart:"نبض القلب", resp:"معدل التنفس", history:"التاريخ الطبي", vaccineHistory:"سجل التطعيمات", completed:"مكتمل", soon:"قريبًا", noVaccines:"مفيش تطعيمات مسجلة", noVisits:"مفيش زيارات مسجلة", timelineNote:"التاريخ الطبي هيظهر هنا مع أول زيارة أو تطعيم.", settings:"الإعدادات", light:"الوضع الفاتح", dark:"الوضع الداكن", language:"English", logout:"تسجيل الخروج", secure:"حساب آمن", phone:"الهاتف", email:"البريد الإلكتروني", addTitle:"إضافة حيوان جديد", addNote:"تقدر تضيف أكتر من حيوان لنفس الحساب. اكتب البيانات الأساسية، وVETRA هتربط الحيوان بحسابك بشكل آمن.", name:"اسم الحيوان", species:"النوع", cat:"قطة", dog:"كلب", other:"أخرى", gender:"النوع", female:"أنثى", male:"ذكر", birth:"تاريخ الميلاد", breed:"السلالة", color:"اللون", save:"حفظ الحيوان", saving:"جاري الحفظ...", cancel:"إلغاء", required:"اكتب اسم الحيوان", created:"تمت إضافة الحيوان بنجاح", close:"إغلاق", error:"تعذر تحميل بياناتك", login:"العودة لتسجيل الدخول", loading:"جاري تحميل VETRA...", age:"العمر", unknown:"غير محدد" },
-  en: { home:"Home", pets:"My Pets", more:"More", welcome:"Good evening", allCare:"All your pets' care in one place", selected:"Selected pet", count:"pets", add:"Add Pet", score:"VETRA Score", scorePerfect:"10/10 🎉 Excellent!", scoreAlmost:"You are almost at 10/10!", scoreGood:"You are on the right track", scoreStart:"Let's complete it together", scoreNote:"This is an interactive care-completeness indicator inside VETRA, not a medical score.", scoreMissing:"remaining", scoreProfile:"Pet profile", scoreVaccines:"Vaccination tracking", scoreFollowUp:"Regular follow-up", scoreMonthly:"Monthly clinic visit", scoreViral:"Core viral vaccine", scoreRabies:"Rabies", scoreDeworm:"Deworming", scoreParasite:"Parasite control", next:"Next vaccine", none:"No upcoming vaccines", overdue:"Overdue", day:"day", daysLeft:"left", reminder:"Set reminder", trends:"Health trends", sixMonths:"Last 6 months", noData:"Not enough data", weight:"Weight", temp:"Temperature", heart:"Heart rate", resp:"Respiratory rate", history:"Medical history", vaccineHistory:"Vaccination history", completed:"Completed", soon:"Due soon", noVaccines:"No vaccinations recorded", noVisits:"No visits recorded", timelineNote:"Medical history will appear here after the first visit or vaccination.", settings:"Settings", light:"Light mode", dark:"Dark mode", language:"العربية", logout:"Sign out", secure:"Secure account", phone:"Phone", email:"Email", addTitle:"Add a new pet", addNote:"You can keep multiple pets on the same account. Add the basics here and VETRA will link the pet to your account securely.", name:"Pet name", species:"Species", cat:"Cat", dog:"Dog", other:"Other", gender:"Gender", female:"Female", male:"Male", birth:"Date of birth", breed:"Breed", color:"Color", save:"Save pet", saving:"Saving...", cancel:"Cancel", required:"Enter the pet name", created:"Pet added successfully", close:"Close", error:"We couldn't load your data", login:"Back to login", loading:"Loading VETRA...", age:"Age", unknown:"Not specified" }
+  ar: { home:"الرئيسية", pets:"حيواناتي", more:"المزيد", welcome:"مساء الخير", allCare:"كل رعاية حيواناتك في مكان واحد", selected:"الحيوان المختار", count:"حيوانات", add:"إضافة حيوان", score:"نقاط VETRA", scorePerfect:"10/10 🎉 ممتاز!", scoreAlmost:"قربت توصل 10/10!", scoreGood:"أنت على الطريق الصح", scoreStart:"خلّينا نكملها سوا", scoreNote:"ده مقياس تفاعلي لاكتمال متابعة الحيوان داخل VETRA، مش تقييمًا طبيًا.", scoreMissing:"متبقي", scoreProfile:"بيانات الحيوان", scoreVaccines:"متابعة التطعيمات", scoreFollowUp:"المتابعة الدورية", scoreMonthly:"زيارة العيادة الشهرية", scoreViral:"الفيروسي", scoreRabies:"السعار", scoreDeworm:"الديدان", scoreParasite:"الحشرات", next:"الاستحقاق القادم", none:"مفيش تطعيمات قادمة", overdue:"متأخر", day:"يوم", daysLeft:"متبقي", reminder:"فعّل تذكير", trends:"المؤشرات الحيوية", sixMonths:"آخر 6 شهور", noData:"بيانات غير كافية", weight:"الوزن", temp:"الحرارة", heart:"نبض القلب", resp:"معدل التنفس", history:"التاريخ الطبي", vaccineHistory:"سجل التطعيمات", completed:"مكتمل", soon:"قريبًا", noVaccines:"مفيش تطعيمات مسجلة", noVisits:"مفيش زيارات مسجلة", timelineNote:"التاريخ الطبي هيظهر هنا مع أول زيارة أو تطعيم.", settings:"الإعدادات", light:"الوضع الفاتح", dark:"الوضع الداكن", language:"English", logout:"تسجيل الخروج", secure:"حساب آمن", phone:"الهاتف", email:"البريد الإلكتروني", addTitle:"إضافة حيوان جديد", addNote:"تقدر تضيف أكتر من حيوان لنفس الحساب. اكتب البيانات الأساسية، وVETRA هتربط الحيوان بحسابك بشكل آمن.", name:"اسم الحيوان", species:"النوع", cat:"قطة", dog:"كلب", other:"أخرى", gender:"النوع", female:"أنثى", male:"ذكر", birth:"تاريخ الميلاد", breed:"السلالة", color:"اللون", save:"حفظ الحيوان", saving:"جاري الحفظ...", cancel:"إلغاء", required:"اكتب اسم الحيوان", created:"تمت إضافة الحيوان بنجاح", close:"إغلاق", error:"تعذر تحميل بياناتك", login:"العودة لتسجيل الدخول", loading:"جاري تحميل VETRA...", age:"العمر", unknown:"غير محدد" },
+  en: { home:"Home", pets:"My Pets", more:"More", welcome:"Good evening", allCare:"All your pets' care in one place", selected:"Selected pet", count:"pets", add:"Add Pet", score:"VETRA Score", scorePerfect:"10/10 🎉 Excellent!", scoreAlmost:"You are almost at 10/10!", scoreGood:"You are on the right track", scoreStart:"Let's complete it together", scoreNote:"This is an interactive care-completeness indicator inside VETRA, not a medical score.", scoreMissing:"remaining", scoreProfile:"Pet profile", scoreVaccines:"Vaccination tracking", scoreFollowUp:"Regular follow-up", scoreMonthly:"Monthly clinic visit", scoreViral:"Core viral vaccine", scoreRabies:"Rabies", scoreDeworm:"Deworming", scoreParasite:"Parasite control", next:"Next due", none:"No upcoming vaccines", overdue:"Overdue", day:"day", daysLeft:"left", reminder:"Set reminder", trends:"Health trends", sixMonths:"Last 6 months", noData:"Not enough data", weight:"Weight", temp:"Temperature", heart:"Heart rate", resp:"Respiratory rate", history:"Medical history", vaccineHistory:"Vaccination history", completed:"Completed", soon:"Due soon", noVaccines:"No vaccinations recorded", noVisits:"No visits recorded", timelineNote:"Medical history will appear here after the first visit or vaccination.", settings:"Settings", light:"Light mode", dark:"Dark mode", language:"العربية", logout:"Sign out", secure:"Secure account", phone:"Phone", email:"Email", addTitle:"Add a new pet", addNote:"You can keep multiple pets on the same account. Add the basics here and VETRA will link the pet to your account securely.", name:"Pet name", species:"Species", cat:"Cat", dog:"Dog", other:"Other", gender:"Gender", female:"Female", male:"Male", birth:"Date of birth", breed:"Breed", color:"Color", save:"Save pet", saving:"Saving...", cancel:"Cancel", required:"Enter the pet name", created:"Pet added successfully", close:"Close", error:"We couldn't load your data", login:"Back to login", loading:"Loading VETRA...", age:"Age", unknown:"Not specified" }
 } as const;
 
 const icon = (s:string) => s.toLowerCase().includes("cat") || s.includes("قط") ? "🐱" : s.toLowerCase().includes("dog") || s.includes("كلب") ? "🐶" : "🐾";
@@ -94,6 +94,17 @@ function isParasite(v: Vaccine) {
   return ["حشرات", "flea", "fleas", "tick", "ticks", "ecto", "external parasite", "براغيث", "قراد"].some(k => x.includes(k));
 }
 
+type ProtocolState = "not_due" | "current" | "grace" | "overdue" | "due";
+
+type ProtocolStatus = {
+  points: number;
+  max: number;
+  status: ProtocolState;
+  due: string | null;
+  reset: boolean;
+  record: Vaccine | null;
+};
+
 function latestRecord(records: Vaccine[], matcher: (v: Vaccine) => boolean) {
   return records
     .filter(v => matcher(v) && v.administered_at)
@@ -128,97 +139,260 @@ function todayDateOnly() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function getDewormStatus(records: Vaccine[], petBirth: string | null) {
+function dateOnlyFromIso(value: string) {
+  const d = new Date(value);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function ageDaysAtDate(birthDate: string | null, value: string) {
+  if (!birthDate) return null;
+  const birth = new Date(birthDate);
+  const at = new Date(value);
+  const b = new Date(birth.getFullYear(), birth.getMonth(), birth.getDate()).getTime();
+  const a = new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+  return Math.floor((a - b) / DAY_MS);
+}
+
+function protocolState(due: string | null): ProtocolState {
+  if (!due) return "current";
+  const d = daysUntil(due);
+  if (d > 0) return "current";
+  if (d === 0) return "due";
+  if (d >= -GRACE_DAYS) return "grace";
+  return "overdue";
+}
+
+function getViralStatus(records: Vaccine[], birthDate: string | null): ProtocolStatus {
+  const ageDays = ageInDays(birthDate);
+  const birth = birthDate || todayDateOnly();
+
+  if (ageDays !== null && ageDays < 45) {
+    return {
+      points: 3,
+      max: 3,
+      status: "not_due",
+      due: addDaysToDateOnly(birth, 45),
+      reset: false,
+      record: null,
+    };
+  }
+
+  const events = records
+    .filter(v => isViral(v) && v.administered_at)
+    .filter(v => {
+      const eventAge = ageDaysAtDate(birthDate, v.administered_at as string);
+      return eventAge === null || eventAge >= 45;
+    })
+    .sort((a, b) => +new Date(a.administered_at as string) - +new Date(b.administered_at as string));
+
+  if (!events.length) {
+    return { points: 0, max: 3, status: "overdue", due: todayDateOnly(), reset: true, record: null };
+  }
+
+  let cycleStartIndex = 0;
+  let primaryCompleteIndex: number | null = null;
+
+  while (cycleStartIndex < events.length) {
+    const first = events[cycleStartIndex];
+    const firstDate = first.administered_at as string;
+    const second = events[cycleStartIndex + 1];
+
+    if (!second) {
+      const due = addDays(firstDate, 21);
+      const state = protocolState(due);
+      if (state === "overdue") {
+        return {
+          points: 0,
+          max: 3,
+          status: "overdue",
+          due: todayDateOnly(),
+          reset: true,
+          record: first,
+        };
+      }
+      return { points: 3, max: 3, status: state, due, reset: false, record: first };
+    }
+
+    const secondDate = second.administered_at as string;
+    const secondDeadline = addDays(firstDate, 28);
+    if (dateOnlyFromIso(secondDate) <= dateOnlyFromIso(secondDeadline)) {
+      primaryCompleteIndex = cycleStartIndex + 1;
+      break;
+    }
+
+    // The second dose missed the 21-day target + 7-day grace.
+    // The later dose becomes the new first dose of a fresh viral series.
+    cycleStartIndex += 1;
+  }
+
+  if (primaryCompleteIndex === null) {
+    return { points: 0, max: 3, status: "overdue", due: todayDateOnly(), reset: true, record: events.at(-1) || null };
+  }
+
+  let lastIndex = primaryCompleteIndex;
+
+  while (events[lastIndex + 1]) {
+    const previous = events[lastIndex].administered_at as string;
+    const annualDeadline = addDays(previous, 372);
+    const next = events[lastIndex + 1].administered_at as string;
+
+    if (dateOnlyFromIso(next) <= dateOnlyFromIso(annualDeadline)) {
+      lastIndex += 1;
+      continue;
+    }
+
+    // Annual dose missed beyond the grace window. The later dose is a new first dose.
+    const restart = events[lastIndex + 1];
+    const due = addDays(restart.administered_at as string, 21);
+    const state = protocolState(due);
+    if (state === "overdue") {
+      return { points: 0, max: 3, status: "overdue", due: todayDateOnly(), reset: true, record: restart };
+    }
+    return { points: 3, max: 3, status: state, due, reset: false, record: restart };
+  }
+
+  const last = events[lastIndex];
+  const due = addDays(last.administered_at as string, 365);
+  const state = protocolState(due);
+
+  return state === "overdue"
+    ? { points: 0, max: 3, status: "overdue", due: todayDateOnly(), reset: true, record: last }
+    : { points: 3, max: 3, status: state, due, reset: false, record: last };
+}
+
+function getDewormStatus(records: Vaccine[], petBirth: string | null): ProtocolStatus {
   const ageDays = ageInDays(petBirth);
+  const birth = petBirth || todayDateOnly();
+
   if (ageDays !== null && ageDays < 90) {
-    return { points: 2, status: "not_due" as const, due: null as string | null };
+    return {
+      points: 2,
+      max: 2,
+      status: "not_due",
+      due: addDaysToDateOnly(birth, 90),
+      reset: false,
+      record: null,
+    };
   }
 
   const events = records
     .filter(v => isDeworm(v) && v.administered_at)
+    .filter(v => {
+      const eventAge = ageDaysAtDate(petBirth, v.administered_at as string);
+      return eventAge === null || eventAge >= 90;
+    })
     .sort((a, b) => +new Date(a.administered_at as string) - +new Date(b.administered_at as string));
 
-  if (!events.length) return { points: 0, status: "overdue" as const, due: null as string | null };
+  if (!events.length) {
+    return { points: 0, max: 2, status: "overdue", due: todayDateOnly(), reset: true, record: null };
+  }
 
-  const first = events[0];
-  if (events.length === 1) {
-    const firstDate = first.administered_at as string;
-    const due = first.next_dose_at || addDays(firstDate, 14);
-    const state = careState(due);
+  let firstIndex = 0;
+  const first = events[firstIndex];
+  const second = events[firstIndex + 1];
+
+  if (!second) {
+    const due = addDays(first.administered_at as string, 14);
+    const state = protocolState(due);
     return state === "overdue"
-      ? { points: 0, status: "overdue" as const, due }
-      : { points: 2, status: state, due };
+      ? { points: 0, max: 2, status: "overdue", due: todayDateOnly(), reset: true, record: first }
+      : { points: 2, max: 2, status: state, due, reset: false, record: first };
   }
 
-  const firstDate = new Date(first.administered_at as string).getTime();
-  const second = events[1];
-  const secondDate = new Date(second.administered_at as string).getTime();
-  const gap = Math.round((secondDate - firstDate) / DAY_MS);
-
-  if (gap > 21) {
-    const due = addDays((events[events.length - 1].administered_at as string), 14);
-    return { points: 0, status: "overdue" as const, due };
+  const firstDeadline = addDays(first.administered_at as string, 21);
+  if (dateOnlyFromIso(second.administered_at as string) > dateOnlyFromIso(firstDeadline)) {
+    const restart = second;
+    const due = addDays(restart.administered_at as string, 14);
+    const state = protocolState(due);
+    return state === "overdue"
+      ? { points: 0, max: 2, status: "overdue", due: todayDateOnly(), reset: true, record: restart }
+      : { points: 2, max: 2, status: state, due, reset: false, record: restart };
   }
 
-  const last = events[events.length - 1];
-  const due = last.next_dose_at || addDays(last.administered_at as string, 60);
-  const state = careState(due);
+  let lastIndex = 1;
+  while (events[lastIndex + 1]) {
+    const previous = events[lastIndex].administered_at as string;
+    const maintenanceDeadline = addDays(previous, 67);
+    const next = events[lastIndex + 1].administered_at as string;
+
+    if (dateOnlyFromIso(next) <= dateOnlyFromIso(maintenanceDeadline)) {
+      lastIndex += 1;
+      continue;
+    }
+
+    const restart = events[lastIndex + 1];
+    const due = addDays(restart.administered_at as string, 14);
+    const state = protocolState(due);
+    return state === "overdue"
+      ? { points: 0, max: 2, status: "overdue", due: todayDateOnly(), reset: true, record: restart }
+      : { points: 2, max: 2, status: state, due, reset: false, record: restart };
+  }
+
+  const last = events[lastIndex];
+  const due = addDays(last.administered_at as string, 60);
+  const state = protocolState(due);
 
   return state === "overdue"
-    ? { points: 0, status: "overdue" as const, due }
-    : { points: 2, status: state, due };
+    ? { points: 0, max: 2, status: "overdue", due: todayDateOnly(), reset: true, record: last }
+    : { points: 2, max: 2, status: state, due, reset: false, record: last };
+}
+
+function getRabiesStatus(records: Vaccine[], petBirth: string | null): ProtocolStatus {
+  const ageDays = ageInDays(petBirth);
+  const birth = petBirth || todayDateOnly();
+  const rabies = latestRecord(records, isRabies);
+
+  if (ageDays !== null && ageDays < 90) {
+    return {
+      points: 2,
+      max: 2,
+      status: "not_due",
+      due: addDaysToDateOnly(birth, 90),
+      reset: false,
+      record: rabies,
+    };
+  }
+
+  if (!rabies) {
+    if (ageDays !== null && ageDays <= 180) {
+      return { points: 0, max: 2, status: "due", due: todayDateOnly(), reset: false, record: null };
+    }
+    return { points: 0, max: 2, status: "overdue", due: todayDateOnly(), reset: false, record: null };
+  }
+
+  const due = addDays(rabies.administered_at as string, 365);
+  const state = protocolState(due);
+
+  return state === "overdue"
+    ? { points: 0, max: 2, status: "overdue", due, reset: false, record: rabies }
+    : { points: 2, max: 2, status: state, due, reset: false, record: rabies };
+}
+
+function getParasiteStatus(records: Vaccine[]): ProtocolStatus {
+  const record = latestRecord(records, isParasite);
+  if (!record) {
+    return { points: 1, max: 1, status: "current", due: null, reset: false, record: null };
+  }
+
+  if (!record.next_dose_at) {
+    return { points: 1, max: 1, status: "current", due: null, reset: false, record };
+  }
+
+  const state = protocolState(record.next_dose_at);
+  return state === "overdue"
+    ? { points: 0, max: 1, status: "overdue", due: record.next_dose_at, reset: false, record }
+    : { points: 1, max: 1, status: state, due: record.next_dose_at, reset: false, record };
 }
 
 function getProtocolStatus(records: Vaccine[], pet: Pet | null) {
-  const ageDays = ageInDays(pet?.birth_date || null);
-  const ageKnown = ageDays !== null;
-
-  const viral = latestRecord(records, isViral);
-  const viralDue = viral?.next_dose_at || null;
-  let viralPoints = 3;
-  let viralStatus: "not_due" | "current" | "grace" | "overdue" = "not_due";
-  if (ageKnown && (ageDays as number) >= 45) {
-    if (!viral) {
-      viralPoints = 0;
-      viralStatus = "overdue";
-    } else {
-      const state = careState(viralDue);
-      viralPoints = state === "overdue" ? 0 : 3;
-      viralStatus = state === "current" ? "current" : state;
-    }
-  }
-
-  const rabies = latestRecord(records, isRabies);
-  const rabiesDue = rabies?.next_dose_at || (rabies?.administered_at ? addDays(rabies.administered_at, 365) : null);
-  let rabiesPoints = 2;
-  let rabiesStatus: "not_due" | "current" | "grace" | "overdue" = "not_due";
-  if (ageKnown && (ageDays as number) >= 90) {
-    if (!rabies) {
-      rabiesPoints = 0;
-      rabiesStatus = "overdue";
-    } else {
-      const state = careState(rabiesDue);
-      rabiesPoints = state === "overdue" ? 0 : 2;
-      rabiesStatus = state === "current" ? "current" : state;
-    }
-  }
-
-  const deworm = getDewormStatus(records, pet?.birth_date || null);
-  const parasite = latestRecord(records, isParasite);
-  let parasitePoints = 1;
-  let parasiteStatus: "not_due" | "current" | "grace" | "overdue" = "not_due";
-  const parasiteDue = parasite?.next_dose_at || null;
-  if (parasite) {
-    const state = careState(parasiteDue);
-    parasitePoints = state === "overdue" ? 0 : 1;
-    parasiteStatus = state === "current" ? "current" : state;
-  }
-
   return {
-    viral: { points: viralPoints, max: 3, status: viralStatus, due: viralDue, record: viral },
-    rabies: { points: rabiesPoints, max: 2, status: rabiesStatus, due: rabiesDue, record: rabies },
-    deworm: { ...deworm, max: 2, record: latestRecord(records, isDeworm) },
-    parasite: { points: parasitePoints, max: 1, status: parasiteStatus, due: parasiteDue, record: parasite },
+    viral: getViralStatus(records, pet?.birth_date || null),
+    rabies: getRabiesStatus(records, pet?.birth_date || null),
+    deworm: getDewormStatus(records, pet?.birth_date || null),
+    parasite: getParasiteStatus(records),
   };
 }
 
@@ -285,9 +459,34 @@ function Chart({ values, unit, empty }: { values:number[]; unit:string; empty:st
   );
 }
 
-function Countdown({ days, lang }:{days:number|null;lang:Lang}) {
-  const c=2*Math.PI*42, progress=days===null?.05:days<=0?1:Math.min(1,Math.max(.08,1-days/30));
-  return <div className="relative h-28 w-28 shrink-0"><svg viewBox="0 0 100 100" className="h-full w-full -rotate-90"><circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,.07)" strokeWidth="6"/><circle cx="50" cy="50" r="42" fill="none" stroke="url(#ring)" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${c*progress} ${c}`}/><defs><linearGradient id="ring"><stop offset="0" stopColor="#22d3ee"/><stop offset="1" stopColor="#8b5cf6"/></linearGradient></defs></svg><div className="absolute inset-0 flex flex-col items-center justify-center"><b className="text-xl">{days===null?"—":Math.max(days,0)}</b><span className="text-[9px] font-bold text-slate-500">{days!==null&&days<0?T[lang].overdue:T[lang].day}</span></div></div>;
+function Countdown({ days, lang, status }:{days:number|null;lang:Lang;status:ProtocolState|null}) {
+  const c=2*Math.PI*42;
+  const isGrace=status === "grace";
+  const isOverdue=status === "overdue";
+  const graceRemaining=days !== null && days < 0 ? Math.max(0, GRACE_DAYS + days) : null;
+  const displayValue = days === null
+    ? "—"
+    : isGrace
+      ? String(graceRemaining)
+      : isOverdue
+        ? "0"
+        : String(Math.max(days, 0));
+  const label = isGrace
+    ? (lang === "ar" ? "سماح" : "grace")
+    : isOverdue
+      ? (lang === "ar" ? "ابدأ الآن" : "start now")
+      : status === "due"
+        ? (lang === "ar" ? "مستحق" : "due")
+        : T[lang].day;
+  const progress = days === null
+    ? 0.05
+    : isGrace
+      ? Math.min(1, Math.max(0.08, (GRACE_DAYS - (graceRemaining ?? 0)) / GRACE_DAYS))
+      : isOverdue || status === "due"
+        ? 1
+        : Math.min(1,Math.max(.08,1-days/30));
+
+  return <div className="relative h-28 w-28 shrink-0"><svg viewBox="0 0 100 100" className="h-full w-full -rotate-90"><circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,.07)" strokeWidth="6"/><circle cx="50" cy="50" r="42" fill="none" stroke="url(#ring)" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${c*progress} ${c}`}/><defs><linearGradient id="ring"><stop offset="0" stopColor="#22d3ee"/><stop offset="1" stopColor="#8b5cf6"/></linearGradient></defs></svg><div className="absolute inset-0 flex flex-col items-center justify-center"><b className="text-xl">{displayValue}</b><span className="text-[9px] font-bold text-slate-500">{label}</span></div></div>;
 }
 
 export default function ClientInterfaceIdPage(){
@@ -411,33 +610,28 @@ export default function ClientInterfaceIdPage(){
     {label:t.scoreParasite,points:catProtocol.parasite.points,max:1,done:catProtocol.parasite.points===1,status:catProtocol.parasite.status},
   ] : [];
 
-  const today = todayDateOnly();
-  const vaccinationCandidates = catProtocol ? [
-    (() => {
-      const birth = pet?.birth_date || today;
-      const status = catProtocol.viral.status;
-      const dueDate = catProtocol.viral.due
-        || (ageInDays(pet?.birth_date || null) !== null && (ageInDays(pet?.birth_date || null) as number) < 45
-          ? addDaysToDateOnly(birth, 45)
-          : today);
-      return {
-        name: status === "overdue" ? (lang === "ar" ? "إعادة الفيروسي" : "Restart viral protocol") : t.scoreViral,
-        due: dueDate,
-        sort: daysUntil(dueDate),
-      };
-    })(),
-    (() => {
-      const birth = pet?.birth_date || today;
-      const ageDaysValue = ageInDays(pet?.birth_date || null);
-      const dueDate = catProtocol.rabies.due
-        || (ageDaysValue !== null && ageDaysValue < 90 ? addDaysToDateOnly(birth, 90) : today);
-      return {
-        name: catProtocol.rabies.status === "overdue" ? (lang === "ar" ? "السعار — يحتاج إعادة" : "Rabies — renewal needed") : t.scoreRabies,
-        due: dueDate,
-        sort: daysUntil(dueDate),
-      };
-    })(),
-  ].sort((a,b) => a.sort - b.sort) : [];
+  type VaccinationCandidate = {
+    name: string;
+    due: string;
+    sort: number;
+    status: ProtocolState;
+  };
+
+  const vaccinationCandidates: VaccinationCandidate[] = catProtocol
+    ? [
+        { name: catProtocol.viral.reset ? (lang === "ar" ? "إعادة الفيروسي" : "Restart viral vaccine") : t.scoreViral, due: catProtocol.viral.due || todayDateOnly(), sort: 0, status: catProtocol.viral.status },
+        { name: catProtocol.rabies.status === "overdue" ? (lang === "ar" ? "السعار — متأخر" : "Rabies — overdue") : t.scoreRabies, due: catProtocol.rabies.due || todayDateOnly(), sort: 0, status: catProtocol.rabies.status },
+        { name: catProtocol.deworm.reset ? (lang === "ar" ? "إعادة الديدان" : "Restart deworming") : t.scoreDeworm, due: catProtocol.deworm.due || todayDateOnly(), sort: 0, status: catProtocol.deworm.status },
+        ...(catProtocol.parasite.due
+          ? [{ name: t.scoreParasite, due: catProtocol.parasite.due, sort: 0, status: catProtocol.parasite.status }]
+          : []),
+      ].sort((a,b) => {
+        const rank = (status: ProtocolState) => status === "overdue" ? 0 : status === "due" ? 1 : status === "grace" ? 2 : status === "current" ? 3 : 4;
+        const r = rank(a.status) - rank(b.status);
+        return r !== 0 ? r : daysUntil(a.due) - daysUntil(b.due);
+      })
+    : [];
+
   const next = vaccinationCandidates[0] || null;
   const due = next ? daysUntil(next.due) : null;
   const timeline=[...pv.map(x=>({id:`v${x.id}`,date:x.visit_date,type:"visit",title:x.reason|| (lang==="ar"?"زيارة":"Visit"),sub:x.diagnosis||x.examination||x.notes||""})),...px.filter(x=>x.administered_at).map(x=>({id:`x${x.id}`,date:x.administered_at!,type:"vaccine",title:x.vaccine_name||x.vaccine_type||(lang==="ar"?"تطعيم":"Vaccination"),sub:x.next_dose_at?`${t.next}: ${dateText(x.next_dose_at,lang)}`:t.completed}))].sort((a,b)=>+new Date(b.date)-+new Date(a.date)).slice(0,8);
@@ -510,9 +704,9 @@ export default function ClientInterfaceIdPage(){
           </div>
           {catCareScore !== null && scoreRemaining>0&&<div className="mt-3 text-center text-[10px] font-bold text-slate-500">{lang==="ar"?`إيه اللي ناقص؟ تعالى كمّل ${scoreRemaining} ${t.scoreMissing} 👀`: `${scoreRemaining} ${t.scoreMissing} to go — can you reach 10/10? 👀`}</div>}
         </div></div>
-        <div className="rounded-[1.7rem] border border-white/[.06] bg-white/[.035] p-5"><div className="flex items-center justify-between gap-4"><div><div className="text-xs font-bold text-cyan-300">{t.next}</div><div className="mt-2 text-lg font-black">{next?.name||t.none}</div>{next?.due&&<div className="mt-1 text-xs text-slate-500">{dateText(next.due,lang)}</div>}</div><Countdown days={due} lang={lang}/></div><button onClick={()=>next?.due&&alert(lang==="ar"?"التذكير هيتوصل بنظام الإشعارات في الخطوة التالية.":"Reminder notifications will be connected in the next step.")} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-xs font-black text-slate-950">🔔 {t.reminder}</button></div></div>}
+        <div className="rounded-[1.7rem] border border-white/[.06] bg-white/[.035] p-5"><div className="flex items-center justify-between gap-4"><div><div className="text-xs font-bold text-cyan-300">{t.next}</div><div className="mt-2 text-lg font-black">{next?.name||t.none}</div>{next?.due&&<div className="mt-1 text-xs text-slate-500">{dateText(next.due,lang)}</div>}</div><Countdown days={due} lang={lang} status={next?.status || null}/></div><button onClick={()=>next?.due&&alert(lang==="ar"?"التذكير هيتوصل بنظام الإشعارات في الخطوة التالية.":"Reminder notifications will be connected in the next step.")} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-xs font-black text-slate-950">🔔 {t.reminder}</button></div></div>}
       </div>
-      <div id="pets-section" className={dark?"rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5":"rounded-[2rem] border border-slate-100 bg-white p-5"}><div className="flex items-center justify-between"><div><h2 className="text-lg font-black">{t.pets}</h2><p className="mt-1 text-xs text-slate-500">{pets.length} {t.count}</p></div><button onClick={()=>setAddPet(true)} className="rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2.5 text-xs font-black text-slate-950">+ {t.add}</button></div><div className="mt-4 max-h-[330px] space-y-2 overflow-y-auto pe-1">{pets.map(p=><button key={p.id} onClick={()=>setSelected(p.id)} className={p.id===pet?.id?"flex w-full items-center gap-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/[.08] p-3 text-start":"flex w-full items-center gap-3 rounded-2xl border border-white/[.05] bg-white/[.025] p-3 text-start transition hover:bg-white/[.05]"}><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-3xl">{icon(p.species)}</div><div className="min-w-0 flex-1"><div className="truncate font-black">{p.name}</div><div className="mt-1 text-[11px] text-slate-500">{species(p.species,lang)} • {age(p.birth_date,lang)}</div></div><span className="text-slate-500">‹</span></button>)}<button onClick={()=>setAddPet(true)} className="w-full rounded-2xl border border-dashed border-cyan-400/20 bg-cyan-400/[.03] p-4 text-xs font-black text-cyan-300">+ {t.add}</button></div></div></section>
+      <div id="pets-section" className={dark?"rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5":"rounded-[2rem] border border-slate-100 bg-white p-5"}><div className="flex items-center justify-between"><div><h2 className="text-lg font-black">{t.pets}</h2><p className="mt-1 text-xs text-slate-500">{pets.length} {t.count}</p></div><button onClick={()=>setAddPet(true)} className="rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2.5 text-xs font-black text-slate-950">+ {t.add}</button></div><div className="mt-4 max-h-[330px] space-y-2 overflow-y-auto pe-1">{pets.map(p=><button key={p.id} onClick={()=>router.push(`/client-interface/${clientId}/pets/${p.id}`)} className={p.id===pet?.id?"flex w-full items-center gap-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/[.08] p-3 text-start":"flex w-full items-center gap-3 rounded-2xl border border-white/[.05] bg-white/[.025] p-3 text-start transition hover:bg-white/[.05]"}><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-3xl">{icon(p.species)}</div><div className="min-w-0 flex-1"><div className="truncate font-black">{p.name}</div><div className="mt-1 text-[11px] text-slate-500">{species(p.species,lang)} • {age(p.birth_date,lang)}</div></div><span className="text-slate-500">‹</span></button>)}<button onClick={()=>setAddPet(true)} className="w-full rounded-2xl border border-dashed border-cyan-400/20 bg-cyan-400/[.03] p-4 text-xs font-black text-cyan-300">+ {t.add}</button></div></div></section>
 
       {pet&&<><section className="mt-5 grid gap-5 lg:grid-cols-[1.1fr_.9fr]"><div className={dark?"rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5 sm:p-6":"rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6"}><div className="flex items-end justify-between"><div><p className="text-xs font-bold text-cyan-300">{t.trends}</p><h2 className="mt-1 text-2xl font-black">{pet.name}</h2></div><span className="rounded-full border border-white/[.06] bg-white/[.03] px-3 py-1.5 text-[10px] font-bold text-slate-400">{t.sixMonths}</span></div><div className="mt-5 grid gap-3 sm:grid-cols-2">{metrics.map(m=><div key={m.n} className={dark?"rounded-[1.5rem] border border-white/[.05] bg-white/[.025] p-4":"rounded-[1.5rem] border border-slate-100 bg-slate-50 p-4"}><div className="flex items-center gap-2"><span>{m.i}</span><span className="text-xs font-black">{m.n}</span></div><Chart values={m.v} unit={m.u} empty={t.noData}/></div>)}</div></div>
         <div className={dark?"rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5 sm:p-6":"rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6"}><div className="flex items-center justify-between"><div><p className="text-xs font-bold text-cyan-300">{t.next}</p><h2 className="mt-1 text-2xl font-black">{t.vaccineHistory}</h2></div><span className="rounded-full bg-cyan-400/10 px-3 py-1.5 text-[10px] font-black text-cyan-300">{px.length}</span></div><div className="mt-5 space-y-2">{px.slice(0,5).map(x=>{const d=x.next_dose_at?daysUntil(x.next_dose_at):null;return <div key={x.id} className={dark?"rounded-2xl border border-white/[.05] bg-white/[.025] p-3.5":"rounded-2xl border border-slate-100 bg-slate-50 p-3.5"}><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-400/10">💉</div><div className="min-w-0 flex-1"><div className="truncate text-sm font-black">{x.vaccine_name||x.vaccine_type||"Vaccination"}</div><div className="mt-1 text-[10px] text-slate-500">{x.administered_at?dateText(x.administered_at,lang):"—"}</div></div><span className={d!==null&&d<0?"rounded-full bg-rose-400/10 px-2 py-1 text-[9px] font-black text-rose-300":"rounded-full bg-emerald-400/10 px-2 py-1 text-[9px] font-black text-emerald-300"}>{d!==null&&d<0?t.overdue:d!==null&&d<=30?t.soon:t.completed}</span></div></div>})}{px.length===0&&<div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">{t.noVaccines}</div>}</div></div></section>
