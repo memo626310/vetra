@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { getClientPortalDb } from "@/lib/client-portal-db";
 
 export default function ClientLoginPage() {
   const router = useRouter();
@@ -14,23 +14,38 @@ export default function ClientLoginPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const savedLanguage = window.localStorage.getItem("vetra-language");
-    const savedTheme = window.localStorage.getItem("vetra-theme");
+    const savedLanguage =
+      window.localStorage.getItem("vetra-language");
 
-    if (savedLanguage === "ar") setLanguage("ar");
-    if (savedTheme === "dark") setDark(true);
+    const savedTheme =
+      window.localStorage.getItem("vetra-theme");
+
+    if (savedLanguage === "ar") {
+      setLanguage("ar");
+    }
+
+    if (savedTheme === "dark") {
+      setDark(true);
+    }
   }, []);
 
   const ar = language === "ar";
 
-  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function handleLogin(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     setLoading(true);
     setMessage("");
 
-    const normalizedPhone = phone.trim();
-    const normalizedCode = clientCode.trim().toUpperCase();
+    const normalizedPhone = phone
+      .trim()
+      .replace(/\s+/g, "");
+
+    const normalizedCode = clientCode
+      .trim()
+      .replace(/\s+/g, "");
 
     if (!normalizedPhone || !normalizedCode) {
       setMessage(
@@ -38,57 +53,122 @@ export default function ClientLoginPage() {
           ? "من فضلك اكتب رقم التليفون و Client ID."
           : "Please enter your phone number and Client ID."
       );
+
       setLoading(false);
       return;
     }
 
-    const { data: client, error } = await supabase
-      .from("clients")
-      .select("id, client_code")
-      .eq("phone", normalizedPhone)
-      .eq("client_code", normalizedCode)
-      .maybeSingle();
+    if (!/^[0-9]{6}$/.test(normalizedCode)) {
+      setMessage(
+        ar
+          ? "Client ID لازم يكون 6 أرقام."
+          : "Client ID must be 6 digits."
+      );
 
-    if (error || !client) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const db = await getClientPortalDb(
+        normalizedCode,
+        normalizedPhone
+      );
+
+      const {
+        data: client,
+        error,
+      } = await db
+        .from("clients")
+        .select("id, client_code")
+        .eq("phone", normalizedPhone)
+        .eq("client_code", normalizedCode)
+        .maybeSingle();
+
+      if (error || !client) {
+        setMessage(
+          ar
+            ? "رقم التليفون أو Client ID غير صحيح."
+            : "The phone number or Client ID is incorrect."
+        );
+
+        setLoading(false);
+        return;
+      }
+
+      window.sessionStorage.setItem(
+        "vetra-client-id",
+        client.id
+      );
+
+      window.sessionStorage.setItem(
+        "vetra-client-code",
+        client.client_code
+      );
+
+      window.sessionStorage.setItem(
+        "vetra-client-phone",
+        normalizedPhone
+      );
+
+      router.replace(
+        `/client-interface/${client.id}`
+      );
+    } catch (error) {
+      console.error(
+        "PET OWNER LOGIN ERROR:",
+        error
+      );
+
       setMessage(
         ar
           ? "رقم التليفون أو Client ID غير صحيح."
           : "The phone number or Client ID is incorrect."
       );
+
       setLoading(false);
-      return;
     }
-
-    window.sessionStorage.setItem("vetra-client-id", client.id);
-    window.sessionStorage.setItem("vetra-client-code", client.client_code);
-
-    router.replace(`/client-interface/${client.id}`);
   }
 
   return (
     <main
       dir={ar ? "rtl" : "ltr"}
       className={`relative min-h-screen overflow-hidden transition-colors duration-700 ${
-        dark ? "bg-[#07111C] text-white" : "bg-[#F8FBFF] text-slate-900"
+        dark
+          ? "bg-[#07111C] text-white"
+          : "bg-[#F8FBFF] text-slate-900"
       }`}
     >
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-32 -top-32 h-[30rem] w-[30rem] rounded-full bg-cyan-300/20 blur-3xl" />
+
         <div className="absolute -right-32 bottom-[-5rem] h-[32rem] w-[32rem] rounded-full bg-blue-300/20 blur-3xl" />
-        <div className="absolute left-[5%] top-[40%] rotate-[-18deg] text-8xl opacity-10">🐾</div>
-        <div className="absolute right-[7%] top-[20%] rotate-[18deg] text-7xl opacity-10">🐾</div>
+
+        <div className="absolute left-[5%] top-[40%] rotate-[-18deg] text-8xl opacity-10">
+          🐾
+        </div>
+
+        <div className="absolute right-[7%] top-[20%] rotate-[18deg] text-7xl opacity-10">
+          🐾
+        </div>
       </div>
 
       <header className="relative z-10 flex items-center justify-between px-6 py-5 sm:px-10">
         <button
-          onClick={() => router.push("/client-interface")}
+          onClick={() =>
+            router.push("/client-interface")
+          }
           className="flex items-center gap-3"
         >
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-2xl text-white shadow-xl dark:bg-white dark:text-slate-900">
             🐾
           </div>
+
           <div className="text-left">
-            <div className="font-black tracking-[0.2em]">VETRA</div>
+            <div className="font-black tracking-[0.2em]">
+              VETRA
+            </div>
+
             <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400">
               Pet Care Portal
             </div>
@@ -97,14 +177,20 @@ export default function ClientLoginPage() {
 
         <div className="flex gap-2">
           <button
-            onClick={() => setLanguage(ar ? "en" : "ar")}
+            onClick={() =>
+              setLanguage(
+                ar ? "en" : "ar"
+              )
+            }
             className="rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-xs font-bold backdrop-blur dark:border-white/10 dark:bg-white/5"
           >
             {ar ? "English" : "العربية"}
           </button>
 
           <button
-            onClick={() => setDark((v) => !v)}
+            onClick={() =>
+              setDark((v) => !v)
+            }
             className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/70 backdrop-blur dark:border-white/10 dark:bg-white/5"
           >
             {dark ? "☀️" : "🌙"}
@@ -114,6 +200,7 @@ export default function ClientLoginPage() {
 
       <section className="relative z-10 flex min-h-[calc(100vh-90px)] items-center justify-center px-5 pb-10">
         <div className="grid w-full max-w-5xl overflow-hidden rounded-[3rem] border border-white/70 bg-white/70 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-white/5 lg:grid-cols-2">
+
           <div className="hidden min-h-[600px] items-center justify-center bg-slate-900 p-12 text-white lg:flex dark:bg-[#0B1825]">
             <div className="text-center">
               <div className="mx-auto flex h-56 w-56 items-center justify-center rounded-full bg-white/10 text-[8rem] shadow-2xl">
@@ -125,7 +212,9 @@ export default function ClientLoginPage() {
               </div>
 
               <h1 className="mt-4 text-4xl font-black">
-                {ar ? "أهلاً بيك تاني 🐾" : "Welcome back 🐾"}
+                {ar
+                  ? "أهلاً بيك تاني 🐾"
+                  : "Welcome back 🐾"}
               </h1>
 
               <p className="mx-auto mt-4 max-w-sm text-sm leading-7 text-slate-300">
@@ -143,7 +232,9 @@ export default function ClientLoginPage() {
               </div>
 
               <h2 className="mt-3 text-4xl font-black tracking-tight">
-                {ar ? "تسجيل الدخول" : "Sign in"}
+                {ar
+                  ? "تسجيل الدخول"
+                  : "Sign in"}
               </h2>
 
               <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-300">
@@ -153,10 +244,15 @@ export default function ClientLoginPage() {
               </p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-5">
+            <form
+              onSubmit={handleLogin}
+              className="space-y-5"
+            >
               <label className="block">
                 <span className="mb-2 block text-sm font-bold">
-                  {ar ? "رقم التليفون" : "Phone Number"}
+                  {ar
+                    ? "رقم التليفون"
+                    : "Phone Number"}
                 </span>
 
                 <input
@@ -164,7 +260,9 @@ export default function ClientLoginPage() {
                   required
                   autoComplete="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) =>
+                    setPhone(e.target.value)
+                  }
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 dark:border-white/10 dark:bg-white/5"
                   placeholder="010XXXXXXXX"
                   dir="ltr"
@@ -173,17 +271,24 @@ export default function ClientLoginPage() {
 
               <label className="block">
                 <span className="mb-2 block text-sm font-bold">
-                  {ar ? "Client ID" : "Client ID"}
+                  Client ID
                 </span>
 
                 <input
                   type="text"
                   required
-                  autoCapitalize="characters"
+                  inputMode="numeric"
+                  maxLength={6}
                   value={clientCode}
-                  onChange={(e) => setClientCode(e.target.value.toUpperCase())}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 font-bold uppercase tracking-wider outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 dark:border-white/10 dark:bg-white/5"
-                  placeholder="VETRA-000125"
+                  onChange={(e) =>
+                    setClientCode(
+                      e.target.value
+                        .replace(/\D/g, "")
+                        .slice(0, 6)
+                    )
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 font-bold tracking-[0.18em] outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 dark:border-white/10 dark:bg-white/5"
+                  placeholder="012746"
                   dir="ltr"
                 />
               </label>
