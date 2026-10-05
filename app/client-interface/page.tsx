@@ -1,295 +1,611 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
-const features = [
-  { icon: "🐾", title: "Your Pets", subtitle: "Everything about their care" },
-  { icon: "💉", title: "Vaccines", subtitle: "Never miss an important dose" },
-  { icon: "📅", title: "Appointments", subtitle: "Your next visit, one tap away" },
-  { icon: "🧾", title: "Invoices", subtitle: "Your records, always with you" },
+type Client = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+};
+
+type Pet = {
+  id: string;
+  name: string;
+  species: string;
+  breed: string | null;
+  gender: string | null;
+  birth_date: string | null;
+  is_deceased: boolean;
+};
+
+type Visit = {
+  id: string;
+  client_id: string;
+  pet_id: string;
+  visit_date: string;
+  reason: string | null;
+  examination: string | null;
+  diagnosis: string | null;
+  treatment: string | null;
+  weight: number | null;
+  temperature: number | null;
+  heart_rate: number | null;
+  respiratory_rate: number | null;
+  notes: string | null;
+};
+
+type Vaccination = {
+  id: string;
+  pet_id: string;
+  vaccine_name: string;
+  vaccine_type: string | null;
+  administered_at: string;
+  next_dose_at: string | null;
+  dose: string | null;
+  route: string | null;
+  batch_number: string | null;
+  manufacturer: string | null;
+  notes: string | null;
+};
+
+const cards = [
+  ["🐾", "Your Pets", "Everything about their care"],
+  ["💉", "Vaccines", "Never miss an important dose"],
+  ["📅", "Appointments", "Your next visit, one tap away"],
+  ["🧾", "Invoices", "Your records, always with you"],
 ];
 
-export default function ClientPortalPage() {
+export default function ClientInterfaceIdPage() {
+  const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [showWelcome, setShowWelcome] = useState(true);
-  const [welcomeExiting, setWelcomeExiting] = useState(false);
+  const clientId = params.id;
+
+  const [client, setClient] = useState<Client | null>(null);
+  const [pets, setPets] = useState<Pet[]>([]);
+  const [visits, setVisits] = useState<Visit[]>([]);
+  const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [authorized, setAuthorized] = useState(false);
   const [language, setLanguage] = useState<"en" | "ar">("en");
   const [dark, setDark] = useState(false);
+  const [message, setMessage] = useState("");
+  const [showDeviceSetup, setShowDeviceSetup] = useState(false);
+  const [notificationState, setNotificationState] = useState<"default" | "granted" | "denied" | "unsupported">("default");
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
+  const [canInstall, setCanInstall] = useState(false);
+  const [installDone, setInstallDone] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
     const savedLanguage = window.localStorage.getItem("vetra-language");
     const savedTheme = window.localStorage.getItem("vetra-theme");
-    const welcomed = window.localStorage.getItem("vetra-welcome-seen");
-
     if (savedLanguage === "ar") setLanguage("ar");
     if (savedTheme === "dark") setDark(true);
+  }, []);
 
-    if (welcomed === "true") {
-      setShowWelcome(false);
-      return;
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+
+      const savedClientId = window.sessionStorage.getItem("vetra-client-id");
+
+      if (!savedClientId || savedClientId !== clientId) {
+        router.replace("/client-interface/login");
+        return;
+      }
+
+      const { data: clientData, error: clientError } = await supabase
+        .from("clients")
+        .select("id, name, phone, email")
+        .eq("id", clientId)
+        .maybeSingle();
+
+      if (clientError || !clientData) {
+        setMessage("ملف العميل غير موجود.");
+        setLoading(false);
+        return;
+      }
+
+      const { data: petsData, error: petsError } = await supabase
+        .from("pets")
+        .select("id, name, species, breed, gender, birth_date, is_deceased")
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false });
+
+      if (petsError) {
+        setMessage(petsError.message);
+      }
+
+      const { data: visitsData, error: visitsError } = await supabase
+        .from("visits")
+        .select("id, client_id, pet_id, visit_date, reason, examination, diagnosis, treatment, weight, temperature, heart_rate, respiratory_rate, notes")
+        .eq("client_id", clientId)
+        .order("visit_date", { ascending: false });
+
+      const { data: vaccinationData, error: vaccinationError } = await supabase
+        .from("vaccinations")
+        .select("id, pet_id, vaccine_name, vaccine_type, administered_at, next_dose_at, dose, route, batch_number, manufacturer, notes")
+        .eq("client_id", clientId)
+        .order("next_dose_at", { ascending: true });
+
+      if (visitsError) console.error("CLIENT VISITS LOAD ERROR:", visitsError);
+      if (vaccinationError) console.error("CLIENT VACCINATIONS LOAD ERROR:", vaccinationError);
+
+      setVisits((visitsData || []) as Visit[]);
+      setVaccinations((vaccinationData || []) as Vaccination[]);
+
+      setClient(clientData);
+      setPets((petsData || []) as Pet[]);
+      setAuthorized(true);
+      setLoading(false);
     }
 
-    const exitTimer = window.setTimeout(() => setWelcomeExiting(true), 2100);
-    const hideTimer = window.setTimeout(() => {
-      setShowWelcome(false);
-      window.localStorage.setItem("vetra-welcome-seen", "true");
-    }, 2900);
+    if (clientId) load();
+  }, [clientId, router]);
+
+  function signOut() {
+    window.sessionStorage.removeItem("vetra-client-id");
+    window.sessionStorage.removeItem("vetra-client-code");
+    router.replace("/client-interface/login");
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const nav = window.navigator;
+
+    // Strong iOS detection:
+    // 1) Normal iPhone/iPad/iPod user agents.
+    // 2) iPadOS 13+ can identify itself as a Mac, so use touch points too.
+    // 3) iOS standalone mode is exposed by Safari as navigator.standalone.
+    const userAgent = nav.userAgent || "";
+    const platform = nav.platform || "";
+    const maxTouchPoints = nav.maxTouchPoints || 0;
+
+    const ios =
+      /iPhone|iPad|iPod/i.test(userAgent) ||
+      /iPhone|iPad|iPod/i.test(platform) ||
+      (platform === "MacIntel" && maxTouchPoints > 1);
+
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (nav as Navigator & { standalone?: boolean }).standalone === true;
+
+    setIsIOS(ios);
+    setIsStandalone(standalone);
+
+    console.log("VETRA DEVICE:", {
+      userAgent,
+      platform,
+      maxTouchPoints,
+      isIOS: ios,
+      isStandalone: standalone,
+    });
+
+    if ("Notification" in window) {
+      const permission = window.Notification.permission;
+      setNotificationState(permission === "granted" ? "granted" : permission === "denied" ? "denied" : "default");
+    } else {
+      setNotificationState("unsupported");
+    }
+
+    const handler = (event: Event) => {
+      event.preventDefault();
+      setDeferredInstallPrompt(event);
+      setCanInstall(true);
+    };
+
+    const installed = () => {
+      setCanInstall(false);
+      setInstallDone(true);
+      window.localStorage.setItem("vetra-pwa-installed", "true");
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", installed);
+
+    if (standalone) {
+      setInstallDone(true);
+    }
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch((error) => { console.error("VETRA SERVICE WORKER ERROR:", error); });
+    }
 
     return () => {
-      window.clearTimeout(exitTimer);
-      window.clearTimeout(hideTimer);
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", installed);
     };
   }, []);
 
+  useEffect(() => {
+    if (!authorized) return;
+    if (window.localStorage.getItem("vetra-device-setup-seen-v2") === "true") return;
+    const timer = window.setTimeout(() => setShowDeviceSetup(true), 700);
+    return () => window.clearTimeout(timer);
+  }, [authorized]);
+
+  async function enableNotifications() {
+    if (isIOS && !isStandalone) {
+      return;
+    }
+
+    if (!("Notification" in window)) {
+      setNotificationState("unsupported");
+      return;
+    }
+
+    const permission = await window.Notification.requestPermission();
+    setNotificationState(
+      permission === "granted"
+        ? "granted"
+        : permission === "denied"
+          ? "denied"
+          : "default"
+    );
+
+    if (permission === "granted") {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.showNotification("VETRA 🐾", {
+          body: "تم تفعيل إشعارات VETRA بنجاح. هتوصلك التنبيهات المهمة هنا.",
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+        });
+      } catch (error) {
+        console.error("VETRA NOTIFICATION ERROR:", error);
+      }
+    }
+  }
+
+  async function installWebsite() {
+    if (!deferredInstallPrompt) return;
+    try {
+      await deferredInstallPrompt.prompt();
+      const result = await deferredInstallPrompt.userChoice;
+      if (result?.outcome === "accepted") setInstallDone(true);
+    } finally {
+      setDeferredInstallPrompt(null);
+      setCanInstall(false);
+    }
+  }
+
+  function finishDeviceSetup() {
+    window.localStorage.setItem("vetra-device-setup-seen-v2", "true");
+    setShowDeviceSetup(false);
+  }
+
   const ar = language === "ar";
+  const heroPet = pets.find((pet) => !pet.is_deceased) || pets[0];
 
-  const toggleLanguage = () => {
-    const next = ar ? "en" : "ar";
-    setLanguage(next);
-    window.localStorage.setItem("vetra-language", next);
-  };
+  if (loading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#F8FBFF] dark:bg-[#07111C]">
+        <div className="text-center">
+          <div className="text-6xl animate-pulse">🐾</div>
+          <p className="mt-4 text-sm font-bold text-slate-500">Loading VETRA...</p>
+        </div>
+      </main>
+    );
+  }
 
-  const toggleTheme = () => {
-    setDark((value) => {
-      const next = !value;
-      window.localStorage.setItem("vetra-theme", next ? "dark" : "light");
-      return next;
-    });
-  };
+  if (!authorized) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#F8FBFF] px-6 dark:bg-[#07111C]">
+        <div className="max-w-md rounded-[2rem] bg-white p-8 text-center shadow-2xl dark:bg-[#101923]">
+          <div className="text-5xl">🐾</div>
+          <h1 className="mt-4 text-2xl font-black">VETRA</h1>
+          <p className="mt-3 text-sm text-slate-500 dark:text-slate-300">{message}</p>
+          <button
+            onClick={() => router.replace("/client-interface/login")}
+            className="mt-6 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-black text-white dark:bg-white dark:text-slate-900"
+          >
+            Back to Login
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  const setupModal = showDeviceSetup ? (
+    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/45 p-4 backdrop-blur-sm sm:items-center">
+      <div dir="rtl" className="w-full max-w-md rounded-[2rem] border border-white/70 bg-white p-6 text-slate-900 shadow-2xl dark:border-white/10 dark:bg-[#101923] dark:text-white">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-100 text-3xl dark:bg-cyan-400/10">🐾</div>
+        <h2 className="mt-5 text-center text-2xl font-black">خلي VETRA معاك دايمًا 🐾</h2>
+        <div className="mt-3 text-center text-xs font-bold text-cyan-600 dark:text-cyan-300">
+          {isIOS
+            ? isStandalone
+              ? "🍎 تم اكتشاف iPhone — VETRA تعمل كتطبيق"
+              : "🍎 تم اكتشاف iPhone — افتحها كتطبيق من الشاشة الرئيسية"
+            : "📱 تم اكتشاف جهاز Android / متصفح يدعم التثبيت"}
+        </div>
+        <p className="mt-2 text-center text-sm leading-7 text-slate-500 dark:text-slate-300">فعّل الإشعارات واحفظ VETRA على موبايلك عشان توصلك التنبيهات المهمة بسهولة.</p>
+
+        <div className="mt-6 space-y-3">
+          <button
+            type="button"
+            onClick={enableNotifications}
+            disabled={notificationState === "granted" || (isIOS && !isStandalone)}
+            className="flex w-full items-center justify-between rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-90 dark:border-cyan-400/10 dark:bg-cyan-400/10"
+          >
+            <span>
+              <span className="block font-black">
+                {notificationState === "granted"
+                  ? "الإشعارات مفعّلة ✓"
+                  : isIOS && !isStandalone
+                    ? "فعّل الإشعارات بعد إضافة VETRA"
+                    : "السماح بإشعارات VETRA"}
+              </span>
+              <span className="mt-1 block text-xs leading-6 text-slate-500 dark:text-slate-300">
+                {notificationState === "denied"
+                  ? "الإشعارات مرفوضة من إعدادات الجهاز."
+                  : isIOS && !isStandalone
+                    ? "أولًا أضف VETRA للشاشة الرئيسية وافتحها من الأيقونة، وبعدها فعّل الإشعارات."
+                    : "استقبل تنبيهات المواعيد والتطعيمات والتحديثات المهمة."}
+              </span>
+            </span>
+            <span className="text-2xl">🔔</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={isIOS ? undefined : installWebsite}
+            disabled={isIOS ? isStandalone : !canInstall}
+            className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-md disabled:cursor-default disabled:opacity-90 dark:border-emerald-400/10 dark:bg-emerald-400/10"
+          >
+            <span>
+              <span className="block font-black">
+                {installDone ? "VETRA محفوظة على الموبايل ✓" : "احفظ VETRA على موبايلك"}
+              </span>
+              <span className="mt-1 block text-xs leading-6 text-slate-500 dark:text-slate-300">
+                {isIOS && !isStandalone
+                  ? "اضغط مشاركة ↑ ثم إضافة إلى الشاشة الرئيسية، وبعدها افتح VETRA من الأيقونة."
+                  : isIOS && isStandalone
+                    ? "VETRA تعمل الآن كتطبيق على جهازك."
+                    : canInstall
+                      ? "أضف VETRA للشاشة الرئيسية بضغطة واحدة."
+                      : installDone
+                        ? "تقدر تفتح VETRA من الشاشة الرئيسية."
+                        : "من المتصفح اختار إضافة إلى الشاشة الرئيسية."}
+              </span>
+            </span>
+            <span className="text-2xl">📲</span>
+          </button>
+        </div>
+
+        <button type="button" onClick={finishDeviceSetup} className="mt-5 w-full rounded-2xl px-4 py-3 text-sm font-bold text-slate-400 transition hover:text-slate-700 dark:hover:text-white">لاحقًا</button>
+      </div>
+    </div>
+  ) : null;
 
   return (
-    <main
+    <>
+      {setupModal}
+      <main
       dir={ar ? "rtl" : "ltr"}
-      className={`relative min-h-screen overflow-hidden transition-colors duration-700 ${
-        dark ? "bg-[#09111A] text-white" : "bg-[#F8FBFF] text-slate-900"
+      className={`min-h-screen overflow-hidden transition-colors duration-700 ${
+        dark ? "bg-[#07111C] text-white" : "bg-[#F8FBFF] text-slate-900"
       }`}
     >
-      {/* Fullscreen VETRA welcome transition */}
-      {showWelcome && (
-        <section
-          className={`fixed inset-0 z-[100] flex items-center justify-center bg-[#07111C] text-white transition-all duration-700 ${
-            welcomeExiting ? "scale-[1.08] opacity-0 blur-sm" : "scale-100 opacity-100"
-          }`}
-        >
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute left-1/2 top-1/2 h-[460px] w-[460px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-400/10 blur-3xl" />
-            <div className="absolute left-[10%] top-[18%] text-5xl opacity-30 animate-bounce">🐾</div>
-            <div className="absolute right-[13%] top-[26%] text-4xl opacity-25 animate-pulse">🐾</div>
-            <div className="absolute bottom-[19%] left-[20%] text-4xl opacity-20 animate-pulse">✦</div>
-            <div className="absolute bottom-[14%] right-[18%] text-5xl opacity-20 animate-bounce">🐾</div>
-          </div>
-
-          <div className="relative px-8 text-center">
-            <div className="mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-[2rem] border border-white/10 bg-white/10 text-5xl shadow-2xl backdrop-blur-xl transition duration-700 hover:scale-110">
-              🐾
-            </div>
-
-            <div className="text-sm font-bold uppercase tracking-[0.45em] text-cyan-300">
-              VETRA
-            </div>
-
-            <h1 className="mt-4 text-4xl font-black tracking-tight sm:text-6xl">
-              {ar ? "أهلاً بيك في VETRA" : "Welcome to VETRA"}
-            </h1>
-
-            <p className="mx-auto mt-5 max-w-xl text-base leading-8 text-slate-300 sm:text-lg">
-              {ar
-                ? "مكان بسيط وجميل تتابع منه كل حاجة تخص صاحبك الصغير. 🐾"
-                : "A beautiful little place to keep your pet's care close to you. 🐾"}
-            </p>
-
-            <div className="mx-auto mt-8 h-1.5 w-32 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full w-full origin-left animate-pulse rounded-full bg-cyan-300" />
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Ambient background */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-24 -top-24 h-80 w-80 rounded-full bg-cyan-200/30 blur-3xl dark:bg-cyan-400/10" />
-        <div className="absolute right-[-100px] top-1/4 h-96 w-96 rounded-full bg-blue-200/30 blur-3xl dark:bg-blue-500/10" />
-        <div className="absolute bottom-[-140px] left-1/3 h-96 w-96 rounded-full bg-emerald-200/20 blur-3xl dark:bg-emerald-400/10" />
-        <div className="absolute left-[8%] top-[18%] text-3xl opacity-20 animate-bounce">🐾</div>
-        <div className="absolute right-[12%] top-[12%] text-2xl opacity-20 animate-pulse">✦</div>
-        <div className="absolute bottom-[20%] right-[7%] text-4xl opacity-15 animate-bounce">🐾</div>
-        <div className="absolute bottom-[12%] left-[12%] text-2xl opacity-20 animate-pulse">♡</div>
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-cyan-300/20 blur-3xl" />
+        <div className="absolute -right-32 top-1/4 h-[30rem] w-[30rem] rounded-full bg-blue-300/20 blur-3xl" />
+        <div className="absolute bottom-[-10rem] left-1/3 h-96 w-96 rounded-full bg-emerald-300/15 blur-3xl" />
+        <div className="absolute left-[5%] top-[35%] rotate-[-18deg] text-8xl opacity-10">🐾</div>
+        <div className="absolute right-[5%] bottom-[20%] rotate-[18deg] text-8xl opacity-10">🐾</div>
       </div>
 
-      {/* Header */}
-      <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8 lg:px-10">
+      <header className="relative z-10 flex items-center justify-between px-5 py-5 sm:px-10">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-xl text-white shadow-lg dark:bg-white dark:text-slate-900">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-2xl text-white shadow-xl dark:bg-white dark:text-slate-900">
             🐾
           </div>
           <div>
-            <div className="font-black tracking-[0.18em]">VETRA</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+            <div className="font-black tracking-[0.2em]">VETRA</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400">
               Pet Care Portal
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex gap-2">
           <button
-            onClick={() => router.push("/login")}
-            className="hidden rounded-full border border-slate-200/80 bg-white/70 px-4 py-2 text-xs font-black backdrop-blur transition duration-300 hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-md sm:inline-flex dark:border-white/10 dark:bg-white/5"
-          >
-            🩺 {ar ? "دخول الطبيب / العيادة" : "Doctor / Clinic Login"}
-          </button>
-
-          <button
-            onClick={toggleLanguage}
-            className="rounded-full border border-slate-200/80 bg-white/70 px-4 py-2 text-xs font-bold backdrop-blur transition duration-300 hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/5"
+            onClick={() => setLanguage(ar ? "en" : "ar")}
+            className="rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-xs font-bold backdrop-blur dark:border-white/10 dark:bg-white/5"
           >
             {ar ? "English" : "العربية"}
           </button>
-
           <button
-            onClick={toggleTheme}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white/70 backdrop-blur transition duration-300 hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/5"
-            aria-label="Toggle theme"
+            onClick={() => setDark((v) => !v)}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/70 backdrop-blur dark:border-white/10 dark:bg-white/5"
           >
             {dark ? "☀️" : "🌙"}
+          </button>
+          <button
+            onClick={signOut}
+            className="rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-xs font-bold backdrop-blur dark:border-white/10 dark:bg-white/5"
+          >
+            {ar ? "خروج" : "Sign out"}
           </button>
         </div>
       </header>
 
-      {/* Main landing */}
-      <section className="relative z-10 mx-auto grid min-h-[calc(100vh-90px)] max-w-7xl items-center gap-12 px-5 pb-14 pt-6 sm:px-8 lg:grid-cols-[1.05fr_.95fr] lg:px-10 lg:pt-0">
-        <div className="order-2 lg:order-1">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-200/70 bg-white/70 px-4 py-2 text-xs font-bold text-cyan-700 shadow-sm backdrop-blur dark:border-cyan-300/10 dark:bg-white/5 dark:text-cyan-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            {ar ? "رعاية حيوانك في مكان واحد" : "Your pet care, all in one place"}
-          </div>
+      <section className="relative z-10 mx-auto max-w-7xl px-5 pb-12 sm:px-10">
+        <div className="grid items-center gap-10 rounded-[3rem] border border-white/70 bg-white/65 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5 sm:p-10 lg:grid-cols-[1.05fr_.95fr]">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white/80 px-4 py-2 text-xs font-bold text-cyan-700 dark:border-cyan-300/10 dark:bg-white/5 dark:text-cyan-300">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              {ar ? "رعاية حيوانك في مكان واحد" : "Your pet care, all in one place"}
+            </div>
 
-          <h2 className="max-w-3xl text-5xl font-black leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl">
-            {ar ? (
-              <>
-                أهلاً بيك،
-                <span className="text-cyan-500"> Pet Owner</span> 👋
-              </>
-            ) : (
-              <>
-                Welcome,
-                <span className="text-cyan-500"> Pet Owner</span> 👋
-              </>
-            )}
-          </h2>
+            <h1 className="mt-6 text-5xl font-black leading-[1.02] tracking-tight sm:text-6xl">
+              {ar ? "Welcome back، " : "Welcome back, "}
+              <span className="text-cyan-500">
+                {client?.name || "Pet Owner"}
+              </span>{" "}
+              👋
+            </h1>
 
-          <p className="mt-6 max-w-xl text-lg leading-8 text-slate-500 dark:text-slate-300">
-            {ar
-              ? "كل تفاصيل حيوانك، مواعيدك، تطعيماتك وفواتيرك موجودة هنا بشكل بسيط وسهل."
-              : "Your pets, appointments, vaccines and invoices — beautifully organized and always within reach."}
-          </p>
+            <p className="mt-5 max-w-xl text-lg leading-8 text-slate-500 dark:text-slate-300">
+              {ar
+                ? "كل تفاصيل حيواناتك، مواعيدك وتطعيماتك وفواتيرك هنا."
+                : "Your pets, appointments, vaccines and invoices — all in one place."}
+            </p>
 
-          <div className="mt-9 flex flex-wrap gap-3">
-            <button
-              onClick={() => router.push("/client-interface/login")}
-              className="group rounded-2xl bg-slate-900 px-6 py-4 text-sm font-black text-white shadow-xl shadow-slate-900/15 transition duration-300 hover:-translate-y-1 hover:shadow-2xl dark:bg-white dark:text-slate-900"
-            >
-              <span>{ar ? "دخول صاحب الحيوان" : "Pet Owner Login"}</span>
-              <span className="ms-2 inline-block transition-transform duration-300 group-hover:translate-x-1">→</span>
-            </button>
-
-            <button
-              onClick={() => router.push("/login")}
-              className="rounded-2xl border border-slate-200 bg-white/70 px-6 py-4 text-sm font-bold backdrop-blur transition duration-300 hover:-translate-y-1 hover:bg-white hover:shadow-lg dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
-            >
-              🩺 {ar ? "دخول الطبيب / العيادة" : "Doctor / Clinic Login"}
-            </button>
-          </div>
-
-          <div className="mt-12 grid max-w-2xl grid-cols-2 gap-3 sm:grid-cols-4">
-            {features.map((feature) => (
-              <div
-                key={feature.title}
-                className="group rounded-3xl border border-white/80 bg-white/65 p-4 text-start shadow-sm backdrop-blur transition duration-500 hover:-translate-y-2 hover:shadow-xl dark:border-white/[0.06] dark:bg-white/[0.04]"
-              >
-                <div className="text-2xl transition-transform duration-500 group-hover:scale-125 group-hover:-rotate-6">
-                  {feature.icon}
-                </div>
-                <div className="mt-4 text-sm font-black">
-                  {ar
-                    ? feature.title === "Your Pets"
-                      ? "حيواناتك"
-                      : feature.title === "Vaccines"
-                        ? "التطعيمات"
-                        : feature.title === "Appointments"
-                          ? "المواعيد"
-                          : "الفواتير"
-                    : feature.title}
-                </div>
-                <div className="mt-1 text-[11px] leading-5 text-slate-400">
-                  {ar ? "متابعة سهلة" : feature.subtitle}
-                </div>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <div className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white dark:bg-white dark:text-slate-900">
+                {pets.length} {ar ? "حيوان" : pets.length === 1 ? "Pet" : "Pets"}
               </div>
-            ))}
+              <div className="rounded-2xl border border-slate-200 bg-white/70 px-5 py-3 text-sm font-bold dark:border-white/10 dark:bg-white/5">
+                {ar ? "حساب آمن" : "Secure account"} 🔐
+              </div>
+            </div>
+          </div>
+
+          <div className="relative mx-auto h-[360px] w-full max-w-[430px]">
+            <div className="absolute inset-5 rounded-[3rem] bg-gradient-to-br from-cyan-100 via-white to-blue-100 shadow-2xl dark:from-cyan-500/10 dark:via-slate-900 dark:to-blue-500/10" />
+            <div className="absolute left-1/2 top-5 flex h-56 w-56 -translate-x-1/2 items-center justify-center rounded-full bg-white/80 text-[8rem] shadow-2xl backdrop-blur-xl dark:bg-white/5">
+              {heroPet?.species?.toLowerCase().includes("cat") ? "🐱" : "🐶"}
+            </div>
+
+            <div className="absolute bottom-0 left-4 right-4 rounded-[2rem] border border-white/70 bg-white/90 p-5 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#101923]/90">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                {ar ? "حيوانك المميز" : "Your Hero Pet"}
+              </div>
+              <div className="mt-1 text-2xl font-black">
+                {heroPet?.name || "Your Hero Pet"} 🐾
+              </div>
+              <div className="mt-1 text-sm text-slate-500 dark:text-slate-300">
+                {heroPet
+                  ? `${heroPet.species}${heroPet.breed ? ` • ${heroPet.breed}` : ""}`
+                  : ar
+                    ? "لم تضف حيوانًا بعد"
+                    : "No pet added yet"}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Hero visual */}
-        <div className="relative order-1 flex min-h-[430px] items-center justify-center lg:order-2">
-          <div className="absolute h-[330px] w-[330px] rounded-full bg-cyan-300/20 blur-3xl dark:bg-cyan-400/10" />
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {cards.map(([icon, title, subtitle]) => (
+            <button
+              key={title}
+              className="group rounded-[2rem] border border-white/70 bg-white/70 p-6 text-left shadow-lg backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:shadow-2xl dark:border-white/10 dark:bg-white/5"
+            >
+              <div className="text-3xl transition duration-300 group-hover:scale-110">{icon}</div>
+              <div className="mt-5 text-lg font-black">{ar ? title : title}</div>
+              <div className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-300">
+                {subtitle}
+              </div>
+            </button>
+          ))}
+        </div>
 
-          <div className="absolute right-[5%] top-[8%] rounded-full bg-white/70 p-4 text-2xl shadow-lg backdrop-blur animate-bounce dark:bg-white/10">
-            🐾
-          </div>
-
-          <div className="absolute bottom-[12%] left-[8%] rounded-full bg-white/70 p-3 text-xl shadow-lg backdrop-blur animate-pulse dark:bg-white/10">
-            ♡
-          </div>
-
-          <div className="relative h-[390px] w-[320px] sm:h-[450px] sm:w-[370px]">
-            <div className="absolute inset-x-0 bottom-0 h-[330px] rounded-[3.5rem] border border-white/70 bg-white/55 shadow-2xl shadow-cyan-900/10 backdrop-blur-2xl dark:border-white/10 dark:bg-white/[0.05]" />
-
-            <div className="absolute left-1/2 top-0 flex h-[230px] w-[230px] -translate-x-1/2 items-center justify-center rounded-full bg-gradient-to-br from-cyan-100 via-white to-blue-100 text-[125px] shadow-2xl transition duration-700 hover:scale-105 dark:from-cyan-500/20 dark:via-slate-900 dark:to-blue-500/20 sm:h-[260px] sm:w-[260px] sm:text-[145px]">
-              🐶
+        <div className="mt-8">
+          <h2 className="text-2xl font-black">{ar ? "حيواناتك" : "Your Pets"}</h2>
+          {pets.length === 0 ? (
+            <div className="mt-4 rounded-[2rem] border border-dashed border-slate-300 bg-white/50 p-8 text-center text-sm text-slate-500 dark:border-white/10 dark:bg-white/5">
+              {ar ? "لا توجد حيوانات مرتبطة بهذا الحساب حتى الآن." : "No pets are linked to this account yet."}
             </div>
-
-            <div className="absolute bottom-8 left-6 right-6 rounded-[2rem] border border-white/70 bg-white/80 p-5 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#101923]/85">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                    {ar ? "حيوانك المميز" : "Your Hero Pet"}
+          ) : (
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {pets.map((pet) => (
+                <button
+                  key={pet.id}
+                  onClick={() => router.push(`/client-interface/${clientId}?pet=${pet.id}`)}
+                  className="rounded-[2rem] border border-white/70 bg-white/70 p-5 text-left shadow-lg backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-2xl dark:border-white/10 dark:bg-white/5"
+                >
+                  <div className="text-4xl">
+                    {pet.species.toLowerCase().includes("cat") ? "🐱" : "🐶"}
                   </div>
-                  <div className="mt-1 text-2xl font-black">Your Hero Pet 🐾</div>
-                </div>
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-lg dark:bg-emerald-400/10">
-                  💚
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between text-xs">
-                <span className="text-slate-400">
-                  {ar ? "رعاية أسهل" : "Smarter care"}
-                </span>
-                <span className="font-bold">VETRA</span>
-              </div>
-
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
-                <div className="h-full w-[82%] rounded-full bg-cyan-400 transition-all duration-1000" />
-              </div>
+                  <div className="mt-3 text-xl font-black">{pet.name}</div>
+                  <div className="mt-1 text-sm text-slate-500 dark:text-slate-300">
+                    {pet.species}{pet.breed ? ` • ${pet.breed}` : ""}
+                  </div>
+                  {pet.is_deceased && (
+                    <div className="mt-3 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-white/10">
+                      {ar ? "متوفى" : "Deceased"}
+                    </div>
+                  )}
+                </button>
+              ))}
             </div>
-          </div>
+          )}
+        </div>
+
+        <div className="mt-10 grid gap-6 lg:grid-cols-[1.4fr_.9fr]">
+          <section className="rounded-[2rem] border border-white/70 bg-white/70 p-6 shadow-lg backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-black">{ar ? "الزيارات الطبية" : "Medical Visits"}</h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">{ar ? "كل تفاصيل الزيارة محفوظة مع الحيوان." : "Your complete visit information, all in one place."}</p>
+              </div>
+              <span className="rounded-full bg-cyan-500/10 px-3 py-1 text-xs font-black text-cyan-600">{visits.length}</span>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {visits.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-white/10">{ar ? "لا توجد زيارات مسجلة حتى الآن." : "No visits recorded yet."}</div>
+              ) : visits.map((visit) => {
+                const pet = pets.find((item) => item.id === visit.pet_id);
+                return (
+                  <article key={visit.id} className="rounded-2xl border border-slate-200 bg-white/80 p-5 dark:border-white/10 dark:bg-[#101923]/80">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-lg font-black">{pet?.name || "Pet"}</div>
+                        <div className="mt-1 text-xs font-bold text-slate-400">{new Date(visit.visit_date).toLocaleString(ar ? "ar-EG" : "en-EG")}</div>
+                      </div>
+                      {visit.weight != null && <div className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black dark:bg-white/10">{visit.weight} kg</div>}
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {[[ar ? "سبب الزيارة" : "Reason", visit.reason],[ar ? "الفحص" : "Examination", visit.examination],[ar ? "التشخيص" : "Diagnosis", visit.diagnosis],[ar ? "العلاج" : "Treatment", visit.treatment],[ar ? "ملاحظات" : "Notes", visit.notes]].map(([label,value]) => value ? <div key={String(label)} className="rounded-xl bg-slate-50 p-3 dark:bg-white/5"><div className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</div><div className="mt-1 whitespace-pre-wrap text-sm leading-6">{value}</div></div> : null)}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+                      {visit.temperature != null && <span className="rounded-full bg-rose-500/10 px-3 py-1">🌡 {visit.temperature}°C</span>}
+                      {visit.heart_rate != null && <span className="rounded-full bg-blue-500/10 px-3 py-1">❤️ {visit.heart_rate} bpm</span>}
+                      {visit.respiratory_rate != null && <span className="rounded-full bg-emerald-500/10 px-3 py-1">🫁 {visit.respiratory_rate} rpm</span>}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="rounded-[2rem] border border-white/70 bg-white/70 p-6 shadow-lg backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-black">{ar ? "التطعيمات" : "Vaccinations"}</h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">{ar ? "التطعيمات القادمة مع موعد الجرعة التالية." : "Vaccines and upcoming dose dates."}</p>
+              </div>
+              <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-black text-emerald-600">💉 {vaccinations.length}</span>
+            </div>
+            <div className="mt-5 space-y-3">
+              {vaccinations.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-white/10">{ar ? "لا توجد تطعيمات مسجلة." : "No vaccinations recorded."}</div>
+              ) : vaccinations.map((vaccine) => {
+                const pet = pets.find((item) => item.id === vaccine.pet_id);
+                const next = vaccine.next_dose_at ? new Date(vaccine.next_dose_at) : null;
+                const days = next ? Math.ceil((next.getTime() - Date.now()) / 86400000) : null;
+                return (
+                  <article key={vaccine.id} className="rounded-2xl border border-slate-200 bg-white/80 p-4 dark:border-white/10 dark:bg-[#101923]/80">
+                    <div className="flex items-start justify-between gap-3">
+                      <div><div className="font-black">{vaccine.vaccine_name}</div><div className="mt-1 text-xs text-slate-400">{pet?.name || "Pet"}{vaccine.vaccine_type ? ` • ${vaccine.vaccine_type}` : ""}</div></div>
+                      {days != null && <div className={`rounded-xl px-3 py-2 text-xs font-black ${days < 0 ? "bg-rose-500/10 text-rose-600" : days <= 7 ? "bg-amber-500/10 text-amber-600" : "bg-emerald-500/10 text-emerald-600"}`}>{days < 0 ? (ar ? "متأخر" : "Overdue") : days === 0 ? (ar ? "اليوم" : "Today") : `${days} ${ar ? "يوم" : "days"}`}</div>}
+                    </div>
+                    {next && <div className="mt-3 text-sm font-bold">{ar ? "الجرعة التالية:" : "Next dose:"} {next.toLocaleDateString(ar ? "ar-EG" : "en-EG")}</div>}
+                    {(vaccine.route || vaccine.manufacturer || vaccine.batch_number) && <div className="mt-2 text-xs text-slate-500">{[vaccine.route, vaccine.manufacturer, vaccine.batch_number].filter(Boolean).join(" • ")}</div>}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
         </div>
       </section>
-
-      <div className="relative z-10 px-5 pb-5 sm:hidden">
-        <button
-          onClick={() => router.push("/login")}
-          className="w-full rounded-2xl border border-slate-200 bg-white/70 px-5 py-4 text-sm font-black shadow-lg backdrop-blur transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-white/5"
-        >
-          🩺 {ar ? "دخول الطبيب / العيادة" : "Doctor / Clinic Login"}
-        </button>
-      </div>
-
-      <footer className="relative z-10 mx-auto max-w-7xl px-5 pb-8 text-center text-xs text-slate-400 sm:px-8 lg:px-10">
-        {ar
-          ? "VETRA — لأن كل حياة صغيرة تستحق الاهتمام. 🐾"
-          : "VETRA — Because every little life matters. 🐾"}
-      </footer>
     </main>
+    </>
   );
 }

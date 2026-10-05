@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getClinicDb } from "@/lib/clinic-db";
+import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 
 type Language = "en" | "ar";
 
@@ -41,6 +42,54 @@ type Visit = {
   heart_rate: number | null;
   respiratory_rate: number | null;
   notes: string | null;
+};
+
+type Medication = {
+  id: string;
+  name: string;
+  active_ingredient: string | null;
+  species: string[] | null;
+  concentration: number | null;
+  concentration_unit: string | null;
+  dose_type: string | null;
+  dose_value: number | null;
+  dose_min: number | null;
+  dose_max: number | null;
+  dose_unit: string | null;
+  route: string | null;
+  frequency: string | null;
+  duration_days: number | null;
+  instructions: string | null;
+};
+
+type MedicationDraft = {
+  id: string;
+  medication_id: string;
+  weight_kg: number;
+  calculated_dose: number;
+  calculated_dose_unit: string;
+  dose_per_kg: number | null;
+  concentration: number | null;
+  concentration_unit: string | null;
+  calculated_volume: number | null;
+  volume_unit: string | null;
+  route: string | null;
+  frequency: string | null;
+  duration_days: number | null;
+  instructions: string | null;
+};
+
+type VaccinationDraft = {
+  id: string;
+  vaccine_name: string;
+  vaccine_type: string;
+  administered_at: string;
+  next_dose_at: string;
+  dose: string;
+  route: string;
+  batch_number: string;
+  manufacturer: string;
+  notes: string;
 };
 
 type PetDetails = Pet & {
@@ -589,6 +638,8 @@ function VitalCard({
 }
 
 export default function NewVisitPage() {
+  const router = useRouter();
+
   const [language, setLanguage] = useState<Language>("en");
   const [darkMode, setDarkMode] = useState(false);
 
@@ -629,6 +680,13 @@ export default function NewVisitPage() {
   const [selectedOldVisit, setSelectedOldVisit] =
     useState<Visit | null>(null);
 
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [medicationSearch, setMedicationSearch] = useState("");
+  const [selectedMedicationId, setSelectedMedicationId] = useState("");
+  const [medicationDrafts, setMedicationDrafts] = useState<MedicationDraft[]>([]);
+  const [vaccinations, setVaccinations] = useState<VaccinationDraft[]>([]);
+  const [whatsappEnabled, setWhatsappEnabled] = useState(true);
+
   const t = translations[language];
 
   useEffect(() => {
@@ -668,6 +726,7 @@ export default function NewVisitPage() {
 
   useEffect(() => {
     loadClients();
+    loadMedications();
   }, []);
 
   useEffect(() => {
@@ -873,6 +932,158 @@ export default function NewVisitPage() {
     }
   }
 
+  async function loadMedications() {
+    try {
+      const db = await getClinicDb();
+      const { data, error } = await db
+        .from("medications")
+        .select(`
+          id, name, active_ingredient, species, concentration, concentration_unit,
+          dose_type, dose_value, dose_min, dose_max, dose_unit, route, frequency,
+          duration_days, instructions
+        `)
+        .eq("active", true)
+        .order("name");
+      if (error) throw error;
+      setMedications((data || []) as Medication[]);
+    } catch (error) {
+      console.error("LOAD MEDICATIONS ERROR:", error);
+    }
+  }
+
+  const filteredMedications = useMemo(() => {
+    const species = (petDetails?.species || "").toLowerCase();
+    const q = medicationSearch.trim().toLowerCase();
+    return medications.filter((med) => {
+      const speciesOk = !med.species?.length || med.species.some((x) => String(x).toLowerCase() === species);
+      const searchOk = !q || med.name.toLowerCase().includes(q) || (med.active_ingredient || "").toLowerCase().includes(q);
+      return speciesOk && searchOk;
+    });
+  }, [medications, medicationSearch, petDetails?.species]);
+
+  function calculateMedicationDraft(med: Medication): MedicationDraft | null {
+    const w = Number(weight);
+    if (!Number.isFinite(w) || w <= 0 || med.dose_value == null) return null;
+
+    const doseType = (med.dose_type || "mg_kg").toLowerCase();
+    let dose = Number(med.dose_value);
+    let unit = med.dose_unit || "mg";
+    let dosePerKg: number | null = null;
+
+    if (doseType === "mg_kg" || doseType === "mg/kg") {
+      dosePerKg = dose;
+      dose = dose * w;
+      unit = med.dose_unit || "mg";
+    } else if (doseType === "ml_kg" || doseType === "ml/kg") {
+      dosePerKg = dose;
+      dose = dose * w;
+      unit = med.dose_unit || "mL";
+    }
+
+    let volume: number | null = null;
+    let volumeUnit: string | null = null;
+    const concentration = med.concentration != null ? Number(med.concentration) : null;
+    const concentrationUnit = med.concentration_unit || null;
+    if (concentration && concentration > 0 && /mg/i.test(unit) && /mg\s*\/?\s*ml|mg\/ml/i.test(concentrationUnit || "")) {
+      volume = dose / concentration;
+      volumeUnit = "mL";
+    } else if (concentration && concentration > 0 && /mcg/i.test(unit) && /mg\s*\/?\s*ml|mg\/ml/i.test(concentrationUnit || "")) {
+      volume = (dose / 1000) / concentration;
+      volumeUnit = "mL";
+    }
+
+    return {
+      id: crypto.randomUUID(),
+      medication_id: med.id,
+      weight_kg: w,
+      calculated_dose: Number(dose.toFixed(3)),
+      calculated_dose_unit: unit,
+      dose_per_kg: dosePerKg,
+      concentration,
+      concentration_unit: concentrationUnit,
+      calculated_volume: volume == null ? null : Number(volume.toFixed(3)),
+      volume_unit: volumeUnit,
+      route: med.route,
+      frequency: med.frequency,
+      duration_days: med.duration_days,
+      instructions: med.instructions,
+    };
+  }
+
+  function addMedication() {
+    const med = medications.find((item) => item.id === selectedMedicationId);
+    if (!med) return;
+    const draft = calculateMedicationDraft(med);
+    if (!draft) {
+      setMessage(language === "ar" ? "أدخل وزن الحيوان أولًا وتأكد أن الدواء له جرعة مسجلة." : "Enter the pet weight and make sure the medication has a configured dose.");
+      return;
+    }
+    setMedicationDrafts((current) => [...current, draft]);
+    setSelectedMedicationId("");
+  }
+
+  function removeMedication(id: string) {
+    setMedicationDrafts((current) => current.filter((item) => item.id !== id));
+  }
+
+  function addVaccination() {
+    setVaccinations((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        vaccine_name: "",
+        vaccine_type: "",
+        administered_at: new Date().toISOString().slice(0, 16),
+        next_dose_at: "",
+        dose: "",
+        route: "",
+        batch_number: "",
+        manufacturer: "",
+        notes: "",
+      },
+    ]);
+  }
+
+  function updateVaccination(id: string, patch: Partial<VaccinationDraft>) {
+    setVaccinations((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
+  }
+
+  function removeVaccination(id: string) {
+    setVaccinations((current) => current.filter((item) => item.id !== id));
+  }
+
+  function buildPrescriptionText() {
+    const lines = medicationDrafts.map((draft) => {
+      const med = medications.find((item) => item.id === draft.medication_id);
+      const name = med?.name || "Medication";
+      const dose = `${draft.calculated_dose} ${draft.calculated_dose_unit}`;
+      const volume = draft.calculated_volume != null ? ` (${draft.calculated_volume} ${draft.volume_unit})` : "";
+      const route = draft.route ? ` • ${draft.route}` : "";
+      const frequency = draft.frequency ? ` • ${draft.frequency}` : "";
+      const duration = draft.duration_days ? ` • ${draft.duration_days} days` : "";
+      return `• ${name}: ${dose}${volume}${route}${frequency}${duration}`;
+    });
+    const vaccineLines = vaccinations.filter((v) => v.vaccine_name.trim()).map((v) => `• Vaccine: ${v.vaccine_name}${v.next_dose_at ? ` — next dose ${v.next_dose_at}` : ""}`);
+    const parts = [
+      `VETRA — ${petDetails?.name || "Pet"}`,
+      diagnosis.trim() ? `Diagnosis: ${diagnosis.trim()}` : "",
+      lines.length ? `Treatment:\n${lines.join("\n")}` : treatment.trim() ? `Treatment:\n${treatment.trim()}` : "",
+      vaccineLines.length ? `Vaccination:\n${vaccineLines.join("\n")}` : "",
+      visitNotes.trim() ? `Notes:\n${visitNotes.trim()}` : "",
+    ].filter(Boolean);
+    return parts.join("\n\n");
+  }
+
+  function openWhatsAppPrescription() {
+    const phone = petDetails?.client?.phone || "";
+    const digits = phone.replace(/\D/g, "");
+    if (!digits) return false;
+    const normalized = digits.startsWith("0") ? `20${digits.slice(1)}` : digits;
+    const url = `https://wa.me/${normalized}?text=${encodeURIComponent(buildPrescriptionText())}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+    return true;
+  }
+
   async function saveVisit() {
     setMessage("");
 
@@ -881,49 +1092,102 @@ export default function NewVisitPage() {
       return;
     }
 
+    if (petDetails?.is_deceased) {
+      setMessage(t.deceasedPet);
+      return;
+    }
+
     setSaving(true);
 
     try {
       const db = await getClinicDb();
-
-      const {
-        data: currentPet,
-        error: currentPetError,
-      } = await db
+      const clinicContext = await getClinicContext();
+      const { data: currentPet, error: currentPetError } = await db
         .from("pets")
         .select("is_deceased")
         .eq("id", selectedPetId)
         .single();
 
-      if (currentPetError || !currentPet) {
-        setMessage(t.loadError);
-        return;
-      }
-
+      if (currentPetError || !currentPet) throw currentPetError || new Error(t.loadError);
       if (currentPet.is_deceased) {
         setMessage(t.deceasedPet);
         setStarted(false);
         return;
       }
 
-      const { error } = await db.from("visits").insert({
-        client_id: selectedClientId,
-        pet_id: selectedPetId,
-        reason: reason || null,
-        examination: examination || null,
-        diagnosis: diagnosis || null,
-        treatment: treatment || null,
-        weight: weight ? Number(weight) : null,
-        temperature: temperature ? Number(temperature) : null,
-        heart_rate: heartRate ? Number(heartRate) : null,
-        respiratory_rate: respiratoryRate ? Number(respiratoryRate) : null,
-        notes: visitNotes || null,
-      });
+      const medicationText = medicationDrafts.map((draft) => {
+        const med = medications.find((item) => item.id === draft.medication_id);
+        const dose = `${draft.calculated_dose} ${draft.calculated_dose_unit}`;
+        const volume = draft.calculated_volume != null ? ` (${draft.calculated_volume} ${draft.volume_unit})` : "";
+        return `${med?.name || "Medication"}: ${dose}${volume}${draft.route ? `, ${draft.route}` : ""}${draft.frequency ? `, ${draft.frequency}` : ""}${draft.duration_days ? ` for ${draft.duration_days} days` : ""}`;
+      }).join("\n");
+      const finalTreatment = [treatment.trim(), medicationText].filter(Boolean).join("\n\n");
 
-      if (error) {
-        console.error("SAVE VISIT ERROR:", error);
-        setMessage(error.message || t.saveError);
-        return;
+      const { data: visit, error: visitError } = await db
+        .from("visits")
+        .insert({
+          client_id: selectedClientId,
+          pet_id: selectedPetId,
+          reason: reason.trim() || null,
+          examination: examination.trim() || null,
+          diagnosis: diagnosis.trim() || null,
+          treatment: finalTreatment || null,
+          weight: weight ? Number(weight) : null,
+          temperature: temperature ? Number(temperature) : null,
+          heart_rate: heartRate ? Number(heartRate) : null,
+          respiratory_rate: respiratoryRate ? Number(respiratoryRate) : null,
+          notes: visitNotes.trim() || null,
+        })
+        .select("id")
+        .single();
+
+      if (visitError || !visit) throw visitError || new Error(t.saveError);
+
+      if (medicationDrafts.length) {
+        const medicationRows = medicationDrafts.map((draft) => ({
+          clinic_id: clinicContext.clinic_id,
+          visit_id: visit.id,
+          medication_id: draft.medication_id,
+          weight_kg: draft.weight_kg,
+          calculated_dose: draft.calculated_dose,
+          calculated_dose_unit: draft.calculated_dose_unit,
+          dose_per_kg: draft.dose_per_kg,
+          concentration: draft.concentration,
+          concentration_unit: draft.concentration_unit,
+          calculated_volume: draft.calculated_volume,
+          volume_unit: draft.volume_unit,
+          route: draft.route,
+          frequency: draft.frequency,
+          duration_days: draft.duration_days,
+          instructions: draft.instructions,
+        }));
+        const { error: medError } = await db.from("visit_medications").insert(medicationRows);
+        if (medError) throw medError;
+      }
+
+      const validVaccinations = vaccinations.filter((v) => v.vaccine_name.trim());
+      if (validVaccinations.length) {
+        const vaccineRows = validVaccinations.map((v) => ({
+          clinic_id: clinicContext.clinic_id,
+          visit_id: visit.id,
+          pet_id: selectedPetId,
+          client_id: selectedClientId,
+          vaccine_name: v.vaccine_name.trim(),
+          vaccine_type: v.vaccine_type.trim() || null,
+          administered_at: v.administered_at ? new Date(v.administered_at).toISOString() : new Date().toISOString(),
+          next_dose_at: v.next_dose_at ? new Date(v.next_dose_at).toISOString() : null,
+          dose: v.dose.trim() || null,
+          route: v.route.trim() || null,
+          batch_number: v.batch_number.trim() || null,
+          manufacturer: v.manufacturer.trim() || null,
+          notes: v.notes.trim() || null,
+        }));
+        const { error: vaccineError } = await db.from("vaccinations").insert(vaccineRows);
+        if (vaccineError) throw vaccineError;
+      }
+
+      if (whatsappEnabled && petDetails?.client?.phone) {
+        openWhatsAppPrescription();
       }
 
       setMessage(t.visitSaved);
@@ -933,13 +1197,18 @@ export default function NewVisitPage() {
       setDiagnosis("");
       setTreatment("");
       setVisitNotes("");
-
       setWeight("");
       setTemperature("");
       setHeartRate("");
       setRespiratoryRate("");
+      setMedicationDrafts([]);
+      setVaccinations([]);
 
       await loadVisits(selectedPetId);
+
+      router.push(
+        `/invoices/new?client=${encodeURIComponent(selectedClientId)}&pet=${encodeURIComponent(selectedPetId)}&visit=${encodeURIComponent(visit.id)}`
+      );
     } catch (error) {
       console.error("SAVE VISIT ERROR:", error);
       setMessage(error instanceof Error ? error.message : t.saveError);
@@ -2085,31 +2354,80 @@ export default function NewVisitPage() {
                   />
                 </div>
 
-                <div>
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {t.treatment}
-                  </label>
+                <div className="lg:col-span-2">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <label className={`block text-sm font-semibold ${darkMode ? "text-slate-300" : "text-slate-700"}`}>{t.treatment}</label>
+                    <span className="rounded-full bg-blue-500/10 px-3 py-1 text-[11px] font-bold text-blue-600 dark:text-blue-300">Medication Library + dose calculator</span>
+                  </div>
 
-                  <textarea
-                    rows={4}
-                    value={treatment}
-                    onChange={(e) =>
-                      setTreatment(e.target.value)
-                    }
-                    placeholder={t.treatmentPlaceholder}
-                    className={`w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
-                  />
+                  <div className={`rounded-2xl border p-4 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-slate-50"}`}>
+                    <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                      <div>
+                        <input value={medicationSearch} onChange={(e) => setMedicationSearch(e.target.value)} placeholder={language === "ar" ? "ابحث عن دواء..." : "Search medication..."} className={`mb-2 w-full rounded-xl border px-3 py-2 text-sm outline-none ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`} />
+                        <select value={selectedMedicationId} onChange={(e) => setSelectedMedicationId(e.target.value)} className={`w-full rounded-xl border px-3 py-3 text-sm outline-none ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`}>
+                          <option value="">{language === "ar" ? "اختار دواء من المكتبة" : "Select medication from library"}</option>
+                          {filteredMedications.map((med) => (
+                            <option key={med.id} value={med.id}>{med.name}{med.active_ingredient ? ` — ${med.active_ingredient}` : ""}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button type="button" onClick={addMedication} className="self-end rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700">+ {language === "ar" ? "إضافة دواء" : "Add medication"}</button>
+                    </div>
+
+                    {medicationDrafts.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        {medicationDrafts.map((draft) => {
+                          const med = medications.find((item) => item.id === draft.medication_id);
+                          const outside = (med?.dose_min != null && draft.dose_per_kg != null && draft.dose_per_kg < Number(med.dose_min)) || (med?.dose_max != null && draft.dose_per_kg != null && draft.dose_per_kg > Number(med.dose_max));
+                          return (
+                            <div key={draft.id} className={`rounded-xl border p-3 ${darkMode ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"}`}>
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="font-bold">{med?.name || "Medication"}</div>
+                                  <div className="mt-1 text-xs text-slate-500">Dose: {draft.calculated_dose} {draft.calculated_dose_unit}{draft.calculated_volume != null ? ` • ${draft.calculated_volume} ${draft.volume_unit}` : ""} {draft.route ? ` • ${draft.route}` : ""} {draft.frequency ? ` • ${draft.frequency}` : ""} {draft.duration_days ? ` • ${draft.duration_days} days` : ""}</div>
+                                  {outside && <div className="mt-1 text-xs font-bold text-amber-600">⚠ Dose is outside the configured protocol range.</div>}
+                                </div>
+                                <button type="button" onClick={() => removeMedication(draft.id)} className="rounded-lg px-2 py-1 text-rose-500 hover:bg-rose-50">✕</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <textarea rows={4} value={treatment} onChange={(e) => setTreatment(e.target.value)} placeholder={t.treatmentPlaceholder} className={`mt-4 w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${darkMode ? "border-slate-700 bg-slate-900 text-white placeholder:text-slate-500" : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"}`} />
+                  </div>
                 </div>
+
+                <div className="lg:col-span-2">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <label className={`block text-sm font-semibold ${darkMode ? "text-slate-300" : "text-slate-700"}`}>{language === "ar" ? "التطعيمات" : "Vaccinations"}</label>
+                    <button type="button" onClick={addVaccination} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700">+ {language === "ar" ? "إضافة تطعيم" : "Add vaccine"}</button>
+                  </div>
+                  {vaccinations.length === 0 ? (
+                    <div className={`rounded-2xl border border-dashed p-4 text-xs text-slate-500 ${darkMode ? "border-slate-700" : "border-slate-200"}`}>{language === "ar" ? "لا يوجد تطعيم مضاف لهذه الزيارة." : "No vaccination added to this visit."}</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {vaccinations.map((v) => (
+                        <div key={v.id} className={`rounded-2xl border p-4 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-slate-50"}`}>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <input value={v.vaccine_name} onChange={(e) => updateVaccination(v.id,{vaccine_name:e.target.value})} placeholder={language === "ar" ? "اسم التطعيم" : "Vaccine name"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input value={v.vaccine_type} onChange={(e) => updateVaccination(v.id,{vaccine_type:e.target.value})} placeholder={language === "ar" ? "النوع" : "Type"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input type="datetime-local" value={v.administered_at} onChange={(e) => updateVaccination(v.id,{administered_at:e.target.value})} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input type="datetime-local" value={v.next_dose_at} onChange={(e) => updateVaccination(v.id,{next_dose_at:e.target.value})} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input value={v.dose} onChange={(e) => updateVaccination(v.id,{dose:e.target.value})} placeholder={language === "ar" ? "الجرعة" : "Dose"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input value={v.route} onChange={(e) => updateVaccination(v.id,{route:e.target.value})} placeholder={language === "ar" ? "طريقة الإعطاء" : "Route"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input value={v.batch_number} onChange={(e) => updateVaccination(v.id,{batch_number:e.target.value})} placeholder={language === "ar" ? "رقم التشغيلة" : "Batch number"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input value={v.manufacturer} onChange={(e) => updateVaccination(v.id,{manufacturer:e.target.value})} placeholder={language === "ar" ? "الشركة المصنعة" : "Manufacturer"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <textarea value={v.notes} onChange={(e) => updateVaccination(v.id,{notes:e.target.value})} placeholder={language === "ar" ? "ملاحظات التطعيم" : "Vaccination notes"} className={`md:col-span-2 rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                          </div>
+                          <button type="button" onClick={() => removeVaccination(v.id)} className="mt-3 text-xs font-bold text-rose-500">{language === "ar" ? "حذف التطعيم" : "Remove vaccine"}</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
 
                 <div className="lg:col-span-2">
                   <label
@@ -2138,7 +2456,12 @@ export default function NewVisitPage() {
                 </div>
               </div>
 
-              <div className="mt-6 flex justify-end">
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+                <label className={`flex items-center gap-2 text-xs font-bold ${darkMode ? "text-slate-300" : "text-slate-600"}`}>
+                  <input type="checkbox" checked={whatsappEnabled} onChange={(e) => setWhatsappEnabled(e.target.checked)} />
+                  {language === "ar" ? "فتح وصفة العلاج على WhatsApp بعد الحفظ" : "Open treatment prescription in WhatsApp after saving"}
+                </label>
+
                 <button
                   type="button"
                   onClick={saveVisit}

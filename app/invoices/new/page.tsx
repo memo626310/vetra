@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrowserMultiFormatReader } from "@zxing/browser";
-import { supabase } from "@/lib/supabase";
+import { vetraCore } from "@/lib/vetra-core";
+import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 
 type Client = {
   id: string;
@@ -89,13 +90,21 @@ export default function NewInvoicePage() {
   const [serviceName, setServiceName] = useState("");
   const [servicePrice, setServicePrice] = useState("");
   const [consultationFee, setConsultationFee] = useState(100);
+  const [visitId, setVisitId] = useState("");
+  const [requestedPetId, setRequestedPetId] = useState("");
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
     const savedLanguage = localStorage.getItem("vetra-language");
+    const params = new URLSearchParams(window.location.search);
 
     setDarkMode(savedTheme !== "light");
     setLanguage(savedLanguage === "en" ? "en" : "ar");
+    setClientId(params.get("client") || "");
+    const requestedPet = params.get("pet") || "";
+    setPetId(requestedPet);
+    setRequestedPetId(requestedPet);
+    setVisitId(params.get("visit") || "");
     setReady(true);
   }, []);
 
@@ -111,20 +120,17 @@ export default function NewInvoicePage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await vetraCore.auth.getUser();
 
     if (!user) {
       router.replace("/login");
       return;
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+    const context = await getClinicContext();
+    const db = await getClinicDb();
 
-    if (profile?.role !== "admin") {
+    if (!["owner", "admin"].includes(context.role)) {
       setAuthorized(false);
       setLoading(false);
       return;
@@ -134,11 +140,12 @@ export default function NewInvoicePage() {
 
     const [clientsResult, productsResult, settingsResult] =
       await Promise.all([
-        supabase
+        db
           .from("clients")
           .select("id, name, phone")
+          .eq("clinic_id", context.clinic_id)
           .order("name"),
-        supabase
+        db
           .from("products")
           .select(`
             id,
@@ -149,10 +156,12 @@ export default function NewInvoicePage() {
             retail_price,
             category:product_categories(name)
           `)
+          .eq("clinic_id", context.clinic_id)
           .order("name"),
-        supabase
+        db
           .from("billing_settings")
           .select("consultation_fee")
+          .eq("clinic_id", context.clinic_id)
           .limit(1)
           .maybeSingle(),
       ]);
@@ -188,15 +197,22 @@ export default function NewInvoicePage() {
     }
 
     async function loadPets() {
-      const { data, error } = await supabase
+      const db = await getClinicDb();
+      const context = await getClinicContext();
+
+      const { data, error } = await db
         .from("pets")
         .select("id, client_id, name, species")
+        .eq("clinic_id", context.clinic_id)
         .eq("client_id", clientId)
         .eq("is_deceased", false)
         .order("name");
 
       if (!error) {
         setPets((data || []) as Pet[]);
+        if (requestedPetId && (data || []).some((pet) => pet.id === requestedPetId)) {
+          setPetId(requestedPetId);
+        }
       }
     }
 
@@ -375,7 +391,10 @@ export default function NewInvoicePage() {
       return;
     }
 
-    const { data, error } = await supabase
+    const db = await getClinicDb();
+    const context = await getClinicContext();
+
+    const { data, error } = await db
       .from("products")
       .select(`
         id,
@@ -386,6 +405,7 @@ export default function NewInvoicePage() {
         retail_price,
         category:product_categories(name)
       `)
+      .eq("clinic_id", context.clinic_id)
       .eq("barcode", clean)
       .maybeSingle();
 
@@ -478,25 +498,29 @@ export default function NewInvoicePage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await vetraCore.auth.getUser();
 
     if (!user) {
       router.replace("/login");
       return;
     }
 
-    const calculatedStatus =
-      paid <= 0
-        ? "unpaid"
-        : paid >= total
-          ? "paid"
-          : "partially_paid";
+    const context = await getClinicContext();
+    const db = await getClinicDb();
 
-    const { data: invoice, error: invoiceError } = await supabase
+    if (!["owner", "admin"].includes(context.role)) {
+      setAuthorized(false);
+      setSaving(false);
+      return;
+    }
+
+    const { data: invoice, error: invoiceError } = await db
       .from("invoices")
       .insert({
+        clinic_id: context.clinic_id,
         client_id: clientId,
         pet_id: petId || null,
+        visit_id: visitId || null,
         status: "draft",
         payment_method: paymentMethod || null,
         subtotal,
@@ -538,19 +562,24 @@ export default function NewInvoicePage() {
       ),
     }));
 
-    const { error: itemsError } = await supabase
+    const tenantItemRows = itemRows.map((row) => ({
+      ...row,
+      clinic_id: context.clinic_id,
+    }));
+
+    const { error: itemsError } = await db
       .from("invoice_items")
-      .insert(itemRows);
+      .insert(tenantItemRows);
 
     if (itemsError) {
-      await supabase.from("invoices").delete().eq("id", invoice.id);
+      await db.from("invoices").delete().eq("id", invoice.id).eq("clinic_id", context.clinic_id);
       setMessage(itemsError.message);
       setSaving(false);
       return;
     }
 
     if (issueAfterSave) {
-      const { error: issueError } = await supabase.rpc("issue_invoice", {
+      const { error: issueError } = await db.rpc("issue_invoice", {
         p_invoice_id: invoice.id,
       });
 
@@ -619,8 +648,8 @@ export default function NewInvoicePage() {
           </h1>
           <p className="mt-3 text-sm text-slate-500">
             {language === "ar"
-              ? "إنشاء الفواتير متاح للـ Admin فقط."
-              : "Invoice creation is available to Admin users only."}
+              ? "إنشاء الفواتير متاح للـ Owner و Admin فقط."
+              : "Invoice creation is available to Owner and Admin users only."}
           </p>
           <button
             onClick={() => router.push("/")}
@@ -1256,6 +1285,9 @@ function BarcodeScanner({
         videoRef.current.srcObject = null;
       }
 
+      try {
+        readerRef.current?.reset();
+      } catch {}
     };
 
     const enhanceCamera = async (currentStream: MediaStream) => {
