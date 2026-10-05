@@ -11,8 +11,8 @@ type Visit = { id: string; pet_id: string; visit_date: string; reason: string | 
 type Vaccine = { id: string; pet_id: string; vaccine_name: string | null; vaccine_type: string | null; administered_at: string | null; next_dose_at: string | null; notes: string | null };
 
 const T = {
-  ar: { home:"الرئيسية", pets:"حيواناتي", more:"المزيد", welcome:"مساء الخير", allCare:"كل رعاية حيواناتك في مكان واحد", selected:"الحيوان المختار", count:"حيوانات", add:"إضافة حيوان", care:"حالة المتابعة", good:"المتابعة جيدة", needs:"يحتاج متابعة", old:"يستحسن المتابعة", careNote:"ده ملخص للمتابعة المسجلة في VETRA، مش تشخيص طبي.", next:"التطعيم القادم", none:"مفيش تطعيمات قادمة", overdue:"متأخر", day:"يوم", daysLeft:"متبقي", reminder:"فعّل تذكير", trends:"المؤشرات الحيوية", sixMonths:"آخر 6 شهور", noData:"بيانات غير كافية", weight:"الوزن", temp:"الحرارة", heart:"نبض القلب", resp:"معدل التنفس", history:"التاريخ الطبي", vaccineHistory:"سجل التطعيمات", completed:"مكتمل", soon:"قريبًا", noVaccines:"مفيش تطعيمات مسجلة", noVisits:"مفيش زيارات مسجلة", timelineNote:"التاريخ الطبي هيظهر هنا مع أول زيارة أو تطعيم.", settings:"الإعدادات", light:"الوضع الفاتح", dark:"الوضع الداكن", language:"English", logout:"تسجيل الخروج", secure:"حساب آمن", phone:"الهاتف", email:"البريد الإلكتروني", addTitle:"إضافة حيوان جديد", addNote:"تقدر يكون عندك أكتر من حيوان على نفس الحساب. إضافة الحيوان الجديدة بتتم من خلال العيادة حاليًا للحفاظ على السجل الطبي بشكل آمن.", close:"إغلاق", error:"تعذر تحميل بياناتك", login:"العودة لتسجيل الدخول", loading:"جاري تحميل VETRA...", age:"العمر", male:"ذكر", female:"أنثى", unknown:"غير محدد" },
-  en: { home:"Home", pets:"My Pets", more:"More", welcome:"Good evening", allCare:"All your pets' care in one place", selected:"Selected pet", count:"pets", add:"Add Pet", care:"Care status", good:"Follow-up looks good", needs:"Needs follow-up", old:"Follow-up recommended", careNote:"This is a follow-up summary, not a medical diagnosis.", next:"Next vaccine", none:"No upcoming vaccines", overdue:"Overdue", day:"day", daysLeft:"left", reminder:"Set reminder", trends:"Health trends", sixMonths:"Last 6 months", noData:"Not enough data", weight:"Weight", temp:"Temperature", heart:"Heart rate", resp:"Respiratory rate", history:"Medical history", vaccineHistory:"Vaccination history", completed:"Completed", soon:"Due soon", noVaccines:"No vaccinations recorded", noVisits:"No visits recorded", timelineNote:"Medical history will appear here after the first visit or vaccination.", settings:"Settings", light:"Light mode", dark:"Dark mode", language:"العربية", logout:"Sign out", secure:"Secure account", phone:"Phone", email:"Email", addTitle:"Add a new pet", addNote:"You can keep multiple pets on the same account. New pet registration is currently handled by the clinic to keep the medical record secure.", close:"Close", error:"We couldn't load your data", login:"Back to login", loading:"Loading VETRA...", age:"Age", male:"Male", female:"Female", unknown:"Not specified" }
+  ar: { home:"الرئيسية", pets:"حيواناتي", more:"المزيد", welcome:"مساء الخير", allCare:"كل رعاية حيواناتك في مكان واحد", selected:"الحيوان المختار", count:"حيوانات", add:"إضافة حيوان", score:"نقاط VETRA", scorePerfect:"10/10 🎉 ممتاز!", scoreAlmost:"قربت توصل 10/10!", scoreGood:"أنت على الطريق الصح", scoreStart:"خلّينا نكملها سوا", scoreNote:"ده مقياس تفاعلي لاكتمال متابعة الحيوان داخل VETRA، مش تقييمًا طبيًا.", scoreMissing:"متبقي", scoreProfile:"بيانات الحيوان", scoreVaccines:"متابعة التطعيمات", scoreFollowUp:"المتابعة الدورية", scoreMonthly:"زيارة العيادة الشهرية", scoreViral:"الفيروسي", scoreRabies:"السعار", scoreDeworm:"الديدان", scoreParasite:"الحشرات", next:"التطعيم القادم", none:"مفيش تطعيمات قادمة", overdue:"متأخر", day:"يوم", daysLeft:"متبقي", reminder:"فعّل تذكير", trends:"المؤشرات الحيوية", sixMonths:"آخر 6 شهور", noData:"بيانات غير كافية", weight:"الوزن", temp:"الحرارة", heart:"نبض القلب", resp:"معدل التنفس", history:"التاريخ الطبي", vaccineHistory:"سجل التطعيمات", completed:"مكتمل", soon:"قريبًا", noVaccines:"مفيش تطعيمات مسجلة", noVisits:"مفيش زيارات مسجلة", timelineNote:"التاريخ الطبي هيظهر هنا مع أول زيارة أو تطعيم.", settings:"الإعدادات", light:"الوضع الفاتح", dark:"الوضع الداكن", language:"English", logout:"تسجيل الخروج", secure:"حساب آمن", phone:"الهاتف", email:"البريد الإلكتروني", addTitle:"إضافة حيوان جديد", addNote:"تقدر تضيف أكتر من حيوان لنفس الحساب. اكتب البيانات الأساسية، وVETRA هتربط الحيوان بحسابك بشكل آمن.", name:"اسم الحيوان", species:"النوع", cat:"قطة", dog:"كلب", other:"أخرى", gender:"النوع", female:"أنثى", male:"ذكر", birth:"تاريخ الميلاد", breed:"السلالة", color:"اللون", save:"حفظ الحيوان", saving:"جاري الحفظ...", cancel:"إلغاء", required:"اكتب اسم الحيوان", created:"تمت إضافة الحيوان بنجاح", close:"إغلاق", error:"تعذر تحميل بياناتك", login:"العودة لتسجيل الدخول", loading:"جاري تحميل VETRA...", age:"العمر", male:"ذكر", female:"أنثى", unknown:"غير محدد" },
+  en: { home:"Home", pets:"My Pets", more:"More", welcome:"Good evening", allCare:"All your pets' care in one place", selected:"Selected pet", count:"pets", add:"Add Pet", score:"VETRA Score", scorePerfect:"10/10 🎉 Excellent!", scoreAlmost:"You are almost at 10/10!", scoreGood:"You are on the right track", scoreStart:"Let's complete it together", scoreNote:"This is an interactive care-completeness indicator inside VETRA, not a medical score.", scoreMissing:"remaining", scoreProfile:"Pet profile", scoreVaccines:"Vaccination tracking", scoreFollowUp:"Regular follow-up", scoreMonthly:"Monthly clinic visit", scoreViral:"Core viral vaccine", scoreRabies:"Rabies", scoreDeworm:"Deworming", scoreParasite:"Parasite control", next:"Next vaccine", none:"No upcoming vaccines", overdue:"Overdue", day:"day", daysLeft:"left", reminder:"Set reminder", trends:"Health trends", sixMonths:"Last 6 months", noData:"Not enough data", weight:"Weight", temp:"Temperature", heart:"Heart rate", resp:"Respiratory rate", history:"Medical history", vaccineHistory:"Vaccination history", completed:"Completed", soon:"Due soon", noVaccines:"No vaccinations recorded", noVisits:"No visits recorded", timelineNote:"Medical history will appear here after the first visit or vaccination.", settings:"Settings", light:"Light mode", dark:"Dark mode", language:"العربية", logout:"Sign out", secure:"Secure account", phone:"Phone", email:"Email", addTitle:"Add a new pet", addNote:"You can keep multiple pets on the same account. Add the basics here and VETRA will link the pet to your account securely.", name:"Pet name", species:"Species", cat:"Cat", dog:"Dog", other:"Other", gender:"Gender", female:"Female", male:"Male", birth:"Date of birth", breed:"Breed", color:"Color", save:"Save pet", saving:"Saving...", cancel:"Cancel", required:"Enter the pet name", created:"Pet added successfully", close:"Close", error:"We couldn't load your data", login:"Back to login", loading:"Loading VETRA...", age:"Age", male:"Male", female:"Female", unknown:"Not specified" }
 } as const;
 
 const icon = (s:string) => s.toLowerCase().includes("cat") || s.includes("قط") ? "🐱" : s.toLowerCase().includes("dog") || s.includes("كلب") ? "🐶" : "🐾";
@@ -21,11 +21,244 @@ const dateText = (d:string, l:Lang) => new Date(d).toLocaleDateString(l === "ar"
 const daysUntil = (d:string) => Math.ceil((new Date(new Date(d).getFullYear(), new Date(d).getMonth(), new Date(d).getDate()).getTime() - new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()).getTime()) / 86400000);
 const age = (d:string|null,l:Lang) => { if(!d) return T[l].unknown; const b=new Date(d), n=new Date(); let y=n.getFullYear()-b.getFullYear(), m=n.getMonth()-b.getMonth(); if(n.getDate()<b.getDate()) m--; if(m<0){y--;m+=12;} if(y>0) return l==='ar'?`${y} سنة`:`${y} ${y===1?'year':'years'}`; return l==='ar'?`${Math.max(m,0)} شهر`:`${Math.max(m,0)} ${m===1?'month':'months'}`; };
 
+const DAY_MS = 86400000;
+const GRACE_DAYS = 7;
+
+function ageInDays(birthDate: string | null) {
+  if (!birthDate) return null;
+  const birth = new Date(birthDate);
+  const now = new Date();
+  const b = new Date(birth.getFullYear(), birth.getMonth(), birth.getDate()).getTime();
+  const n = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.floor((n - b) / DAY_MS);
+}
+
+function daysSince(value: string | null) {
+  if (!value) return null;
+  return -daysUntil(value);
+}
+
+function careState(nextDue: string | null): "not_due" | "current" | "grace" | "overdue" {
+  if (!nextDue) return "current";
+  const d = daysUntil(nextDue);
+  if (d > 0) return "current";
+  if (d >= -GRACE_DAYS) return "grace";
+  return "overdue";
+}
+
+function recordText(v: Vaccine) {
+  return `${v.vaccine_name || ""} ${v.vaccine_type || ""} ${v.notes || ""}`.toLowerCase();
+}
+
+function isViral(v: Vaccine) {
+  const x = recordText(v);
+  return ["ثلاثي", "رباعي", "فيروسي", "فيروسى", "viral", "triple", "quad", "fvr", "fvrcp", "f3", "f4"].some(k => x.includes(k));
+}
+
+function isRabies(v: Vaccine) {
+  const x = recordText(v);
+  return ["سعار", "rabies", "rabis"].some(k => x.includes(k));
+}
+
+function isDeworm(v: Vaccine) {
+  const x = recordText(v);
+  return ["ديدان", "deworm", "worm", "internal parasite", "anthelmint"].some(k => x.includes(k));
+}
+
+function isParasite(v: Vaccine) {
+  const x = recordText(v);
+  return ["حشرات", "flea", "fleas", "tick", "ticks", "ecto", "external parasite", "براغيث", "قراد"].some(k => x.includes(k));
+}
+
+function latestRecord(records: Vaccine[], matcher: (v: Vaccine) => boolean) {
+  return records
+    .filter(v => matcher(v) && v.administered_at)
+    .sort((a, b) => +new Date(b.administered_at as string) - +new Date(a.administered_at as string))[0] || null;
+}
+
+function addDays(date: string, days: number) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d.toISOString();
+}
+
+function addDaysToDateOnly(date: string, days: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  const d = new Date(year, month - 1, day + days);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function isCatSpecies(speciesValue: string | null | undefined) {
+  const x = (speciesValue || "").toLowerCase();
+  return x.includes("cat") || x.includes("قط");
+}
+
+function todayDateOnly() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function getDewormStatus(records: Vaccine[], petBirth: string | null) {
+  const ageDays = ageInDays(petBirth);
+  if (ageDays !== null && ageDays < 90) {
+    return { points: 2, status: "not_due" as const, due: null as string | null };
+  }
+
+  const events = records
+    .filter(v => isDeworm(v) && v.administered_at)
+    .sort((a, b) => +new Date(a.administered_at as string) - +new Date(b.administered_at as string));
+
+  if (!events.length) return { points: 0, status: "overdue" as const, due: null as string | null };
+
+  const first = events[0];
+  if (events.length === 1) {
+    const firstDate = first.administered_at as string;
+    const due = first.next_dose_at || addDays(firstDate, 14);
+    const state = careState(due);
+    return state === "overdue"
+      ? { points: 0, status: "overdue" as const, due }
+      : { points: 2, status: state, due };
+  }
+
+  const firstDate = new Date(first.administered_at as string).getTime();
+  const second = events[1];
+  const secondDate = new Date(second.administered_at as string).getTime();
+  const gap = Math.round((secondDate - firstDate) / DAY_MS);
+
+  if (gap > 21) {
+    const due = addDays((events[events.length - 1].administered_at as string), 14);
+    return { points: 0, status: "overdue" as const, due };
+  }
+
+  const last = events[events.length - 1];
+  const due = last.next_dose_at || addDays(last.administered_at as string, 60);
+  const state = careState(due);
+
+  return state === "overdue"
+    ? { points: 0, status: "overdue" as const, due }
+    : { points: 2, status: state, due };
+}
+
+function getProtocolStatus(records: Vaccine[], pet: Pet | null) {
+  const ageDays = ageInDays(pet?.birth_date || null);
+  const ageKnown = ageDays !== null;
+
+  const viral = latestRecord(records, isViral);
+  const viralDue = viral?.next_dose_at || null;
+  let viralPoints = 3;
+  let viralStatus: "not_due" | "current" | "grace" | "overdue" = "not_due";
+  if (ageKnown && (ageDays as number) >= 45) {
+    if (!viral) {
+      viralPoints = 0;
+      viralStatus = "overdue";
+    } else {
+      const state = careState(viralDue);
+      viralPoints = state === "overdue" ? 0 : 3;
+      viralStatus = state === "current" ? "current" : state;
+    }
+  }
+
+  const rabies = latestRecord(records, isRabies);
+  const rabiesDue = rabies?.next_dose_at || (rabies?.administered_at ? addDays(rabies.administered_at, 365) : null);
+  let rabiesPoints = 2;
+  let rabiesStatus: "not_due" | "current" | "grace" | "overdue" = "not_due";
+  if (ageKnown && (ageDays as number) >= 90) {
+    if (!rabies) {
+      rabiesPoints = 0;
+      rabiesStatus = "overdue";
+    } else {
+      const state = careState(rabiesDue);
+      rabiesPoints = state === "overdue" ? 0 : 2;
+      rabiesStatus = state === "current" ? "current" : state;
+    }
+  }
+
+  const deworm = getDewormStatus(records, pet?.birth_date || null);
+  const parasite = latestRecord(records, isParasite);
+  let parasitePoints = 1;
+  let parasiteStatus: "not_due" | "current" | "grace" | "overdue" = "not_due";
+  const parasiteDue = parasite?.next_dose_at || null;
+  if (parasite) {
+    const state = careState(parasiteDue);
+    parasitePoints = state === "overdue" ? 0 : 1;
+    parasiteStatus = state === "current" ? "current" : state;
+  }
+
+  return {
+    viral: { points: viralPoints, max: 3, status: viralStatus, due: viralDue, record: viral },
+    rabies: { points: rabiesPoints, max: 2, status: rabiesStatus, due: rabiesDue, record: rabies },
+    deworm: { ...deworm, max: 2, record: latestRecord(records, isDeworm) },
+    parasite: { points: parasitePoints, max: 1, status: parasiteStatus, due: parasiteDue, record: parasite },
+  };
+}
+
 function Chart({ values, unit, empty }: { values:number[]; unit:string; empty:string }) {
-  if(values.length < 2) return <div className="flex h-24 items-center justify-center rounded-2xl border border-dashed border-white/10 text-[11px] text-slate-500">{empty}</div>;
+  if(values.length === 0) return <div className="flex h-24 items-center justify-center rounded-2xl border border-dashed border-white/10 text-[11px] text-slate-500">{empty}</div>;
+
   const min=Math.min(...values), max=Math.max(...values), spread=Math.max(max-min,.1), w=240,h=78;
-  const points=values.map((v,i)=>`${i/(values.length-1)*w},${h-8-((v-min)/spread)*(h-16)}`).join(" ");
-  return <div><div className="mb-1 text-end text-[10px] font-bold text-slate-500">{values.at(-1)} {unit}</div><svg viewBox={`0 0 ${w} ${h}`} className="h-20 w-full"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stopColor="#22d3ee"/><stop offset="1" stopColor="#8b5cf6"/></linearGradient></defs><polyline points={points} fill="none" stroke="url(#g)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />{values.map((v,i)=>{const [x,y]=points.split(" ")[i].split(",");return <circle key={i} cx={x} cy={y} r="3" fill="#08131f" stroke="#67e8f9" strokeWidth="2"/>})}</svg></div>;
+  const coords=values.map((v,i)=>({
+    x: values.length === 1 ? w / 2 : i/(values.length-1)*w,
+    y: values.length === 1 ? h / 2 : h-8-((v-min)/spread)*(h-16),
+  }));
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
+        <span>{values.length === 1 ? "أول قراءة" : `${values.length} قراءات`}</span>
+        <span>{values.at(-1)} {unit}</span>
+      </div>
+
+      <svg viewBox={`0 0 ${w} ${h}`} className="h-20 w-full">
+        <defs>
+          <linearGradient id="g" x1="0" x2="1">
+            <stop offset="0" stopColor="#22d3ee"/>
+            <stop offset="1" stopColor="#8b5cf6"/>
+          </linearGradient>
+        </defs>
+
+        {values.length > 1 && (
+          <polyline
+            points={coords.map((p)=>`${p.x},${p.y}`).join(" ")}
+            fill="none"
+            stroke="url(#g)"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+
+        {coords.map((p,i)=>(
+          <circle
+            key={i}
+            cx={p.x}
+            cy={p.y}
+            r={values.length === 1 ? "5" : "3"}
+            fill="#08131f"
+            stroke="#67e8f9"
+            strokeWidth="2"
+          />
+        ))}
+
+        {values.length === 1 && (
+          <line
+            x1="20"
+            x2={w-20}
+            y1={h/2}
+            y2={h/2}
+            stroke="rgba(255,255,255,.08)"
+            strokeWidth="1"
+            strokeDasharray="4 4"
+          />
+        )}
+      </svg>
+    </div>
+  );
 }
 
 function Countdown({ days, lang }:{days:number|null;lang:Lang}) {
@@ -35,21 +268,174 @@ function Countdown({ days, lang }:{days:number|null;lang:Lang}) {
 
 export default function ClientInterfaceIdPage(){
   const params=useParams<{id:string}>(); const router=useRouter(); const clientId=params.id;
-  const [lang,setLang]=useState<Lang>("ar"); const [dark,setDark]=useState(true); const [client,setClient]=useState<Client|null>(null); const [pets,setPets]=useState<Pet[]>([]); const [visits,setVisits]=useState<Visit[]>([]); const [vaccines,setVaccines]=useState<Vaccine[]>([]); const [selected,setSelected]=useState(""); const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [settings,setSettings]=useState(false); const [addPet,setAddPet]=useState(false);
+  const [lang,setLang]=useState<Lang>("ar"); const [dark,setDark]=useState(true); const [client,setClient]=useState<Client|null>(null); const [pets,setPets]=useState<Pet[]>([]); const [visits,setVisits]=useState<Visit[]>([]); const [vaccines,setVaccines]=useState<Vaccine[]>([]); const [selected,setSelected]=useState(""); const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [settings,setSettings]=useState(false); const [addPet,setAddPet]=useState(false); const [petForm,setPetForm]=useState({name:"",species:"cat",gender:"Female",birth_date:"",breed:"",color:""}); const [savingPet,setSavingPet]=useState(false);
 
   useEffect(()=>{const l=localStorage.getItem("vetra-language"); const th=localStorage.getItem("vetra-theme"); if(l==="ar"||l==="en")setLang(l); setDark(th==="dark");},[]);
-  useEffect(()=>{async function load(){const id=sessionStorage.getItem("vetra-client-id"), code=sessionStorage.getItem("vetra-client-code"), phone=sessionStorage.getItem("vetra-client-phone"); if(!id||id!==clientId||!code||!phone){router.replace("/client-interface/login");return;} try{const db=await getClientPortalDb(code,phone); const c=await db.from("clients").select("id,name,phone,email").eq("id",clientId).maybeSingle(); if(c.error||!c.data)throw new Error(c.error?.message||"Client not found"); const p=await db.from("pets").select("id,name,species,breed,gender,birth_date,color,is_deceased,created_at").eq("client_id",clientId).order("created_at",{ascending:false}); if(p.error)throw new Error(p.error.message); const ids=(p.data||[]).map(x=>x.id); let v:Visit[]=[];let vx:Vaccine[]=[]; if(ids.length){const vr=await db.from("visits").select("id,pet_id,visit_date,reason,examination,diagnosis,treatment,weight,temperature,heart_rate,respiratory_rate,notes").in("pet_id",ids).order("visit_date",{ascending:false}); if(vr.error)throw new Error(vr.error.message); v=(vr.data||[]) as Visit[]; const xr=await db.from("vaccinations").select("id,pet_id,vaccine_name,vaccine_type,administered_at,next_dose_at,notes").in("pet_id",ids).order("next_dose_at",{ascending:true}); if(xr.error)throw new Error(xr.error.message); vx=(xr.data||[]) as Vaccine[];} setClient(c.data as Client);setPets((p.data||[]) as Pet[]);setVisits(v);setVaccines(vx);setSelected((p.data?.[0]?.id as string)||""); }catch(e){console.error(e);setError(e instanceof Error?e.message:"Failed to load");}finally{setLoading(false);}} if(clientId)void load();},[clientId,router]);
+  const loadDashboard = async (showLoader = false) => {
+    if (!clientId) return;
+    if (showLoader) setLoading(true);
+    setError("");
+
+    const id=sessionStorage.getItem("vetra-client-id"), code=sessionStorage.getItem("vetra-client-code"), phone=sessionStorage.getItem("vetra-client-phone");
+    if(!id||id!==clientId||!code||!phone){router.replace("/client-interface/login");return;}
+
+    try{
+      const db=await getClientPortalDb(code,phone);
+      const c=await db.from("clients").select("id,name,phone,email").eq("id",clientId).maybeSingle();
+      if(c.error||!c.data)throw new Error(c.error?.message||"Client not found");
+
+      const p=await db.from("pets").select("id,name,species,breed,gender,birth_date,color,is_deceased,created_at").eq("client_id",clientId).order("created_at",{ascending:false});
+      if(p.error)throw new Error(p.error.message);
+
+      const ids=(p.data||[]).map(x=>x.id);
+      let v:Visit[]=[];
+      let vx:Vaccine[]=[];
+
+      if(ids.length){
+        const vr=await db.from("visits").select("id,pet_id,visit_date,reason,examination,diagnosis,treatment,weight,temperature,heart_rate,respiratory_rate,notes").in("pet_id",ids).order("visit_date",{ascending:false});
+        if(vr.error)throw new Error(vr.error.message);
+        v=(vr.data||[]) as Visit[];
+
+        const xr=await db.from("vaccinations").select("id,pet_id,vaccine_name,vaccine_type,administered_at,next_dose_at,notes").in("pet_id",ids).order("next_dose_at",{ascending:true});
+        if(xr.error)throw new Error(xr.error.message);
+        vx=(xr.data||[]) as Vaccine[];
+      }
+
+      setClient(c.data as Client);
+      setPets((p.data||[]) as Pet[]);
+      setVisits(v);
+      setVaccines(vx);
+      setSelected(current => {
+        if (current && (p.data || []).some(x => x.id === current)) return current;
+        return (p.data?.[0]?.id as string)||"";
+      });
+    }catch(e){
+      console.error("PET OWNER DASHBOARD ERROR:",e);
+      setError(e instanceof Error?e.message:"Failed to load");
+    }finally{
+      if (showLoader) setLoading(false);
+    }
+  };
+
+  useEffect(()=>{
+    if(!clientId) return;
+    void loadDashboard(true);
+
+    const refresh = () => {
+      if (document.visibilityState === "visible") void loadDashboard(false);
+    };
+
+    window.addEventListener("focus", refresh);
+    window.addEventListener("pageshow", refresh);
+    document.addEventListener("visibilitychange", refresh);
+
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("pageshow", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  },[clientId,router]);
 
   const t=T[lang], pet=pets.find(x=>x.id===selected)||pets[0]||null;
   const pv=useMemo(()=>pet?visits.filter(x=>x.pet_id===pet.id).sort((a,b)=>+new Date(b.visit_date)-+new Date(a.visit_date)):[],[pet,visits]);
   const px=useMemo(()=>pet?vaccines.filter(x=>x.pet_id===pet.id).sort((a,b)=>(a.next_dose_at?+new Date(a.next_dose_at):9e15)-(b.next_dose_at?+new Date(b.next_dose_at):9e15)):[],[pet,vaccines]);
-  const next=px.find(x=>x.next_dose_at&&daysUntil(x.next_dose_at)>=0)||px.find(x=>x.next_dose_at)||null; const due=next?.next_dose_at?daysUntil(next.next_dose_at):null; const last=pv[0]||null;
-  const care=due!==null&&due<0?"needs":last&&Date.now()-+new Date(last.visit_date)<120*86400000?"good":"old";
-  const careLabel=care==="good"?t.good:care==="needs"?t.needs:t.old;
+  // Vaccine countdown is independent from clinic-visit frequency. It uses only next_dose_at.
+  const last=pv[0]||null;
+  // Monthly clinic score uses only the most recent visit. Multiple visits never stack points or alter vaccine countdowns.
   const metrics=[{n:t.weight,u:"kg",i:"⚖️",v:pv.filter(x=>x.weight!==null).slice(0,6).reverse().map(x=>Number(x.weight))},{n:t.temp,u:"°م",i:"🌡️",v:pv.filter(x=>x.temperature!==null).slice(0,6).reverse().map(x=>Number(x.temperature))},{n:t.heart,u:"bpm",i:"❤️",v:pv.filter(x=>x.heart_rate!==null).slice(0,6).reverse().map(x=>Number(x.heart_rate))},{n:t.resp,u:"/min",i:"🫁",v:pv.filter(x=>x.respiratory_rate!==null).slice(0,6).reverse().map(x=>Number(x.respiratory_rate))}];
+
+  // VETRA Care Score: for cats, this follows the VETRA cat-care protocol exactly.
+  // It is a care-adherence indicator, not a medical health score.
+  const catProtocol = isCatSpecies(pet?.species) ? getProtocolStatus(px, pet) : null;
+  const visitAgeDays = last ? Math.max(0, Math.floor((Date.now() - +new Date(last.visit_date)) / DAY_MS)) : Infinity;
+  const visitPoints = visitAgeDays <= 30 ? 2 : 0;
+  const monthlyStatus = visitAgeDays <= 30 ? "current" as const : "overdue" as const;
+  const catCareScore = catProtocol
+    ? catProtocol.viral.points + catProtocol.rabies.points + catProtocol.deworm.points + catProtocol.parasite.points + visitPoints
+    : null;
+  const careScore = catCareScore ?? 0;
+  const scoreRemaining = catCareScore === null ? 0 : 10 - careScore;
+  const scoreTitle = catCareScore === null
+    ? (lang === "ar" ? "بروتوكول هذا النوع هيتم تفعيله قريبًا" : "This species protocol is coming soon")
+    : careScore === 10
+      ? t.scorePerfect
+      : careScore >= 8
+        ? t.scoreAlmost
+        : careScore >= 5
+          ? t.scoreGood
+          : t.scoreStart;
+  const scoreItems = catProtocol ? [
+    {label:t.scoreMonthly,points:visitPoints,max:2,done:visitPoints===2,status:monthlyStatus},
+    {label:t.scoreViral,points:catProtocol.viral.points,max:3,done:catProtocol.viral.points===3,status:catProtocol.viral.status},
+    {label:t.scoreRabies,points:catProtocol.rabies.points,max:2,done:catProtocol.rabies.points===2,status:catProtocol.rabies.status},
+    {label:t.scoreDeworm,points:catProtocol.deworm.points,max:2,done:catProtocol.deworm.points===2,status:catProtocol.deworm.status},
+    {label:t.scoreParasite,points:catProtocol.parasite.points,max:1,done:catProtocol.parasite.points===1,status:catProtocol.parasite.status},
+  ] : [];
+
+  const today = todayDateOnly();
+  const vaccinationCandidates = catProtocol ? [
+    (() => {
+      const birth = pet?.birth_date || today;
+      const status = catProtocol.viral.status;
+      const dueDate = catProtocol.viral.due
+        || (ageInDays(pet?.birth_date || null) !== null && (ageInDays(pet?.birth_date || null) as number) < 45
+          ? addDaysToDateOnly(birth, 45)
+          : today);
+      return {
+        name: status === "overdue" ? (lang === "ar" ? "إعادة الفيروسي" : "Restart viral protocol") : t.scoreViral,
+        due: dueDate,
+        sort: daysUntil(dueDate),
+      };
+    })(),
+    (() => {
+      const birth = pet?.birth_date || today;
+      const ageDaysValue = ageInDays(pet?.birth_date || null);
+      const dueDate = catProtocol.rabies.due
+        || (ageDaysValue !== null && ageDaysValue < 90 ? addDaysToDateOnly(birth, 90) : today);
+      return {
+        name: catProtocol.rabies.status === "overdue" ? (lang === "ar" ? "السعار — يحتاج إعادة" : "Rabies — renewal needed") : t.scoreRabies,
+        due: dueDate,
+        sort: daysUntil(dueDate),
+      };
+    })(),
+  ].sort((a,b) => a.sort - b.sort) : [];
+  const next = vaccinationCandidates[0] || null;
+  const due = next ? daysUntil(next.due) : null;
   const timeline=[...pv.map(x=>({id:`v${x.id}`,date:x.visit_date,type:"visit",title:x.reason|| (lang==="ar"?"زيارة":"Visit"),sub:x.diagnosis||x.examination||x.notes||""})),...px.filter(x=>x.administered_at).map(x=>({id:`x${x.id}`,date:x.administered_at!,type:"vaccine",title:x.vaccine_name||x.vaccine_type||(lang==="ar"?"تطعيم":"Vaccination"),sub:x.next_dose_at?`${t.next}: ${dateText(x.next_dose_at,lang)}`:t.completed}))].sort((a,b)=>+new Date(b.date)-+new Date(a.date)).slice(0,8);
 
   const toggleTheme=()=>{const n=!dark;setDark(n);localStorage.setItem("vetra-theme",n?"dark":"light")}; const toggleLang=()=>{const n=lang==="ar"?"en":"ar";setLang(n);localStorage.setItem("vetra-language",n)}; const logout=()=>{sessionStorage.removeItem("vetra-client-id");sessionStorage.removeItem("vetra-client-code");sessionStorage.removeItem("vetra-client-phone");router.replace("/client-interface/login")};
+
+  async function createPet(){
+    setError("");
+    if(!petForm.name.trim()){setError(t.required);return;}
+    setSavingPet(true);
+    try{
+      const code=sessionStorage.getItem("vetra-client-code");
+      const phone=sessionStorage.getItem("vetra-client-phone");
+      if(!code||!phone) throw new Error("Session expired.");
+      const db=await getClientPortalDb(code,phone);
+      const result=await db.rpc("vetra_add_pet_for_owner",{
+        p_name:petForm.name.trim(),
+        p_species:petForm.species,
+        p_gender:petForm.gender||null,
+        p_birth_date:petForm.birth_date||null,
+        p_breed:petForm.breed.trim()||null,
+        p_color:petForm.color.trim()||null,
+      });
+      if(result.error) throw new Error(result.error.message);
+      const createdPet=Array.isArray(result.data)?result.data[0]:result.data;
+      if(!createdPet?.id) throw new Error("Pet was not created.");
+      setPets(prev=>[createdPet as Pet,...prev]);
+      setSelected(createdPet.id);
+      setPetForm({name:"",species:"cat",gender:"Female",birth_date:"",breed:"",color:""});
+      setAddPet(false);
+      window.scrollTo({top:0,behavior:"smooth"});
+    }catch(e){
+      setError(e instanceof Error?e.message:"Failed to add pet.");
+    }finally{
+      setSavingPet(false);
+    }
+  }
 
   if(loading)return <main dir={lang==="ar"?"rtl":"ltr"} className="flex min-h-screen items-center justify-center bg-[#06101a] text-white"><div className="text-center"><div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-cyan-400/10 text-3xl">🐾</div><p className="text-sm font-bold text-slate-400">{t.loading}</p></div></main>;
   if(error&&!client)return <main dir={lang==="ar"?"rtl":"ltr"} className="flex min-h-screen items-center justify-center bg-[#06101a] px-6 text-white"><div className="max-w-md rounded-[2rem] border border-white/10 bg-white/[.04] p-8 text-center"><div className="text-5xl">🐾</div><h1 className="mt-4 text-2xl font-black">{t.error}</h1><p className="mt-3 text-sm text-slate-400">{error}</p><button onClick={()=>router.replace("/client-interface/login")} className="mt-6 rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-black text-slate-950">{t.login}</button></div></main>;
@@ -60,8 +446,31 @@ export default function ClientInterfaceIdPage(){
       <header className="sticky top-0 z-40 mb-6 flex items-center justify-between py-3 backdrop-blur-xl"><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-500 text-xl shadow-lg">🐾</div><div><div className="font-black tracking-[.18em]">VETRA</div><div className="text-[10px] font-bold tracking-[.18em] text-slate-500">PET CARE</div></div></div><div className="flex items-center gap-2"><button onClick={toggleLang} className={dark?"rounded-full border border-white/10 bg-white/[.05] px-3 py-2 text-xs font-bold":"rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold"}>{t.language}</button><button onClick={toggleTheme} className={dark?"flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[.05]":"flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white"}>{dark?"☀️":"🌙"}</button><button onClick={()=>setSettings(true)} className={dark?"flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[.05]":"flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white"}>⚙️</button></div></header>
 
       <section className="grid gap-5 lg:grid-cols-[1fr_360px]"><div className={dark?"rounded-[2rem] border border-white/[.07] bg-gradient-to-br from-white/[.08] to-white/[.03] p-5 shadow-2xl sm:p-7":"rounded-[2rem] border border-slate-100 bg-white p-5 shadow-2xl sm:p-7"}><p className="text-sm font-bold text-cyan-400">{t.welcome}</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">{client?.name||"VETRA"} 👋</h1><p className="mt-3 text-sm leading-7 text-slate-400">{t.allCare}</p>
-        {pet&&<div className="mt-6 grid gap-4 md:grid-cols-[1.1fr_.9fr]"><div className="rounded-[1.7rem] bg-gradient-to-br from-[#0e2330] to-[#10142a] p-4 sm:p-5"><div className="flex items-center gap-4"><div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-[1.5rem] bg-white/10 text-6xl">{icon(pet.species)}</div><div className="min-w-0"><div className="text-xs font-bold text-cyan-300">{t.selected}</div><div className="mt-1 truncate text-2xl font-black">{pet.name}</div><div className="mt-1 text-xs text-slate-400">{species(pet.species,lang)} • {pet.gender==="Male"?t.male:pet.gender==="Female"?t.female:pet.gender||t.unknown} • {age(pet.birth_date,lang)}</div></div></div><div className="mt-5 rounded-2xl border border-emerald-400/10 bg-emerald-400/[.06] p-4"><div className="flex gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10">{care==="good"?"💚":"⚠️"}</div><div><div className="text-xs font-bold text-slate-500">{t.care}</div><div className="mt-1 font-black">{careLabel}</div><p className="mt-1 text-[11px] leading-5 text-slate-500">{t.careNote}</p></div></div></div></div>
-        <div className="rounded-[1.7rem] border border-white/[.06] bg-white/[.035] p-5"><div className="flex items-center justify-between gap-4"><div><div className="text-xs font-bold text-cyan-300">{t.next}</div><div className="mt-2 text-lg font-black">{next?.vaccine_name||next?.vaccine_type||t.none}</div>{next?.next_dose_at&&<div className="mt-1 text-xs text-slate-500">{dateText(next.next_dose_at,lang)}</div>}</div><Countdown days={due} lang={lang}/></div><button onClick={()=>next?.next_dose_at&&alert(lang==="ar"?"التذكير هيتوصل بنظام الإشعارات في الخطوة التالية.":"Reminder notifications will be connected in the next step.")} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-xs font-black text-slate-950">🔔 {t.reminder}</button></div></div>}
+        {pet&&<div className="mt-6 grid gap-4 md:grid-cols-[1.1fr_.9fr]"><div className="rounded-[1.7rem] bg-gradient-to-br from-[#0e2330] to-[#10142a] p-4 sm:p-5"><div className="flex items-center gap-4"><div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-[1.5rem] bg-white/10 text-6xl">{icon(pet.species)}</div><div className="min-w-0"><div className="text-xs font-bold text-cyan-300">{t.selected}</div><div className="mt-1 truncate text-2xl font-black">{pet.name}</div><div className="mt-1 text-xs text-slate-400">{species(pet.species,lang)} • {pet.gender==="Male"?t.male:pet.gender==="Female"?t.female:pet.gender||t.unknown} • {age(pet.birth_date,lang)}</div></div></div><div className={dark?"mt-5 rounded-[1.6rem] border border-cyan-400/10 bg-gradient-to-br from-cyan-400/[.08] via-white/[.025] to-violet-500/[.06] p-4":"mt-5 rounded-[1.6rem] border border-cyan-100 bg-gradient-to-br from-cyan-50 via-white to-violet-50 p-4"}>
+          <div className="flex items-center gap-4">
+            <div className="relative h-20 w-20 shrink-0">
+              <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+                <circle cx="50" cy="50" r="42" fill="none" stroke={dark?"rgba(255,255,255,.08)":"rgba(15,23,42,.08)"} strokeWidth="7" />
+                <circle cx="50" cy="50" r="42" fill="none" stroke="url(#score-ring)" strokeWidth="7" strokeLinecap="round" strokeDasharray={`${2*Math.PI*42*(careScore/10)} ${2*Math.PI*42}`} />
+                <defs><linearGradient id="score-ring"><stop offset="0" stopColor="#22d3ee"/><stop offset="100%" stopColor="#8b5cf6"/></linearGradient></defs>
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center"><div className="text-xl font-black leading-none">{catCareScore === null ? "—" : careScore}<span className="text-xs text-slate-500">{catCareScore === null ? "" : "/10"}</span></div></div>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2"><div className="text-xs font-bold text-cyan-300">{t.score}</div><span className="rounded-full bg-white/[.06] px-2 py-1 text-[9px] font-black text-slate-400">{scoreRemaining>0?`${scoreRemaining} ${t.scoreMissing}`:t.scorePerfect}</span></div>
+              <div className="mt-1 text-lg font-black">{scoreTitle}</div>
+              <p className="mt-1 text-[10px] leading-5 text-slate-500">{t.scoreNote}</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {scoreItems.map((item)=><div key={item.label} className={dark?"rounded-xl border border-white/[.05] bg-white/[.025] px-3 py-2":"rounded-xl border border-slate-100 bg-white/80 px-3 py-2"}>
+              <div className="flex items-center justify-between gap-2"><span className="truncate text-[10px] font-bold text-slate-400">{item.label}</span><span className={item.done?"text-emerald-400":"text-cyan-300"}>{item.done ? "✓" : "•"}</span></div>
+              <div className="mt-1 text-[9px] font-semibold text-slate-500">{item.done ? "✓" : item.status === "grace" ? (lang==="ar" ? "فترة السماح 7 أيام" : "7-day grace period") : item.status === "overdue" ? (lang==="ar" ? "متأخر — يحتاج إعادة" : "Overdue — reset needed") : item.status === "not_due" ? (lang==="ar" ? "لسه مش مستحق" : "Not due yet") : (lang==="ar" ? "منتظم" : "On track")}</div>
+            </div>)}
+          </div>
+          {catCareScore !== null && scoreRemaining>0&&<div className="mt-3 text-center text-[10px] font-bold text-slate-500">{lang==="ar"?`إيه اللي ناقص؟ تعالى كمّل ${scoreRemaining} ${t.scoreMissing} 👀`: `${scoreRemaining} ${t.scoreMissing} to go — can you reach 10/10? 👀`}</div>}
+        </div></div>
+        <div className="rounded-[1.7rem] border border-white/[.06] bg-white/[.035] p-5"><div className="flex items-center justify-between gap-4"><div><div className="text-xs font-bold text-cyan-300">{t.next}</div><div className="mt-2 text-lg font-black">{next?.name||t.none}</div>{next?.due&&<div className="mt-1 text-xs text-slate-500">{dateText(next.due,lang)}</div>}</div><Countdown days={due} lang={lang}/></div><button onClick={()=>next?.due&&alert(lang==="ar"?"التذكير هيتوصل بنظام الإشعارات في الخطوة التالية.":"Reminder notifications will be connected in the next step.")} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-xs font-black text-slate-950">🔔 {t.reminder}</button></div></div>}
       </div>
       <div id="pets-section" className={dark?"rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5":"rounded-[2rem] border border-slate-100 bg-white p-5"}><div className="flex items-center justify-between"><div><h2 className="text-lg font-black">{t.pets}</h2><p className="mt-1 text-xs text-slate-500">{pets.length} {t.count}</p></div><button onClick={()=>setAddPet(true)} className="rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2.5 text-xs font-black text-slate-950">+ {t.add}</button></div><div className="mt-4 max-h-[330px] space-y-2 overflow-y-auto pe-1">{pets.map(p=><button key={p.id} onClick={()=>setSelected(p.id)} className={p.id===pet?.id?"flex w-full items-center gap-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/[.08] p-3 text-start":"flex w-full items-center gap-3 rounded-2xl border border-white/[.05] bg-white/[.025] p-3 text-start transition hover:bg-white/[.05]"}><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-3xl">{icon(p.species)}</div><div className="min-w-0 flex-1"><div className="truncate font-black">{p.name}</div><div className="mt-1 text-[11px] text-slate-500">{species(p.species,lang)} • {age(p.birth_date,lang)}</div></div><span className="text-slate-500">‹</span></button>)}<button onClick={()=>setAddPet(true)} className="w-full rounded-2xl border border-dashed border-cyan-400/20 bg-cyan-400/[.03] p-4 text-xs font-black text-cyan-300">+ {t.add}</button></div></div></section>
 
@@ -76,6 +485,11 @@ export default function ClientInterfaceIdPage(){
     <nav className="fixed bottom-0 left-0 right-0 z-50 p-3"><div className={dark?"mx-auto flex max-w-md items-center justify-around rounded-3xl border border-white/10 bg-[#0a1520]/95 px-3 py-2 shadow-2xl backdrop-blur-xl":"mx-auto flex max-w-md items-center justify-around rounded-3xl border border-slate-200 bg-white/95 px-3 py-2 shadow-2xl backdrop-blur-xl"}><button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})} className="flex min-w-20 flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-black text-cyan-300"><span className="text-lg">⌂</span>{t.home}</button><button onClick={()=>document.getElementById("pets-section")?.scrollIntoView({behavior:"smooth"})} className="flex min-w-20 flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-black text-slate-500"><span className="text-lg">🐾</span>{t.pets}</button><button onClick={()=>setSettings(true)} className="flex min-w-20 flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-black text-slate-500"><span className="text-lg">☰</span>{t.more}</button></div></nav>
 
     {settings&&<div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center"><div className={dark?"w-full max-w-md rounded-[2rem] border border-white/10 bg-[#0b1622] p-5 text-white shadow-2xl":"w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl"}><div className="flex items-center justify-between"><h2 className="text-xl font-black">{t.settings}</h2><button onClick={()=>setSettings(false)} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5">✕</button></div><div className="mt-5 space-y-2"><button onClick={toggleTheme} className="flex w-full items-center justify-between rounded-2xl border border-white/5 bg-white/[.03] p-4"><span className="font-black">{dark?t.dark:t.light}</span><span>{dark?"☀️":"🌙"}</span></button><button onClick={toggleLang} className="flex w-full items-center justify-between rounded-2xl border border-white/5 bg-white/[.03] p-4"><span className="font-black">Language / اللغة</span><span className="text-cyan-300">{lang==="ar"?"عربي":"English"}</span></button><button onClick={logout} className="flex w-full items-center justify-between rounded-2xl border border-rose-400/10 bg-rose-400/[.05] p-4 text-rose-300"><span className="font-black">{t.logout}</span><span>↪</span></button></div></div></div>}
-    {addPet&&<div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center"><div className={dark?"w-full max-w-md rounded-[2rem] border border-white/10 bg-[#0b1622] p-6 text-white shadow-2xl":"w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl"}><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-400/10 text-3xl">🐾</div><h2 className="mt-4 text-center text-2xl font-black">{t.addTitle}</h2><p className="mt-3 text-center text-sm leading-7 text-slate-500">{t.addNote}</p><button onClick={()=>setAddPet(false)} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3.5 text-sm font-black text-slate-950">{t.close}</button></div></div>}
+    {addPet&&<div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center"><div dir={lang==="ar"?"rtl":"ltr"} className={dark?"w-full max-w-md max-h-[92vh] overflow-y-auto rounded-[2rem] border border-white/10 bg-[#0b1622] p-6 text-white shadow-2xl":"w-full max-w-md max-h-[92vh] overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl"}><div className="flex items-center justify-between"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-400/10 text-2xl">🐾</div><button onClick={()=>setAddPet(false)} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5">✕</button></div><h2 className="mt-4 text-2xl font-black">{t.addTitle}</h2><p className="mt-2 text-sm leading-7 text-slate-500">{t.addNote}</p><div className="mt-5 space-y-3">
+        <div><label className="mb-1.5 block text-xs font-bold text-slate-500">{t.name} *</label><input value={petForm.name} onChange={e=>setPetForm(v=>({...v,name:e.target.value}))} placeholder={t.name} className={dark?"w-full rounded-2xl border border-white/10 bg-white/[.04] px-4 py-3 outline-none focus:border-cyan-400":"w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-cyan-400"}/></div>
+        <div><label className="mb-1.5 block text-xs font-bold text-slate-500">{t.species}</label><div className="grid grid-cols-3 gap-2">{[["cat",t.cat,"🐱"],["dog",t.dog,"🐶"],["other",t.other,"🐾"]].map(([v,label,em])=><button type="button" key={v} onClick={()=>setPetForm(x=>({...x,species:v}))} className={petForm.species===v?"rounded-2xl border border-cyan-400 bg-cyan-400/10 px-3 py-3 text-sm font-black":"rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3 text-sm font-bold"}>{em}<span className="ms-1">{label}</span></button>)}</div></div>
+        <div className="grid grid-cols-2 gap-3"><div><label className="mb-1.5 block text-xs font-bold text-slate-500">{t.gender}</label><select value={petForm.gender} onChange={e=>setPetForm(v=>({...v,gender:e.target.value}))} className={dark?"w-full rounded-2xl border border-white/10 bg-[#101c28] px-4 py-3 outline-none":"w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none"}><option value="Female">{t.female}</option><option value="Male">{t.male}</option></select></div><div><label className="mb-1.5 block text-xs font-bold text-slate-500">{t.birth}</label><input type="date" value={petForm.birth_date} onChange={e=>setPetForm(v=>({...v,birth_date:e.target.value}))} className={dark?"w-full rounded-2xl border border-white/10 bg-white/[.04] px-4 py-3 outline-none":"w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none"}/></div></div>
+        <div className="grid grid-cols-2 gap-3"><div><label className="mb-1.5 block text-xs font-bold text-slate-500">{t.breed}</label><input value={petForm.breed} onChange={e=>setPetForm(v=>({...v,breed:e.target.value}))} className={dark?"w-full rounded-2xl border border-white/10 bg-white/[.04] px-4 py-3 outline-none":"w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none"}/></div><div><label className="mb-1.5 block text-xs font-bold text-slate-500">{t.color}</label><input value={petForm.color} onChange={e=>setPetForm(v=>({...v,color:e.target.value}))} className={dark?"w-full rounded-2xl border border-white/10 bg-white/[.04] px-4 py-3 outline-none":"w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none"}/></div></div>
+      </div><div className="mt-5 grid grid-cols-2 gap-2"><button disabled={savingPet} onClick={()=>setAddPet(false)} className={dark?"rounded-2xl border border-white/10 px-4 py-3 font-bold text-slate-400":"rounded-2xl border border-slate-200 px-4 py-3 font-bold text-slate-500"}>{t.cancel}</button><button disabled={savingPet} onClick={createPet} className="rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 font-black text-slate-950 disabled:opacity-60">{savingPet?t.saving:t.save}</button></div></div></div>}
   </main>;
 }
