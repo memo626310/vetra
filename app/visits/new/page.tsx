@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
@@ -191,6 +198,10 @@ const translations = {
     deceasedPet: "This pet is marked as deceased and cannot have new visits.",
     deceasedBadge: "Deceased",
     requiredFields: "Please select both a client and a pet.",
+    quickReasons: "Quick reasons",
+    normal: "Normal",
+    abnormal: "Abnormal",
+    dragToChoose: "Drag or scroll to choose",
 
     cat: "Cat",
     dog: "Dog",
@@ -293,6 +304,10 @@ const translations = {
     deceasedPet: "هذا الحيوان مسجل كمتوفى ولا يمكن تسجيل زيارة جديدة له.",
     deceasedBadge: "متوفى",
     requiredFields: "يرجى اختيار العميل والحيوان.",
+    quickReasons: "أسباب سريعة",
+    normal: "طبيعي",
+    abnormal: "غير طبيعي",
+    dragToChoose: "اسحب أو لف لاختيار القيمة",
 
     cat: "قط",
     dog: "كلب",
@@ -524,6 +539,287 @@ function MiniGraph({
   );
 }
 
+
+type WheelPickerProps = {
+  value: string;
+  onChange: (value: string) => void;
+  min: number;
+  max: number;
+  step: number;
+  decimals: number;
+  unit: string;
+  title: string;
+  icon: string;
+  darkMode: boolean;
+  emptyLabel: string;
+  defaultValue: number;
+};
+
+function WheelPicker({
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  decimals,
+  unit,
+  title,
+  icon,
+  darkMode,
+  emptyLabel,
+  defaultValue,
+}: WheelPickerProps) {
+  const values = useMemo(() => {
+    const count = Math.round((max - min) / step);
+    return Array.from({ length: count + 1 }, (_, index) =>
+      Number((min + index * step).toFixed(decimals))
+    );
+  }, [min, max, step, decimals]);
+
+  const parsedValue = Number(value);
+  const hasValue = value !== "" && Number.isFinite(parsedValue);
+  const fallback = Math.min(max, Math.max(min, defaultValue));
+  const currentValue = hasValue ? parsedValue : fallback;
+  const currentIndex = Math.min(
+    values.length - 1,
+    Math.max(0, Math.round((currentValue - min) / step))
+  );
+
+  const ITEM_HEIGHT = 42;
+  const [position, setPosition] = useState(currentIndex);
+  const [dragging, setDragging] = useState(false);
+  const movedDuringDrag = useRef(false);
+  const dragStartY = useRef(0);
+  const dragStartPosition = useRef(currentIndex);
+  const lastCommittedIndex = useRef(currentIndex);
+
+  useEffect(() => {
+    if (dragging) return;
+    setPosition(currentIndex);
+    lastCommittedIndex.current = currentIndex;
+  }, [currentIndex, dragging]);
+
+  const commitIndex = (nextIndex: number) => {
+    const clamped = Math.min(values.length - 1, Math.max(0, nextIndex));
+    const nextValue = values[clamped];
+
+    setPosition(clamped);
+    lastCommittedIndex.current = clamped;
+    onChange(nextValue.toFixed(decimals));
+  };
+
+  const moveBy = (delta: number) => {
+    const nextIndex = Math.round(position + delta);
+    commitIndex(nextIndex);
+  };
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragStartY.current = event.clientY;
+    dragStartPosition.current = position;
+    movedDuringDrag.current = false;
+    setDragging(true);
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragging) return;
+
+    const delta = dragStartY.current - event.clientY;
+    if (Math.abs(delta) >= 3) movedDuringDrag.current = true;
+    const nextPosition = Math.min(
+      values.length - 1,
+      Math.max(0, dragStartPosition.current + delta / ITEM_HEIGHT)
+    );
+
+    setPosition(nextPosition);
+
+    const nextIndex = Math.round(nextPosition);
+    if (nextIndex !== lastCommittedIndex.current) {
+      lastCommittedIndex.current = nextIndex;
+      onChange(values[nextIndex].toFixed(decimals));
+    }
+  };
+
+  const handlePointerUp = () => {
+    if (!dragging) return;
+    if (!movedDuringDrag.current) {
+      setDragging(false);
+      return;
+    }
+    const snappedIndex = Math.min(
+      values.length - 1,
+      Math.max(0, Math.round(position))
+    );
+    commitIndex(snappedIndex);
+    setDragging(false);
+  };
+
+  const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? 1 : -1;
+    const amount = Math.min(
+      4,
+      Math.max(1, Math.round(Math.abs(event.deltaY) / 45))
+    );
+    moveBy(direction * amount);
+  };
+
+  const roundedPosition = Math.round(position);
+  const startIndex = Math.max(0, Math.floor(position) - 3);
+
+  const visibleItems = Array.from({ length: 7 }, (_, offset) => {
+    const index = startIndex + offset;
+    if (index < 0 || index >= values.length) return null;
+
+    const distance = Math.abs(index - position);
+    return {
+      index,
+      value: values[index],
+      distance,
+    };
+  }).filter(Boolean) as {
+    index: number;
+    value: number;
+    distance: number;
+  }[];
+
+  const listOffset = (position - startIndex) * ITEM_HEIGHT + ITEM_HEIGHT / 2;
+
+  return (
+    <div
+      className={`rounded-3xl border p-4 transition-colors duration-200 ${
+        darkMode
+          ? "border-slate-700 bg-slate-950/80"
+          : "border-slate-200 bg-slate-50"
+      }`}
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">{icon}</span>
+          <span
+            className={`text-sm font-bold ${
+              darkMode ? "text-slate-200" : "text-slate-700"
+            }`}
+          >
+            {title}
+          </span>
+        </div>
+        <span
+          className={`text-xs font-semibold ${
+            darkMode ? "text-slate-500" : "text-slate-400"
+          }`}
+        >
+          {unit}
+        </span>
+      </div>
+
+      <div
+        className="relative h-[210px] select-none overflow-hidden rounded-2xl"
+        style={{ touchAction: "none" }}
+        tabIndex={0}
+        role="spinbutton"
+        aria-label={`${title} ${unit}`}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={values[roundedPosition]}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            moveBy(-1);
+          } else if (event.key === "ArrowDown") {
+            event.preventDefault();
+            moveBy(1);
+          }
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onWheel={handleWheel}
+      >
+        <div
+          className={`pointer-events-none absolute inset-x-2 top-1/2 z-10 h-[42px] -translate-y-1/2 rounded-xl border ${
+            darkMode
+              ? "border-blue-500/40 bg-blue-500/10"
+              : "border-blue-500/30 bg-blue-50"
+          }`}
+        />
+
+        <div
+          className="absolute inset-x-0 top-1/2"
+          style={{
+            transform: `translateY(-${listOffset}px)`,
+          }}
+        >
+          {visibleItems.map((item) => {
+            const isSelected = item.index === roundedPosition;
+            const opacity = Math.max(0.15, 1 - item.distance * 0.27);
+            const scale = Math.max(0.76, 1 - item.distance * 0.06);
+
+            return (
+              <div
+                key={item.index}
+                className="flex items-center justify-center"
+                style={{
+                  height: `${ITEM_HEIGHT}px`,
+                  opacity,
+                  transform: `scale(${scale})`,
+                  transition: dragging ? "none" : "transform 140ms ease, opacity 140ms ease",
+                }}
+              >
+                <span
+                  className={`tabular-nums tracking-tight ${
+                    isSelected
+                      ? `text-3xl font-extrabold ${
+                          darkMode ? "text-white" : "text-slate-900"
+                        }`
+                      : `text-lg font-semibold ${
+                          darkMode ? "text-slate-500" : "text-slate-400"
+                        }`
+                  }`}
+                >
+                  {item.value.toFixed(decimals)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {!hasValue && (
+          <div
+            className={`pointer-events-none absolute inset-x-0 bottom-2 text-center text-[11px] font-semibold ${
+              darkMode ? "text-slate-500" : "text-slate-400"
+            }`}
+          >
+            {emptyLabel}
+          </div>
+        )}
+
+        <div
+          className={`pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b ${
+            darkMode ? "from-slate-950" : "from-slate-50"
+          } to-transparent`}
+        />
+        <div
+          className={`pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t ${
+            darkMode ? "from-slate-950" : "from-slate-50"
+          } to-transparent`}
+        />
+      </div>
+
+      <div
+        className={`mt-2 text-center text-[11px] ${
+          darkMode ? "text-slate-500" : "text-slate-400"
+        }`}
+      >
+        {hasValue
+          ? `${values[currentIndex].toFixed(decimals)} ${unit}`
+          : emptyLabel}
+      </div>
+    </div>
+  );
+}
+
 function VitalCard({
   title,
   icon,
@@ -665,6 +961,7 @@ export default function NewVisitPage() {
 
   const [reason, setReason] = useState("");
   const [examination, setExamination] = useState("");
+  const [examinationStatus, setExaminationStatus] = useState<"" | "normal" | "abnormal">("");
   const [diagnosis, setDiagnosis] = useState("");
   const [treatment, setTreatment] = useState("");
   const [visitNotes, setVisitNotes] = useState("");
@@ -1194,6 +1491,7 @@ export default function NewVisitPage() {
 
       setReason("");
       setExamination("");
+      setExaminationStatus("");
       setDiagnosis("");
       setTreatment("");
       setVisitNotes("");
@@ -1222,6 +1520,7 @@ export default function NewVisitPage() {
     setPetDetails(null);
     setVisits([]);
     setSelectedPetId("");
+    setExaminationStatus("");
     setMessage("");
   }
 
@@ -1307,6 +1606,32 @@ export default function NewVisitPage() {
 
   const previousRespiratoryRate =
     vitalData.respiratoryRate[1]?.value ?? null;
+
+  const quickReasonOptions = language === "ar"
+    ? [
+        "كشف عام",
+        "متابعة",
+        "تطعيم",
+        "قيء",
+        "إسهال",
+        "فقدان شهية",
+        "خمول",
+        "كحة / عطس",
+        "حكة / مشكلة جلدية",
+        "إصابة",
+      ]
+    : [
+        "General check",
+        "Follow-up",
+        "Vaccination",
+        "Vomiting",
+        "Diarrhea",
+        "Poor appetite",
+        "Lethargy",
+        "Cough / sneezing",
+        "Itching / skin issue",
+        "Injury",
+      ];
 
   const pageClasses = darkMode
     ? "min-h-screen bg-slate-950 text-slate-100"
@@ -2176,15 +2501,44 @@ export default function NewVisitPage() {
 
               <div className="grid gap-5 lg:grid-cols-2">
                 <div className="lg:col-span-2">
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {t.reason}
-                  </label>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <label
+                      className={`block text-sm font-semibold ${
+                        darkMode ? "text-slate-300" : "text-slate-700"
+                      }`}
+                    >
+                      {t.reason}
+                    </label>
+                    <span
+                      className={`text-[11px] font-semibold ${
+                        darkMode ? "text-slate-500" : "text-slate-400"
+                      }`}
+                    >
+                      {t.quickReasons}
+                    </span>
+                  </div>
+
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {quickReasonOptions.map((option) => {
+                      const active = reason === option;
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => setReason(active ? "" : option)}
+                          className={`rounded-full border px-3 py-2 text-xs font-semibold transition-all duration-150 ${
+                            active
+                              ? "border-blue-500 bg-blue-600 text-white shadow-sm"
+                              : darkMode
+                              ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-600 hover:bg-slate-800"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
+                          }`}
+                        >
+                          {option}
+                        </button>
+                      );
+                    })}
+                  </div>
 
                   <input
                     value={reason}
@@ -2198,56 +2552,57 @@ export default function NewVisitPage() {
                   />
                 </div>
 
-                <div>
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {t.weight}
-                  </label>
+                <div className="lg:col-span-2">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <div
+                        className={`text-sm font-semibold ${
+                          darkMode ? "text-slate-300" : "text-slate-700"
+                        }`}
+                      >
+                        {language === "ar" ? "المؤشرات الحيوية" : "Vital signs"}
+                      </div>
+                      <div
+                        className={`mt-1 text-[11px] ${
+                          darkMode ? "text-slate-500" : "text-slate-400"
+                        }`}
+                      >
+                        {t.dragToChoose}
+                      </div>
+                    </div>
+                  </div>
 
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={weight}
-                    onChange={(e) => setWeight(e.target.value)}
-                    placeholder="0.00"
-                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
-                  />
-                </div>
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <WheelPicker
+                      title={t.weight}
+                      icon="⚖️"
+                      value={weight}
+                      onChange={setWeight}
+                      min={0.1}
+                      max={80}
+                      step={0.1}
+                      decimals={1}
+                      unit={t.kg}
+                      darkMode={darkMode}
+                      emptyLabel={t.noData}
+                      defaultValue={5}
+                    />
 
-                <div>
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {t.temperature}
-                  </label>
-
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={temperature}
-                    onChange={(e) =>
-                      setTemperature(e.target.value)
-                    }
-                    placeholder="38.5"
-                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
-                  />
+                    <WheelPicker
+                      title={t.temperature}
+                      icon="🌡️"
+                      value={temperature}
+                      onChange={setTemperature}
+                      min={34}
+                      max={42}
+                      step={0.1}
+                      decimals={1}
+                      unit={t.celsius}
+                      darkMode={darkMode}
+                      emptyLabel={t.noData}
+                      defaultValue={38.5}
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -2303,29 +2658,80 @@ export default function NewVisitPage() {
                 </div>
 
                 <div className="lg:col-span-2">
-                  <label
-                    className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {t.examinationNotes}
-                  </label>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <label
+                      className={`block text-sm font-semibold ${
+                        darkMode ? "text-slate-300" : "text-slate-700"
+                      }`}
+                    >
+                      {t.examinationNotes}
+                    </label>
 
-                  <textarea
-                    rows={5}
-                    value={examination}
-                    onChange={(e) =>
-                      setExamination(e.target.value)
-                    }
-                    placeholder={t.examinationPlaceholder}
-                    className={`w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
-                  />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExaminationStatus("normal");
+                          setExamination(language === "ar" ? "طبيعي" : "Normal");
+                        }}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-all ${
+                          examinationStatus === "normal"
+                            ? "border-emerald-500 bg-emerald-600 text-white"
+                            : darkMode
+                            ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-emerald-700"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:bg-emerald-50"
+                        }`}
+                      >
+                        ✓ {t.normal}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExaminationStatus("abnormal");
+                          if (!examination || examination === (language === "ar" ? "طبيعي" : "Normal")) {
+                            setExamination("");
+                          }
+                        }}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-all ${
+                          examinationStatus === "abnormal"
+                            ? "border-rose-500 bg-rose-600 text-white"
+                            : darkMode
+                            ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-rose-700"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-rose-300 hover:bg-rose-50"
+                        }`}
+                      >
+                        ! {t.abnormal}
+                      </button>
+                    </div>
+                  </div>
+
+                  {examinationStatus === "normal" ? (
+                    <div
+                      className={`rounded-2xl border p-4 text-sm font-semibold ${
+                        darkMode
+                          ? "border-emerald-900 bg-emerald-950/20 text-emerald-300"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      ✓ {language === "ar" ? "الفحص طبيعي" : "Examination is normal"}
+                    </div>
+                  ) : (
+                    <textarea
+                      rows={5}
+                      value={examination}
+                      onChange={(e) => {
+                        setExamination(e.target.value);
+                        if (e.target.value.trim()) setExaminationStatus("abnormal");
+                      }}
+                      placeholder={t.examinationPlaceholder}
+                      className={`w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                        darkMode
+                          ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                          : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                      }`}
+                    />
+                  )}
                 </div>
 
                 <div>
