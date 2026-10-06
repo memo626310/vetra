@@ -914,7 +914,6 @@ export default function NewVisitPage() {
   const [selectedMedicationId, setSelectedMedicationId] = useState("");
   const [medicationDrafts, setMedicationDrafts] = useState<MedicationDraft[]>([]);
   const [vaccinations, setVaccinations] = useState<VaccinationDraft[]>([]);
-  const [whatsappEnabled, setWhatsappEnabled] = useState(true);
 
   const t = translations[language];
 
@@ -1281,38 +1280,6 @@ export default function NewVisitPage() {
     setVaccinations((current) => current.filter((item) => item.id !== id));
   }
 
-  function buildPrescriptionText() {
-    const lines = medicationDrafts.map((draft) => {
-      const med = medications.find((item) => item.id === draft.medication_id);
-      const name = med?.name || "Medication";
-      const dose = `${draft.calculated_dose} ${draft.calculated_dose_unit}`;
-      const volume = draft.calculated_volume != null ? ` (${draft.calculated_volume} ${draft.volume_unit})` : "";
-      const route = draft.route ? ` • ${draft.route}` : "";
-      const frequency = draft.frequency ? ` • ${draft.frequency}` : "";
-      const duration = draft.duration_days ? ` • ${draft.duration_days} days` : "";
-      return `• ${name}: ${dose}${volume}${route}${frequency}${duration}`;
-    });
-    const vaccineLines = vaccinations.filter((v) => v.vaccine_name.trim()).map((v) => `• Vaccine: ${v.vaccine_name}${v.next_dose_at ? ` — next dose ${v.next_dose_at}` : ""}`);
-    const parts = [
-      `VETRA — ${petDetails?.name || "Pet"}`,
-      diagnosis.trim() ? `Diagnosis: ${diagnosis.trim()}` : "",
-      lines.length ? `Treatment:\n${lines.join("\n")}` : treatment.trim() ? `Treatment:\n${treatment.trim()}` : "",
-      vaccineLines.length ? `Vaccination:\n${vaccineLines.join("\n")}` : "",
-      visitNotes.trim() ? `Notes:\n${visitNotes.trim()}` : "",
-    ].filter(Boolean);
-    return parts.join("\n\n");
-  }
-
-  function openWhatsAppPrescription() {
-    const phone = petDetails?.client?.phone || "";
-    const digits = phone.replace(/\D/g, "");
-    if (!digits) return false;
-    const normalized = digits.startsWith("0") ? `20${digits.slice(1)}` : digits;
-    const url = `https://wa.me/${normalized}?text=${encodeURIComponent(buildPrescriptionText())}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-    return true;
-  }
-
   const selectedFollowUpLabel = useMemo(() => {
     const labels: Record<string, string> = language === "ar"
       ? { none: t.followUpNone, "3d": t.followUp3Days, "1w": t.followUp1Week, "2w": t.followUp2Weeks, "1m": t.followUp1Month, custom: t.followUpCustom }
@@ -1434,10 +1401,6 @@ export default function NewVisitPage() {
         if (vaccineError) throw vaccineError;
       }
 
-      if (whatsappEnabled && petDetails?.client?.phone) {
-        openWhatsAppPrescription();
-      }
-
       setMessage(t.visitSaved);
 
       setReason("");
@@ -1458,7 +1421,7 @@ export default function NewVisitPage() {
       await loadVisits(selectedPetId);
 
       router.push(
-        `/invoices/new?client=${encodeURIComponent(selectedClientId)}&pet=${encodeURIComponent(selectedPetId)}&visit=${encodeURIComponent(visit.id)}`
+        `/prescriptions/${encodeURIComponent(visit.id)}`
       );
     } catch (error) {
       console.error("SAVE VISIT ERROR:", error);
@@ -2812,12 +2775,7 @@ export default function NewVisitPage() {
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-                <label className={`flex items-center gap-2 text-xs font-bold ${darkMode ? "text-slate-300" : "text-slate-600"}`}>
-                  <input type="checkbox" checked={whatsappEnabled} onChange={(e) => setWhatsappEnabled(e.target.checked)} />
-                  {language === "ar" ? "فتح وصفة العلاج على WhatsApp بعد الحفظ" : "Open treatment prescription in WhatsApp after saving"}
-                </label>
-
+              <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={saveVisit}
