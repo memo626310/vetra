@@ -330,7 +330,7 @@ export default function PrescriptionPage() {
     const lines = [
       "VETRA - Prescription",
       `Pet: ${pet.name}`,
-      `Owner: ${client.name}`,
+      `Owner: ${client?.name || "-"}`,
       visit.diagnosis ? `Diagnosis: ${visit.diagnosis}` : "",
       medicationText ? `Treatment:\n${medicationText}` : visit.treatment ? `Treatment:\n${visit.treatment}` : "",
       vaccinations.length
