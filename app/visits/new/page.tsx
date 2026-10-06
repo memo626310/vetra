@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
@@ -169,6 +162,21 @@ const translations = {
     examination: "Current Examination",
     reason: "Reason for Visit",
     reasonPlaceholder: "Why is the patient here today?",
+    quickReasons: "Quick reasons",
+    reasons: ["Check-up", "Follow-up", "Vaccination", "Vomiting", "Diarrhea", "Cough", "Lethargy", "Poor appetite", "Skin problem"],
+    examNormal: "Normal",
+    examAbnormal: "Abnormal",
+    examinationDetails: "Examination findings",
+    examinationNormalHint: "Marked normal — no abnormal findings recorded.",
+    followUp: "Follow-up",
+    followUpNone: "No follow-up",
+    followUp3Days: "3 days",
+    followUp1Week: "1 week",
+    followUp2Weeks: "2 weeks",
+    followUp1Month: "1 month",
+    followUpCustom: "Custom",
+    followUpPlaceholder: "Follow-up / revisit details...",
+    wheelSwipeHint: "Swipe or scroll",
     examinationNotes: "Examination",
     examinationPlaceholder: "Clinical examination findings...",
     diagnosis: "Diagnosis",
@@ -198,10 +206,6 @@ const translations = {
     deceasedPet: "This pet is marked as deceased and cannot have new visits.",
     deceasedBadge: "Deceased",
     requiredFields: "Please select both a client and a pet.",
-    quickReasons: "Quick reasons",
-    normal: "Normal",
-    abnormal: "Abnormal",
-    dragToChoose: "Drag or scroll to choose",
 
     cat: "Cat",
     dog: "Dog",
@@ -275,6 +279,21 @@ const translations = {
     examination: "الكشف الحالي",
     reason: "سبب الزيارة",
     reasonPlaceholder: "ما سبب حضور الحيوان اليوم؟",
+    quickReasons: "أسباب سريعة",
+    reasons: ["كشف", "متابعة", "تطعيم", "قيء", "إسهال", "كحة", "خمول", "قلة شهية", "مشكلة جلدية"],
+    examNormal: "طبيعي",
+    examAbnormal: "غير طبيعي",
+    examinationDetails: "تفاصيل الفحص",
+    examinationNormalHint: "تم تحديد الفحص كطبيعي — لا توجد ملاحظات غير طبيعية مسجلة.",
+    followUp: "المتابعة",
+    followUpNone: "لا توجد متابعة",
+    followUp3Days: "3 أيام",
+    followUp1Week: "أسبوع",
+    followUp2Weeks: "أسبوعين",
+    followUp1Month: "شهر",
+    followUpCustom: "مخصص",
+    followUpPlaceholder: "تفاصيل المتابعة / موعد المراجعة...",
+    wheelSwipeHint: "اسحب أو لف العجلة",
     examinationNotes: "الفحص",
     examinationPlaceholder: "نتائج الفحص الإكلينيكي...",
     diagnosis: "التشخيص",
@@ -304,10 +323,6 @@ const translations = {
     deceasedPet: "هذا الحيوان مسجل كمتوفى ولا يمكن تسجيل زيارة جديدة له.",
     deceasedBadge: "متوفى",
     requiredFields: "يرجى اختيار العميل والحيوان.",
-    quickReasons: "أسباب سريعة",
-    normal: "طبيعي",
-    abnormal: "غير طبيعي",
-    dragToChoose: "اسحب أو لف لاختيار القيمة",
 
     cat: "قط",
     dog: "كلب",
@@ -393,6 +408,202 @@ function getDelta(
   if (delta === 0) return "0";
 
   return delta > 0 ? `+${delta}` : `${delta}`;
+}
+
+function WheelPicker({
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  unit,
+  defaultValue,
+  hint,
+  darkMode,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  min: number;
+  max: number;
+  step: number;
+  unit: string;
+  defaultValue: number;
+  hint: string;
+  darkMode: boolean;
+}) {
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+  const selectedIndexRef = useRef(0);
+  const onChangeRef = useRef(onChange);
+  const dragStartY = useRef<number | null>(null);
+  const dragDistance = useRef(0);
+
+  const values = useMemo(() => {
+    const count = Math.round((max - min) / step);
+    return Array.from({ length: count + 1 }, (_, index) =>
+      Number((min + index * step).toFixed(4))
+    );
+  }, [min, max, step]);
+
+  const fallbackIndex = Math.max(0, Math.min(
+    values.length - 1,
+    Math.round((defaultValue - min) / step)
+  ));
+
+  const numericValue = value === "" ? null : Number(value);
+  const selectedIndex =
+    numericValue !== null && Number.isFinite(numericValue)
+      ? Math.max(0, Math.min(values.length - 1, Math.round((numericValue - min) / step)))
+      : fallbackIndex;
+
+  selectedIndexRef.current = selectedIndex;
+  onChangeRef.current = onChange;
+
+  function commitIndex(nextIndex: number) {
+    const clamped = Math.max(0, Math.min(values.length - 1, nextIndex));
+    onChange(values[clamped].toFixed(step < 0.1 ? 2 : 1));
+  }
+
+  function moveBy(delta: number) {
+    commitIndex(selectedIndex + delta);
+  }
+
+  useEffect(() => {
+    const element = pickerRef.current;
+    if (!element) return;
+
+    const handleNativeWheel = (event: WheelEvent) => {
+      // The picker owns the wheel. Prevent the document from scrolling.
+      if (event.cancelable) event.preventDefault();
+      event.stopPropagation();
+
+      const delta = event.deltaY > 0 ? 1 : -1;
+      const nextIndex = Math.max(
+        0,
+        Math.min(values.length - 1, selectedIndexRef.current + delta)
+      );
+
+      selectedIndexRef.current = nextIndex;
+      onChangeRef.current(
+        values[nextIndex].toFixed(step < 0.1 ? 2 : 1)
+      );
+    };
+
+    // Native non-passive listener is intentional here. React/browser scrolling
+    // can otherwise remain active while the pointer is over the picker.
+    element.addEventListener("wheel", handleNativeWheel, { passive: false });
+
+    return () => {
+      element.removeEventListener("wheel", handleNativeWheel);
+    };
+  }, [step, values]);
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    dragStartY.current = event.clientY;
+    dragDistance.current = 0;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (dragStartY.current === null) return;
+    const delta = dragStartY.current - event.clientY;
+    dragDistance.current += delta;
+    dragStartY.current = event.clientY;
+
+    const pixelsPerStep = 24;
+    while (dragDistance.current >= pixelsPerStep) {
+      moveBy(1);
+      dragDistance.current -= pixelsPerStep;
+    }
+    while (dragDistance.current <= -pixelsPerStep) {
+      moveBy(-1);
+      dragDistance.current += pixelsPerStep;
+    }
+  }
+
+  function stopDragging(event: ReactPointerEvent<HTMLDivElement>) {
+    if (dragStartY.current !== null) {
+      dragStartY.current = null;
+      dragDistance.current = 0;
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  const itemIndexes = [-2, -1, 0, 1, 2];
+
+  return (
+    <div
+      ref={pickerRef}
+      className={`relative select-none overflow-hidden rounded-2xl border ${
+        darkMode
+          ? "border-slate-700 bg-slate-950"
+          : "border-slate-200 bg-slate-50"
+      }`}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={stopDragging}
+      onPointerCancel={stopDragging}
+      style={{ touchAction: "none", overscrollBehavior: "contain" }}
+      role="spinbutton"
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={numericValue ?? undefined}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          moveBy(1);
+        } else if (event.key === "ArrowDown") {
+          event.preventDefault();
+          moveBy(-1);
+        }
+      }}
+    >
+      <div
+        className={`pointer-events-none absolute inset-x-2 top-1/2 z-10 h-12 -translate-y-1/2 rounded-xl border-2 ${
+          darkMode ? "border-blue-500/60 bg-blue-500/10" : "border-blue-500/50 bg-blue-50/70"
+        }`}
+      />
+
+      <div className="flex h-32 flex-col items-center justify-center gap-0 overflow-hidden">
+        {itemIndexes.map((offset) => {
+          const rawIndex = selectedIndex + offset;
+          const index = Math.max(0, Math.min(values.length - 1, rawIndex));
+          const isSelected = offset === 0;
+          const displayValue =
+            isSelected && numericValue === null ? "—" : values[index].toFixed(1);
+
+          return (
+            <div
+              key={`${offset}-${index}`}
+              className={`flex h-8 items-center justify-center leading-none transition-all duration-100 ${
+                isSelected
+                  ? darkMode
+                    ? "text-2xl font-black text-white"
+                    : "text-2xl font-black text-slate-900"
+                  : darkMode
+                  ? "text-sm font-medium text-slate-500"
+                  : "text-sm font-medium text-slate-400"
+              }`}
+            >
+              {displayValue}{isSelected && numericValue !== null ? ` ${unit}` : ""}
+            </div>
+          );
+        })}
+      </div>
+
+      <div
+        className={`border-t px-3 py-1.5 text-center text-[10px] font-medium ${
+          darkMode
+            ? "border-slate-800 text-slate-500"
+            : "border-slate-200 text-slate-400"
+        }`}
+      >
+        ↕ {hint}
+      </div>
+    </div>
+  );
 }
 
 function MiniGraph({
@@ -539,287 +750,6 @@ function MiniGraph({
   );
 }
 
-
-type WheelPickerProps = {
-  value: string;
-  onChange: (value: string) => void;
-  min: number;
-  max: number;
-  step: number;
-  decimals: number;
-  unit: string;
-  title: string;
-  icon: string;
-  darkMode: boolean;
-  emptyLabel: string;
-  defaultValue: number;
-};
-
-function WheelPicker({
-  value,
-  onChange,
-  min,
-  max,
-  step,
-  decimals,
-  unit,
-  title,
-  icon,
-  darkMode,
-  emptyLabel,
-  defaultValue,
-}: WheelPickerProps) {
-  const values = useMemo(() => {
-    const count = Math.round((max - min) / step);
-    return Array.from({ length: count + 1 }, (_, index) =>
-      Number((min + index * step).toFixed(decimals))
-    );
-  }, [min, max, step, decimals]);
-
-  const parsedValue = Number(value);
-  const hasValue = value !== "" && Number.isFinite(parsedValue);
-  const fallback = Math.min(max, Math.max(min, defaultValue));
-  const currentValue = hasValue ? parsedValue : fallback;
-  const currentIndex = Math.min(
-    values.length - 1,
-    Math.max(0, Math.round((currentValue - min) / step))
-  );
-
-  const ITEM_HEIGHT = 42;
-  const [position, setPosition] = useState(currentIndex);
-  const [dragging, setDragging] = useState(false);
-  const movedDuringDrag = useRef(false);
-  const dragStartY = useRef(0);
-  const dragStartPosition = useRef(currentIndex);
-  const lastCommittedIndex = useRef(currentIndex);
-
-  useEffect(() => {
-    if (dragging) return;
-    setPosition(currentIndex);
-    lastCommittedIndex.current = currentIndex;
-  }, [currentIndex, dragging]);
-
-  const commitIndex = (nextIndex: number) => {
-    const clamped = Math.min(values.length - 1, Math.max(0, nextIndex));
-    const nextValue = values[clamped];
-
-    setPosition(clamped);
-    lastCommittedIndex.current = clamped;
-    onChange(nextValue.toFixed(decimals));
-  };
-
-  const moveBy = (delta: number) => {
-    const nextIndex = Math.round(position + delta);
-    commitIndex(nextIndex);
-  };
-
-  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragStartY.current = event.clientY;
-    dragStartPosition.current = position;
-    movedDuringDrag.current = false;
-    setDragging(true);
-  };
-
-  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragging) return;
-
-    const delta = dragStartY.current - event.clientY;
-    if (Math.abs(delta) >= 3) movedDuringDrag.current = true;
-    const nextPosition = Math.min(
-      values.length - 1,
-      Math.max(0, dragStartPosition.current + delta / ITEM_HEIGHT)
-    );
-
-    setPosition(nextPosition);
-
-    const nextIndex = Math.round(nextPosition);
-    if (nextIndex !== lastCommittedIndex.current) {
-      lastCommittedIndex.current = nextIndex;
-      onChange(values[nextIndex].toFixed(decimals));
-    }
-  };
-
-  const handlePointerUp = () => {
-    if (!dragging) return;
-    if (!movedDuringDrag.current) {
-      setDragging(false);
-      return;
-    }
-    const snappedIndex = Math.min(
-      values.length - 1,
-      Math.max(0, Math.round(position))
-    );
-    commitIndex(snappedIndex);
-    setDragging(false);
-  };
-
-  const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const direction = event.deltaY > 0 ? 1 : -1;
-    const amount = Math.min(
-      4,
-      Math.max(1, Math.round(Math.abs(event.deltaY) / 45))
-    );
-    moveBy(direction * amount);
-  };
-
-  const roundedPosition = Math.round(position);
-  const startIndex = Math.max(0, Math.floor(position) - 3);
-
-  const visibleItems = Array.from({ length: 7 }, (_, offset) => {
-    const index = startIndex + offset;
-    if (index < 0 || index >= values.length) return null;
-
-    const distance = Math.abs(index - position);
-    return {
-      index,
-      value: values[index],
-      distance,
-    };
-  }).filter(Boolean) as {
-    index: number;
-    value: number;
-    distance: number;
-  }[];
-
-  const listOffset = (position - startIndex) * ITEM_HEIGHT + ITEM_HEIGHT / 2;
-
-  return (
-    <div
-      className={`rounded-3xl border p-4 transition-colors duration-200 ${
-        darkMode
-          ? "border-slate-700 bg-slate-950/80"
-          : "border-slate-200 bg-slate-50"
-      }`}
-    >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xl">{icon}</span>
-          <span
-            className={`text-sm font-bold ${
-              darkMode ? "text-slate-200" : "text-slate-700"
-            }`}
-          >
-            {title}
-          </span>
-        </div>
-        <span
-          className={`text-xs font-semibold ${
-            darkMode ? "text-slate-500" : "text-slate-400"
-          }`}
-        >
-          {unit}
-        </span>
-      </div>
-
-      <div
-        className="relative h-[210px] select-none overflow-hidden rounded-2xl"
-        style={{ touchAction: "none" }}
-        tabIndex={0}
-        role="spinbutton"
-        aria-label={`${title} ${unit}`}
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={values[roundedPosition]}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowUp") {
-            event.preventDefault();
-            moveBy(-1);
-          } else if (event.key === "ArrowDown") {
-            event.preventDefault();
-            moveBy(1);
-          }
-        }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onWheel={handleWheel}
-      >
-        <div
-          className={`pointer-events-none absolute inset-x-2 top-1/2 z-10 h-[42px] -translate-y-1/2 rounded-xl border ${
-            darkMode
-              ? "border-blue-500/40 bg-blue-500/10"
-              : "border-blue-500/30 bg-blue-50"
-          }`}
-        />
-
-        <div
-          className="absolute inset-x-0 top-1/2"
-          style={{
-            transform: `translateY(-${listOffset}px)`,
-          }}
-        >
-          {visibleItems.map((item) => {
-            const isSelected = item.index === roundedPosition;
-            const opacity = Math.max(0.15, 1 - item.distance * 0.27);
-            const scale = Math.max(0.76, 1 - item.distance * 0.06);
-
-            return (
-              <div
-                key={item.index}
-                className="flex items-center justify-center"
-                style={{
-                  height: `${ITEM_HEIGHT}px`,
-                  opacity,
-                  transform: `scale(${scale})`,
-                  transition: dragging ? "none" : "transform 140ms ease, opacity 140ms ease",
-                }}
-              >
-                <span
-                  className={`tabular-nums tracking-tight ${
-                    isSelected
-                      ? `text-3xl font-extrabold ${
-                          darkMode ? "text-white" : "text-slate-900"
-                        }`
-                      : `text-lg font-semibold ${
-                          darkMode ? "text-slate-500" : "text-slate-400"
-                        }`
-                  }`}
-                >
-                  {item.value.toFixed(decimals)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {!hasValue && (
-          <div
-            className={`pointer-events-none absolute inset-x-0 bottom-2 text-center text-[11px] font-semibold ${
-              darkMode ? "text-slate-500" : "text-slate-400"
-            }`}
-          >
-            {emptyLabel}
-          </div>
-        )}
-
-        <div
-          className={`pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b ${
-            darkMode ? "from-slate-950" : "from-slate-50"
-          } to-transparent`}
-        />
-        <div
-          className={`pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t ${
-            darkMode ? "from-slate-950" : "from-slate-50"
-          } to-transparent`}
-        />
-      </div>
-
-      <div
-        className={`mt-2 text-center text-[11px] ${
-          darkMode ? "text-slate-500" : "text-slate-400"
-        }`}
-      >
-        {hasValue
-          ? `${values[currentIndex].toFixed(decimals)} ${unit}`
-          : emptyLabel}
-      </div>
-    </div>
-  );
-}
-
 function VitalCard({
   title,
   icon,
@@ -960,8 +890,10 @@ export default function NewVisitPage() {
   const [started, setStarted] = useState(false);
 
   const [reason, setReason] = useState("");
+  const [examStatus, setExamStatus] = useState<"normal" | "abnormal" | "">("");
   const [examination, setExamination] = useState("");
-  const [examinationStatus, setExaminationStatus] = useState<"" | "normal" | "abnormal">("");
+  const [followUp, setFollowUp] = useState("");
+  const [followUpDetails, setFollowUpDetails] = useState("");
   const [diagnosis, setDiagnosis] = useState("");
   const [treatment, setTreatment] = useState("");
   const [visitNotes, setVisitNotes] = useState("");
@@ -1381,6 +1313,13 @@ export default function NewVisitPage() {
     return true;
   }
 
+  const selectedFollowUpLabel = useMemo(() => {
+    const labels: Record<string, string> = language === "ar"
+      ? { none: t.followUpNone, "3d": t.followUp3Days, "1w": t.followUp1Week, "2w": t.followUp2Weeks, "1m": t.followUp1Month, custom: t.followUpCustom }
+      : { none: t.followUpNone, "3d": t.followUp3Days, "1w": t.followUp1Week, "2w": t.followUp2Weeks, "1m": t.followUp1Month, custom: t.followUpCustom };
+    return labels[followUp] || "";
+  }, [followUp, language, t]);
+
   async function saveVisit() {
     setMessage("");
 
@@ -1419,6 +1358,18 @@ export default function NewVisitPage() {
         return `${med?.name || "Medication"}: ${dose}${volume}${draft.route ? `, ${draft.route}` : ""}${draft.frequency ? `, ${draft.frequency}` : ""}${draft.duration_days ? ` for ${draft.duration_days} days` : ""}`;
       }).join("\n");
       const finalTreatment = [treatment.trim(), medicationText].filter(Boolean).join("\n\n");
+      const finalExamination =
+        examStatus === "normal"
+          ? "Normal"
+          : examStatus === "abnormal"
+          ? examination.trim()
+            ? `Abnormal: ${examination.trim()}`
+            : "Abnormal"
+          : examination.trim();
+      const followUpText = followUp && followUp !== "none"
+        ? `Follow-up: ${selectedFollowUpLabel}${followUp === "custom" && followUpDetails.trim() ? ` — ${followUpDetails.trim()}` : ""}`
+        : "";
+      const finalVisitNotes = [visitNotes.trim(), followUpText].filter(Boolean).join("\n\n");
 
       const { data: visit, error: visitError } = await db
         .from("visits")
@@ -1426,14 +1377,14 @@ export default function NewVisitPage() {
           client_id: selectedClientId,
           pet_id: selectedPetId,
           reason: reason.trim() || null,
-          examination: examination.trim() || null,
+          examination: finalExamination || null,
           diagnosis: diagnosis.trim() || null,
           treatment: finalTreatment || null,
           weight: weight ? Number(weight) : null,
           temperature: temperature ? Number(temperature) : null,
           heart_rate: heartRate ? Number(heartRate) : null,
           respiratory_rate: respiratoryRate ? Number(respiratoryRate) : null,
-          notes: visitNotes.trim() || null,
+          notes: finalVisitNotes || null,
         })
         .select("id")
         .single();
@@ -1490,8 +1441,10 @@ export default function NewVisitPage() {
       setMessage(t.visitSaved);
 
       setReason("");
+      setExamStatus("");
       setExamination("");
-      setExaminationStatus("");
+      setFollowUp("");
+      setFollowUpDetails("");
       setDiagnosis("");
       setTreatment("");
       setVisitNotes("");
@@ -1520,7 +1473,6 @@ export default function NewVisitPage() {
     setPetDetails(null);
     setVisits([]);
     setSelectedPetId("");
-    setExaminationStatus("");
     setMessage("");
   }
 
@@ -1606,32 +1558,6 @@ export default function NewVisitPage() {
 
   const previousRespiratoryRate =
     vitalData.respiratoryRate[1]?.value ?? null;
-
-  const quickReasonOptions = language === "ar"
-    ? [
-        "كشف عام",
-        "متابعة",
-        "تطعيم",
-        "قيء",
-        "إسهال",
-        "فقدان شهية",
-        "خمول",
-        "كحة / عطس",
-        "حكة / مشكلة جلدية",
-        "إصابة",
-      ]
-    : [
-        "General check",
-        "Follow-up",
-        "Vaccination",
-        "Vomiting",
-        "Diarrhea",
-        "Poor appetite",
-        "Lethargy",
-        "Cough / sneezing",
-        "Itching / skin issue",
-        "Injury",
-      ];
 
   const pageClasses = darkMode
     ? "min-h-screen bg-slate-950 text-slate-100"
@@ -2501,7 +2427,7 @@ export default function NewVisitPage() {
 
               <div className="grid gap-5 lg:grid-cols-2">
                 <div className="lg:col-span-2">
-                  <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
                     <label
                       className={`block text-sm font-semibold ${
                         darkMode ? "text-slate-300" : "text-slate-700"
@@ -2509,35 +2435,28 @@ export default function NewVisitPage() {
                     >
                       {t.reason}
                     </label>
-                    <span
-                      className={`text-[11px] font-semibold ${
-                        darkMode ? "text-slate-500" : "text-slate-400"
-                      }`}
-                    >
+                    <span className={`text-[11px] font-medium ${darkMode ? "text-slate-500" : "text-slate-400"}`}>
                       {t.quickReasons}
                     </span>
                   </div>
 
                   <div className="mb-3 flex flex-wrap gap-2">
-                    {quickReasonOptions.map((option) => {
-                      const active = reason === option;
-                      return (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => setReason(active ? "" : option)}
-                          className={`rounded-full border px-3 py-2 text-xs font-semibold transition-all duration-150 ${
-                            active
-                              ? "border-blue-500 bg-blue-600 text-white shadow-sm"
-                              : darkMode
-                              ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-600 hover:bg-slate-800"
-                              : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
-                          }`}
-                        >
-                          {option}
-                        </button>
-                      );
-                    })}
+                    {t.reasons.map((label, index) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => setReason(label)}
+                        className={`rounded-full border px-3 py-2 text-xs font-semibold transition-all ${
+                          reason === label
+                            ? "border-blue-500 bg-blue-600 text-white shadow-sm"
+                            : darkMode
+                            ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-600"
+                            : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
 
                   <input
@@ -2554,74 +2473,135 @@ export default function NewVisitPage() {
 
                 <div className="lg:col-span-2">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                      <div
-                        className={`text-sm font-semibold ${
-                          darkMode ? "text-slate-300" : "text-slate-700"
-                        }`}
-                      >
-                        {language === "ar" ? "المؤشرات الحيوية" : "Vital signs"}
-                      </div>
-                      <div
-                        className={`mt-1 text-[11px] ${
-                          darkMode ? "text-slate-500" : "text-slate-400"
-                        }`}
-                      >
-                        {t.dragToChoose}
-                      </div>
+                    <label
+                      className={`block text-sm font-semibold ${
+                        darkMode ? "text-slate-300" : "text-slate-700"
+                      }`}
+                    >
+                      {t.examinationNotes}
+                    </label>
+                    <span className={`text-[11px] ${darkMode ? "text-slate-500" : "text-slate-400"}`}>
+                      {examStatus === "normal" ? t.examinationNormalHint : t.examinationDetails}
+                    </span>
+                  </div>
+
+                  <div className="mb-4 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExamStatus("normal");
+                        setExamination("");
+                      }}
+                      className={`rounded-2xl border px-4 py-3 text-sm font-bold transition-all ${
+                        examStatus === "normal"
+                          ? "border-emerald-500 bg-emerald-600 text-white shadow-md"
+                          : darkMode
+                          ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-emerald-500/50"
+                          : "border-slate-200 bg-slate-50 text-slate-600 hover:border-emerald-300"
+                      }`}
+                    >
+                      ✓ {t.examNormal}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExamStatus("abnormal")}
+                      className={`rounded-2xl border px-4 py-3 text-sm font-bold transition-all ${
+                        examStatus === "abnormal"
+                          ? "border-rose-500 bg-rose-600 text-white shadow-md"
+                          : darkMode
+                          ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-rose-500/50"
+                          : "border-slate-200 bg-slate-50 text-slate-600 hover:border-rose-300"
+                      }`}
+                    >
+                      ! {t.examAbnormal}
+                    </button>
+                  </div>
+
+                  {examStatus !== "normal" && (
+                    <textarea
+                      rows={5}
+                      value={examination}
+                      onChange={(e) => {
+                        setExamination(e.target.value);
+                        if (e.target.value.trim()) setExamStatus("abnormal");
+                      }}
+                      placeholder={t.examinationPlaceholder}
+                      className={`w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                        darkMode
+                          ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                          : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                      }`}
+                    />
+                  )}
+
+                  {examStatus === "normal" && (
+                    <div
+                      className={`rounded-2xl border px-4 py-4 text-sm ${
+                        darkMode
+                          ? "border-emerald-900/70 bg-emerald-950/30 text-emerald-300"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      ✓ {t.examinationNormalHint}
                     </div>
-                  </div>
-
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    <WheelPicker
-                      title={t.weight}
-                      icon="⚖️"
-                      value={weight}
-                      onChange={setWeight}
-                      min={0.1}
-                      max={80}
-                      step={0.1}
-                      decimals={1}
-                      unit={t.kg}
-                      darkMode={darkMode}
-                      emptyLabel={t.noData}
-                      defaultValue={5}
-                    />
-
-                    <WheelPicker
-                      title={t.temperature}
-                      icon="🌡️"
-                      value={temperature}
-                      onChange={setTemperature}
-                      min={34}
-                      max={42}
-                      step={0.1}
-                      decimals={1}
-                      unit={t.celsius}
-                      darkMode={darkMode}
-                      emptyLabel={t.noData}
-                      defaultValue={38.5}
-                    />
-                  </div>
+                  )}
                 </div>
 
                 <div>
                   <label
                     className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
+                      darkMode ? "text-slate-300" : "text-slate-700"
+                    }`}
+                  >
+                    {t.weight}
+                  </label>
+                  <WheelPicker
+                    value={weight}
+                    onChange={setWeight}
+                    min={0.1}
+                    max={100}
+                    step={0.1}
+                    unit={t.kg}
+                    defaultValue={5}
+                    hint={t.wheelSwipeHint}
+                    darkMode={darkMode}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className={`mb-2 block text-sm font-semibold ${
+                      darkMode ? "text-slate-300" : "text-slate-700"
+                    }`}
+                  >
+                    {t.temperature}
+                  </label>
+                  <WheelPicker
+                    value={temperature}
+                    onChange={setTemperature}
+                    min={34}
+                    max={42}
+                    step={0.1}
+                    unit={t.celsius}
+                    defaultValue={38.5}
+                    hint={t.wheelSwipeHint}
+                    darkMode={darkMode}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className={`mb-2 block text-sm font-semibold ${
+                      darkMode ? "text-slate-300" : "text-slate-700"
                     }`}
                   >
                     {t.heartRate}
                   </label>
-
                   <input
                     type="number"
+                    min="0"
                     value={heartRate}
-                    onChange={(e) =>
-                      setHeartRate(e.target.value)
-                    }
+                    onChange={(e) => setHeartRate(e.target.value)}
                     placeholder="120"
                     className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                       darkMode
@@ -2634,20 +2614,16 @@ export default function NewVisitPage() {
                 <div>
                   <label
                     className={`mb-2 block text-sm font-semibold ${
-                      darkMode
-                        ? "text-slate-300"
-                        : "text-slate-700"
+                      darkMode ? "text-slate-300" : "text-slate-700"
                     }`}
                   >
                     {t.respiratoryRate}
                   </label>
-
                   <input
                     type="number"
+                    min="0"
                     value={respiratoryRate}
-                    onChange={(e) =>
-                      setRespiratoryRate(e.target.value)
-                    }
+                    onChange={(e) => setRespiratoryRate(e.target.value)}
                     placeholder="30"
                     className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                       darkMode
@@ -2655,83 +2631,6 @@ export default function NewVisitPage() {
                         : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
                     }`}
                   />
-                </div>
-
-                <div className="lg:col-span-2">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <label
-                      className={`block text-sm font-semibold ${
-                        darkMode ? "text-slate-300" : "text-slate-700"
-                      }`}
-                    >
-                      {t.examinationNotes}
-                    </label>
-
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setExaminationStatus("normal");
-                          setExamination(language === "ar" ? "طبيعي" : "Normal");
-                        }}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-all ${
-                          examinationStatus === "normal"
-                            ? "border-emerald-500 bg-emerald-600 text-white"
-                            : darkMode
-                            ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-emerald-700"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:bg-emerald-50"
-                        }`}
-                      >
-                        ✓ {t.normal}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setExaminationStatus("abnormal");
-                          if (!examination || examination === (language === "ar" ? "طبيعي" : "Normal")) {
-                            setExamination("");
-                          }
-                        }}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-all ${
-                          examinationStatus === "abnormal"
-                            ? "border-rose-500 bg-rose-600 text-white"
-                            : darkMode
-                            ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-rose-700"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-rose-300 hover:bg-rose-50"
-                        }`}
-                      >
-                        ! {t.abnormal}
-                      </button>
-                    </div>
-                  </div>
-
-                  {examinationStatus === "normal" ? (
-                    <div
-                      className={`rounded-2xl border p-4 text-sm font-semibold ${
-                        darkMode
-                          ? "border-emerald-900 bg-emerald-950/20 text-emerald-300"
-                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      }`}
-                    >
-                      ✓ {language === "ar" ? "الفحص طبيعي" : "Examination is normal"}
-                    </div>
-                  ) : (
-                    <textarea
-                      rows={5}
-                      value={examination}
-                      onChange={(e) => {
-                        setExamination(e.target.value);
-                        if (e.target.value.trim()) setExaminationStatus("abnormal");
-                      }}
-                      placeholder={t.examinationPlaceholder}
-                      className={`w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                        darkMode
-                          ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                          : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                      }`}
-                    />
-                  )}
                 </div>
 
                 <div>
@@ -2859,6 +2758,57 @@ export default function NewVisitPage() {
                         : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
                     }`}
                   />
+                </div>
+
+                <div className="lg:col-span-2">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <label
+                      className={`block text-sm font-semibold ${
+                        darkMode ? "text-slate-300" : "text-slate-700"
+                      }`}
+                    >
+                      {t.followUp}
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      ["none", t.followUpNone],
+                      ["3d", t.followUp3Days],
+                      ["1w", t.followUp1Week],
+                      ["2w", t.followUp2Weeks],
+                      ["1m", t.followUp1Month],
+                      ["custom", t.followUpCustom],
+                    ].map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setFollowUp(key)}
+                        className={`rounded-full border px-4 py-2 text-xs font-bold transition-all ${
+                          followUp === key
+                            ? "border-blue-500 bg-blue-600 text-white shadow-sm"
+                            : darkMode
+                            ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-600"
+                            : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {followUp === "custom" && (
+                    <input
+                      value={followUpDetails}
+                      onChange={(e) => setFollowUpDetails(e.target.value)}
+                      placeholder={t.followUpPlaceholder}
+                      className={`mt-3 w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
+                        darkMode
+                          ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                          : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                      }`}
+                    />
+                  )}
                 </div>
               </div>
 
