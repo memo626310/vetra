@@ -161,6 +161,8 @@ export default function PrescriptionPage() {
 
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+  const [pdfPreparing, setPdfPreparing] = useState(false);
   const [error, setError] = useState("");
 
   const medicationRows = useMemo(
@@ -193,6 +195,61 @@ export default function PrescriptionPage() {
     loadPrescription();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visitId]);
+
+  useEffect(() => {
+    if (loading || !visit || !pet || !client || !prescriptionRef.current) return;
+
+    let cancelled = false;
+
+    async function preparePdf() {
+      setPdfPreparing(true);
+
+      try {
+        const blob = await buildPrescriptionPdfBlob(prescriptionRef.current!);
+        if (!cancelled) {
+          setPdfBlob(blob);
+        }
+      } catch (pdfError) {
+        console.error("PREPARE PRESCRIPTION PDF ERROR:", pdfError);
+        if (!cancelled) {
+          setPdfBlob(null);
+          setError(
+            pdfError instanceof Error
+              ? pdfError.message
+              : "Could not prepare the prescription PDF."
+          );
+        }
+      } finally {
+        if (!cancelled) setPdfPreparing(false);
+      }
+    }
+
+    preparePdf();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loading,
+    visit?.id,
+    visit?.visit_date,
+    visit?.reason,
+    visit?.examination,
+    visit?.diagnosis,
+    visit?.treatment,
+    visit?.weight,
+    visit?.temperature,
+    visit?.heart_rate,
+    visit?.respiratory_rate,
+    visit?.notes,
+    pet?.id,
+    client?.id,
+    clinic?.clinic_name,
+    clinic?.doctor_name,
+    visitMedications,
+    vaccinations,
+    medications,
+  ]);
 
   async function loadPrescription() {
     setLoading(true);
@@ -274,30 +331,31 @@ export default function PrescriptionPage() {
     }
   }
 
-  async function getPdfBlob() {
-    if (!prescriptionRef.current) {
-      throw new Error("Prescription preview is not ready.");
+  function getReadyPdfBlob() {
+    if (!pdfBlob || pdfBlob.size === 0) {
+      throw new Error(
+        pdfPreparing
+          ? "PDF is still being prepared. Please wait a moment."
+          : "Prescription PDF is not ready yet."
+      );
     }
-    return buildPrescriptionPdfBlob(prescriptionRef.current);
+    return pdfBlob;
   }
 
-  async function handleDownloadPdf() {
+  function handleDownloadPdf() {
     if (working) return;
-    setWorking(true);
     setError("");
 
     try {
-      const blob = await getPdfBlob();
+      const blob = getReadyPdfBlob();
       downloadBlob(blob, pdfFilename);
     } catch (pdfError) {
-      console.error("CREATE PRESCRIPTION PDF ERROR:", pdfError);
+      console.error("DOWNLOAD PRESCRIPTION PDF ERROR:", pdfError);
       setError(
         pdfError instanceof Error
           ? pdfError.message
-          : "Could not create the prescription PDF."
+          : "Could not download the prescription PDF."
       );
-    } finally {
-      setWorking(false);
     }
   }
 
@@ -347,41 +405,47 @@ export default function PrescriptionPage() {
 
   async function handleSharePrescription() {
     if (working) return;
-    setWorking(true);
     setError("");
 
     try {
-      const blob = await getPdfBlob();
+      const blob = getReadyPdfBlob();
       const file = new File([blob], pdfFilename, {
         type: "application/pdf",
       });
 
-      if (
+      const canShareFile =
         typeof navigator !== "undefined" &&
-        navigator.share &&
-        (!navigator.canShare || navigator.canShare({ files: [file] }))
-      ) {
+        typeof navigator.share === "function" &&
+        (!navigator.canShare || navigator.canShare({ files: [file] }));
+
+      if (canShareFile) {
+        // Keep the share call directly inside the user click handler.
+        // This preserves the browser's transient user activation on mobile.
         await navigator.share({
           title: `VETRA Prescription - ${pet?.name || "Pet"}`,
           text: `Prescription for ${pet?.name || "Pet"}`,
           files: [file],
         });
-      } else {
-        downloadBlob(blob, pdfFilename);
-        openWhatsAppText();
+        return;
       }
+
+      // Browsers that do not support file sharing cannot attach a local PDF
+      // to a wa.me URL. Download the real PDF first, then open WhatsApp with
+      // the prescription text so the owner can attach the downloaded file.
+      downloadBlob(blob, pdfFilename);
+      window.setTimeout(() => {
+        openWhatsAppText();
+      }, 200);
     } catch (shareError) {
       if (shareError instanceof DOMException && shareError.name === "AbortError") {
         return;
       }
       console.error("SHARE PRESCRIPTION ERROR:", shareError);
-      try {
-        openWhatsAppText();
-      } catch {
-        setError("Could not share the prescription.");
-      }
-    } finally {
-      setWorking(false);
+      setError(
+        shareError instanceof Error
+          ? shareError.message
+          : "Could not share the prescription PDF."
+      );
     }
   }
 
@@ -438,15 +502,15 @@ export default function PrescriptionPage() {
             <button
               type="button"
               onClick={handleDownloadPdf}
-              disabled={working}
+              disabled={pdfPreparing || !pdfBlob}
               className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {working ? "Preparing..." : "↓ PDF"}
+              {pdfPreparing ? "Preparing PDF..." : "↓ PDF"}
             </button>
             <button
               type="button"
               onClick={handleSharePrescription}
-              disabled={working}
+              disabled={pdfPreparing || !pdfBlob}
               className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               ↗ WhatsApp / Share
