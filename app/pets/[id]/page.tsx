@@ -15,6 +15,8 @@ type Pet = {
   color: string | null;
   microchip: string | null;
   notes: string | null;
+  photo_url: string | null;
+  is_deceased: boolean;
 };
 
 type Client = {
@@ -41,8 +43,37 @@ export default function PetPage() {
   const [pet, setPet] = useState<Pet | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [visits, setVisits] = useState<Visit[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [deletingPet, setDeletingPet] = useState(false);
+
+  const [darkMode, setDarkMode] = useState(false);
+
+  // =========================
+  // DARK MODE
+  // =========================
+
+  useEffect(() => {
+    const savedMode = localStorage.getItem("vetra-dark-mode");
+
+    if (savedMode === "true") {
+      setDarkMode(true);
+    }
+  }, []);
+
+  function toggleDarkMode() {
+    const nextMode = !darkMode;
+
+    setDarkMode(nextMode);
+    localStorage.setItem("vetra-dark-mode", String(nextMode));
+  }
+
+  // =========================
+  // LOAD PET
+  // =========================
 
   useEffect(() => {
     async function loadPet() {
@@ -153,6 +184,10 @@ export default function PetPage() {
     void loadPet();
   }, []);
 
+  // =========================
+  // HELPERS
+  // =========================
+
   function getSpeciesIcon(species: string) {
     const value = species.toLowerCase();
 
@@ -217,16 +252,171 @@ export default function PetPage() {
     });
   }
 
+  // =========================
+  // TOGGLE DECEASED
+  // =========================
+
+  async function handleToggleDeceased() {
+    if (!pet) return;
+
+    const nextStatus = !pet.is_deceased;
+
+    const confirmed = window.confirm(
+      nextStatus
+        ? `هل أنت متأكد من تسجيل "${pet.name}" كحيوان متوفى؟`
+        : `هل تريد إعادة تفعيل "${pet.name}"؟`
+    );
+
+    if (!confirmed) return;
+
+    setUpdatingStatus(true);
+    setError("");
+
+    try {
+      const db = await getClinicDb();
+
+      const { data, error: updateError } = await db
+        .from("pets")
+        .update({
+          is_deceased: nextStatus,
+        })
+        .eq("id", pet.id)
+        .select("*")
+        .single();
+
+      if (updateError) {
+        console.error("DECEASED UPDATE ERROR:", updateError);
+        setError(updateError.message);
+        return;
+      }
+
+      setPet(data as Pet);
+    } catch (err) {
+      console.error("DECEASED UPDATE ERROR:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "حصل خطأ أثناء تحديث حالة الحيوان."
+      );
+    } finally {
+      setUpdatingStatus(false);
+    }
+  }
+
+  // =========================
+  // DELETE PET
+  // =========================
+
+  async function handleDeletePet() {
+    if (!pet) return;
+
+    const confirmed = window.confirm(
+      `⚠️ تحذير\n\nهل أنت متأكد من حذف "${pet.name}" نهائيًا؟\n\nالحذف لا يمكن التراجع عنه.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingPet(true);
+    setError("");
+
+    try {
+      const db = await getClinicDb();
+
+      // =========================
+      // CHECK MEDICAL HISTORY
+      // =========================
+
+      const {
+        count,
+        error: visitsCheckError,
+      } = await db
+        .from("visits")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq("pet_id", pet.id);
+
+      if (visitsCheckError) {
+        console.error("VISITS CHECK ERROR:", visitsCheckError);
+
+        setError(
+          "تعذر التأكد من وجود زيارات للحيوان. لم يتم حذف الحيوان."
+        );
+
+        return;
+      }
+
+      if ((count ?? 0) > 0) {
+        setError(
+          `لا يمكن حذف ${pet.name} لأنه لديه ${count} زيارة مسجلة. استخدم "اعتبار الحيوان متوفى" بدل الحذف للحفاظ على التاريخ الطبي.`
+        );
+
+        return;
+      }
+
+      // =========================
+      // DELETE PET
+      // =========================
+
+      const { error: deleteError } = await db
+        .from("pets")
+        .delete()
+        .eq("id", pet.id);
+
+      if (deleteError) {
+        console.error("PET DELETE ERROR:", deleteError);
+
+        setError(
+          deleteError.message ||
+            "تعذر حذف الحيوان."
+        );
+
+        return;
+      }
+
+      // Go back to pets list
+      window.location.href = "/pets";
+    } catch (err) {
+      console.error("PET DELETE ERROR:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "حصل خطأ أثناء حذف الحيوان."
+      );
+    } finally {
+      setDeletingPet(false);
+    }
+  }
+
+  // =========================
+  // LOADING
+  // =========================
+
   if (loading) {
     return (
       <main
         dir="rtl"
-        className="min-h-screen bg-[#f7f9fc] p-6 text-slate-900"
+        className={`min-h-screen p-6 ${
+          darkMode
+            ? "bg-slate-950 text-slate-100"
+            : "bg-[#f7f9fc] text-slate-900"
+        }`}
       >
-        <div className="mx-auto max-w-6xl rounded-3xl bg-white p-10 text-center shadow-sm">
+        <div
+          className={`mx-auto max-w-6xl rounded-3xl p-10 text-center shadow-sm ${
+            darkMode ? "bg-slate-900" : "bg-white"
+          }`}
+        >
           <div className="mb-3 text-4xl">🐾</div>
 
-          <p className="font-semibold text-slate-500">
+          <p
+            className={`font-semibold ${
+              darkMode ? "text-slate-400" : "text-slate-500"
+            }`}
+          >
             جاري تحميل الملف الطبي...
           </p>
         </div>
@@ -234,21 +424,65 @@ export default function PetPage() {
     );
   }
 
+  // =========================
+  // ERROR
+  // =========================
+
   if (error && !pet) {
     return (
       <main
         dir="rtl"
-        className="min-h-screen bg-[#f7f9fc] p-6 text-slate-900"
+        className={`min-h-screen p-6 ${
+          darkMode
+            ? "bg-slate-950 text-slate-100"
+            : "bg-[#f7f9fc] text-slate-900"
+        }`}
       >
         <div className="mx-auto max-w-6xl">
-          <Link
-            href="/pets"
-            className="mb-6 inline-block text-sm font-semibold text-slate-500 hover:text-slate-900"
-          >
-            ← العودة للحيوانات
-          </Link>
 
-          <div className="rounded-3xl bg-white p-10 text-center shadow-sm">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <Link
+              href="/pets"
+              className={`text-sm font-semibold ${
+                darkMode
+                  ? "text-slate-400 hover:text-white"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              ← العودة للحيوانات
+            </Link>
+
+            <div className="flex gap-2">
+              <Link
+                href="/"
+                className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
+                  darkMode
+                    ? "bg-slate-800 text-white"
+                    : "bg-white text-slate-700 shadow-sm"
+                }`}
+              >
+                🏠 Dashboard
+              </Link>
+
+              <button
+                type="button"
+                onClick={toggleDarkMode}
+                className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
+                  darkMode
+                    ? "bg-slate-800 text-yellow-300"
+                    : "bg-white text-slate-700 shadow-sm"
+                }`}
+              >
+                {darkMode ? "☀️" : "🌙"}
+              </button>
+            </div>
+          </div>
+
+          <div
+            className={`rounded-3xl p-10 text-center shadow-sm ${
+              darkMode ? "bg-slate-900" : "bg-white"
+            }`}
+          >
             <div className="mb-4 text-5xl">❌</div>
 
             <h1 className="text-2xl font-bold">
@@ -268,79 +502,270 @@ export default function PetPage() {
     return null;
   }
 
+  const cardClass = darkMode
+    ? "bg-slate-900 border border-slate-800"
+    : "bg-white";
+
+  const mutedText = darkMode
+    ? "text-slate-400"
+    : "text-slate-500";
+
+  const softCard = darkMode
+    ? "bg-slate-800"
+    : "bg-slate-50";
+
   return (
     <main
       dir="rtl"
-      className="min-h-screen bg-[#f7f9fc] px-5 py-8 text-slate-900"
+      className={`min-h-screen px-4 py-6 transition-colors sm:px-5 sm:py-8 ${
+        darkMode
+          ? "bg-slate-950 text-slate-100"
+          : "bg-[#f7f9fc] text-slate-900"
+      }`}
     >
       <div className="mx-auto max-w-6xl">
 
-        {/* Back */}
-        <Link
-          href="/pets"
-          className="mb-6 inline-block text-sm text-slate-500 transition hover:text-slate-900"
+        {/* =========================
+            TOP NAVIGATION
+        ========================= */}
+
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+
+          <Link
+            href="/pets"
+            className={`text-sm font-semibold transition ${
+              darkMode
+                ? "text-slate-400 hover:text-white"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            ← العودة للحيوانات
+          </Link>
+
+          <div className="flex flex-wrap gap-2">
+
+            {/* DASHBOARD */}
+
+            <Link
+              href="/"
+              className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+                darkMode
+                  ? "bg-slate-800 text-white hover:bg-slate-700"
+                  : "bg-white text-slate-700 shadow-sm hover:shadow-md"
+              }`}
+            >
+              🏠 Dashboard
+            </Link>
+
+            {/* DARK MODE */}
+
+            <button
+              type="button"
+              onClick={toggleDarkMode}
+              className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+                darkMode
+                  ? "bg-slate-800 text-yellow-300 hover:bg-slate-700"
+                  : "bg-white text-slate-700 shadow-sm hover:shadow-md"
+              }`}
+              title={darkMode ? "الوضع الفاتح" : "الوضع الداكن"}
+            >
+              {darkMode ? "☀️" : "🌙"}
+            </button>
+
+          </div>
+        </div>
+
+        {/* =========================
+            PET HEADER
+        ========================= */}
+
+        <section
+          className={`mb-6 rounded-3xl p-5 shadow-sm sm:p-6 ${cardClass}`}
         >
-          ← العودة للحيوانات
-        </Link>
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
 
-        {/* Pet Header */}
-        <section className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-4 sm:gap-5">
 
-            <div className="flex items-center gap-5">
+              {/* PHOTO */}
 
-              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl bg-slate-100 text-6xl">
-                {getSpeciesIcon(pet.species)}
+              <div
+                className={`flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-3xl text-6xl sm:h-28 sm:w-28 ${
+                  darkMode ? "bg-slate-800" : "bg-slate-100"
+                }`}
+              >
+                {pet.photo_url ? (
+                  <img
+                    src={pet.photo_url}
+                    alt={pet.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  getSpeciesIcon(pet.species)
+                )}
               </div>
 
-              <div>
-                <h1 className="text-3xl font-bold">
-                  {pet.name}
-                </h1>
+              {/* INFO */}
 
-                <p className="mt-2 text-slate-500">
+              <div className="min-w-0">
+
+                <div className="flex flex-wrap items-center gap-2">
+
+                  <h1 className="text-2xl font-bold sm:text-3xl">
+                    {pet.name}
+                  </h1>
+
+                  {pet.is_deceased && (
+                    <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                      🕊️ متوفى
+                    </span>
+                  )}
+
+                </div>
+
+                <p className={`mt-2 ${mutedText}`}>
                   {getSpeciesName(pet.species)}
                   {pet.breed ? ` • ${pet.breed}` : ""}
                 </p>
 
                 {client && (
-                  <p className="mt-2 text-sm text-slate-500">
+                  <p className={`mt-2 text-sm ${mutedText}`}>
                     المالك:{" "}
                     <Link
                       href={`/clients/${client.id}`}
-                      className="font-semibold text-slate-800 hover:underline"
+                      className={`font-semibold hover:underline ${
+                        darkMode
+                          ? "text-white"
+                          : "text-slate-800"
+                      }`}
                     >
                       {client.name}
                     </Link>
                   </p>
                 )}
-              </div>
 
+                {pet.is_deceased && (
+                  <p className="mt-2 text-sm font-semibold text-slate-400">
+                    هذا الحيوان مسجل كمتوفى ولا يمكن تسجيل زيارات جديدة له.
+                  </p>
+                )}
+
+              </div>
             </div>
 
-            {/* New Visit */}
-            <Link
-              href={`/visits/new?pet=${pet.id}`}
-              className="rounded-2xl bg-slate-900 px-6 py-4 text-center font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
-            >
-              🩺 زيارة جديدة
-            </Link>
+            {/* ACTIONS */}
+
+            <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:flex-wrap">
+
+              {/* EDIT */}
+
+              <Link
+                href={`/pets/${pet.id}/edit`}
+                className={`rounded-2xl px-5 py-3 text-center text-sm font-semibold transition ${
+                  darkMode
+                    ? "bg-slate-800 text-white hover:bg-slate-700"
+                    : "bg-slate-100 text-slate-800 hover:bg-slate-200"
+                }`}
+              >
+                ✏️ تعديل البيانات
+              </Link>
+
+              {/* NEW VISIT */}
+
+              {!pet.is_deceased && (
+                <Link
+                  href={`/visits/new?pet=${pet.id}`}
+                  className="rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-white dark:text-slate-900"
+                >
+                  🩺 زيارة جديدة
+                </Link>
+              )}
+
+            </div>
 
           </div>
         </section>
 
-        {/* Error */}
+        {/* =========================
+            STATUS / DANGER ACTIONS
+        ========================= */}
+
+        <section
+          className={`mb-6 rounded-3xl p-5 shadow-sm ${cardClass}`}
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+            <div>
+              <h2 className="font-bold">
+                حالة الحيوان
+              </h2>
+
+              <p className={`mt-1 text-sm ${mutedText}`}>
+                {pet.is_deceased
+                  ? "الحيوان مسجل كمتوفى. تظل بياناته وتاريخه الطبي محفوظين."
+                  : "الحيوان نشط ويمكن تسجيل زيارات جديدة له."}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+
+              {/* DECEASED */}
+
+              <button
+                type="button"
+                onClick={handleToggleDeceased}
+                disabled={updatingStatus}
+                className={`rounded-2xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  pet.is_deceased
+                    ? darkMode
+                      ? "bg-emerald-900 text-emerald-200 hover:bg-emerald-800"
+                      : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    : darkMode
+                    ? "bg-slate-800 text-slate-200 hover:bg-slate-700"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                {updatingStatus
+                  ? "جاري التحديث..."
+                  : pet.is_deceased
+                  ? "♻️ إعادة تفعيل الحيوان"
+                  : "🕊️ تسجيل كمتوفى"}
+              </button>
+
+              {/* DELETE */}
+
+              <button
+                type="button"
+                onClick={handleDeletePet}
+                disabled={deletingPet}
+                className="rounded-2xl bg-red-50 px-5 py-3 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900"
+              >
+                {deletingPet
+                  ? "جاري الحذف..."
+                  : "🗑️ حذف الحيوان"}
+              </button>
+
+            </div>
+          </div>
+        </section>
+
+        {/* =========================
+            ERROR
+        ========================= */}
+
         {error && (
-          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+          <div className="mb-6 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
             {error}
           </div>
         )}
 
-        {/* Basic Information */}
+        {/* =========================
+            BASIC INFORMATION
+        ========================= */}
+
         <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
-          <div className="rounded-3xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-400">
+          <div className={`rounded-3xl p-5 shadow-sm ${cardClass}`}>
+            <p className={`text-sm ${mutedText}`}>
               الجنس
             </p>
 
@@ -353,8 +778,8 @@ export default function PetPage() {
             </p>
           </div>
 
-          <div className="rounded-3xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-400">
+          <div className={`rounded-3xl p-5 shadow-sm ${cardClass}`}>
+            <p className={`text-sm ${mutedText}`}>
               العمر
             </p>
 
@@ -363,8 +788,8 @@ export default function PetPage() {
             </p>
           </div>
 
-          <div className="rounded-3xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-400">
+          <div className={`rounded-3xl p-5 shadow-sm ${cardClass}`}>
+            <p className={`text-sm ${mutedText}`}>
               اللون
             </p>
 
@@ -373,8 +798,8 @@ export default function PetPage() {
             </p>
           </div>
 
-          <div className="rounded-3xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-400">
+          <div className={`rounded-3xl p-5 shadow-sm ${cardClass}`}>
+            <p className={`text-sm ${mutedText}`}>
               Microchip
             </p>
 
@@ -388,18 +813,23 @@ export default function PetPage() {
 
         </section>
 
-        {/* Owner */}
+        {/* =========================
+            OWNER
+        ========================= */}
+
         {client && (
-          <section className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
+          <section
+            className={`mb-6 rounded-3xl p-6 shadow-sm ${cardClass}`}
+          >
 
             <h2 className="mb-5 text-xl font-bold">
               👤 بيانات المالك
             </h2>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-5 sm:grid-cols-3">
 
               <div>
-                <p className="text-sm text-slate-400">
+                <p className={`text-sm ${mutedText}`}>
                   الاسم
                 </p>
 
@@ -409,7 +839,7 @@ export default function PetPage() {
               </div>
 
               <div>
-                <p className="text-sm text-slate-400">
+                <p className={`text-sm ${mutedText}`}>
                   الهاتف
                 </p>
 
@@ -422,11 +852,11 @@ export default function PetPage() {
               </div>
 
               <div>
-                <p className="text-sm text-slate-400">
+                <p className={`text-sm ${mutedText}`}>
                   البريد الإلكتروني
                 </p>
 
-                <p className="mt-1 font-semibold">
+                <p className="mt-1 break-all font-semibold">
                   {client.email || "غير موجود"}
                 </p>
               </div>
@@ -436,44 +866,69 @@ export default function PetPage() {
           </section>
         )}
 
-        {/* Notes */}
+        {/* =========================
+            NOTES
+        ========================= */}
+
         {pet.notes && (
-          <section className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
+          <section
+            className={`mb-6 rounded-3xl p-6 shadow-sm ${cardClass}`}
+          >
 
             <h2 className="mb-3 text-xl font-bold">
               📝 ملاحظات
             </h2>
 
-            <p className="leading-7 text-slate-600">
+            <p
+              className={`leading-7 ${
+                darkMode
+                  ? "text-slate-300"
+                  : "text-slate-600"
+              }`}
+            >
               {pet.notes}
             </p>
 
           </section>
         )}
 
-        {/* Medical History */}
-        <section className="rounded-3xl bg-white p-6 shadow-sm">
+        {/* =========================
+            MEDICAL HISTORY
+        ========================= */}
 
-          <div className="mb-6 flex items-center justify-between">
+        <section
+          className={`rounded-3xl p-5 shadow-sm sm:p-6 ${cardClass}`}
+        >
+
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
             <div>
               <h2 className="text-2xl font-bold">
                 التاريخ الطبي
               </h2>
 
-              <p className="mt-1 text-sm text-slate-500">
+              <p className={`mt-1 text-sm ${mutedText}`}>
                 جميع الزيارات المسجلة للحيوان
               </p>
             </div>
 
-            <div className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold">
+            <div
+              className={`w-fit rounded-2xl px-4 py-2 text-sm font-semibold ${
+                darkMode
+                  ? "bg-slate-800 text-slate-200"
+                  : "bg-slate-100 text-slate-700"
+              }`}
+            >
               {visits.length} زيارة
             </div>
 
           </div>
 
           {visits.length === 0 ? (
-            <div className="rounded-2xl bg-slate-50 p-8 text-center">
+
+            <div
+              className={`rounded-2xl p-8 text-center ${softCard}`}
+            >
 
               <div className="mb-3 text-5xl">
                 🩺
@@ -483,28 +938,43 @@ export default function PetPage() {
                 مفيش زيارات مسجلة
               </h3>
 
-              <p className="mt-2 text-sm text-slate-500">
+              <p className={`mt-2 text-sm ${mutedText}`}>
                 أول زيارة للحيوان هتظهر هنا.
               </p>
 
-              <Link
-                href={`/visits/new?pet=${pet.id}`}
-                className="mt-5 inline-block rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
-              >
-                تسجيل أول زيارة
-              </Link>
+              {!pet.is_deceased && (
+                <Link
+                  href={`/visits/new?pet=${pet.id}`}
+                  className="mt-5 inline-block rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
+                >
+                  تسجيل أول زيارة
+                </Link>
+              )}
 
             </div>
+
           ) : (
+
             <div className="space-y-5">
 
               {visits.map((visit, index) => (
+
                 <div
                   key={visit.id}
-                  className="relative border-r-2 border-slate-200 pr-6"
+                  className={`relative border-r-2 pr-5 sm:pr-6 ${
+                    darkMode
+                      ? "border-slate-700"
+                      : "border-slate-200"
+                  }`}
                 >
 
-                  <div className="absolute -right-[9px] top-1 h-4 w-4 rounded-full border-4 border-white bg-slate-900" />
+                  <div
+                    className={`absolute -right-[9px] top-1 h-4 w-4 rounded-full border-4 ${
+                      darkMode
+                        ? "border-slate-900 bg-white"
+                        : "border-white bg-slate-900"
+                    }`}
+                  />
 
                   <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
 
@@ -513,7 +983,7 @@ export default function PetPage() {
                         زيارة #{visits.length - index}
                       </p>
 
-                      <p className="text-sm text-slate-500">
+                      <p className={`text-sm ${mutedText}`}>
                         {formatDate(visit.visit_date)}
                         {" • "}
                         {formatTime(visit.visit_date)}
@@ -531,8 +1001,8 @@ export default function PetPage() {
                   <div className="grid gap-4 sm:grid-cols-2">
 
                     {visit.reason && (
-                      <div className="rounded-2xl bg-slate-50 p-4">
-                        <p className="text-xs text-slate-400">
+                      <div className={`rounded-2xl p-4 ${softCard}`}>
+                        <p className={`text-xs ${mutedText}`}>
                           سبب الزيارة
                         </p>
 
@@ -543,8 +1013,8 @@ export default function PetPage() {
                     )}
 
                     {visit.examination && (
-                      <div className="rounded-2xl bg-slate-50 p-4">
-                        <p className="text-xs text-slate-400">
+                      <div className={`rounded-2xl p-4 ${softCard}`}>
+                        <p className={`text-xs ${mutedText}`}>
                           الفحص
                         </p>
 
@@ -555,8 +1025,8 @@ export default function PetPage() {
                     )}
 
                     {visit.diagnosis && (
-                      <div className="rounded-2xl bg-slate-50 p-4">
-                        <p className="text-xs text-slate-400">
+                      <div className={`rounded-2xl p-4 ${softCard}`}>
+                        <p className={`text-xs ${mutedText}`}>
                           التشخيص
                         </p>
 
@@ -567,8 +1037,8 @@ export default function PetPage() {
                     )}
 
                     {visit.treatment && (
-                      <div className="rounded-2xl bg-slate-50 p-4">
-                        <p className="text-xs text-slate-400">
+                      <div className={`rounded-2xl p-4 ${softCard}`}>
+                        <p className={`text-xs ${mutedText}`}>
                           العلاج
                         </p>
 
@@ -579,8 +1049,8 @@ export default function PetPage() {
                     )}
 
                     {visit.weight !== null && (
-                      <div className="rounded-2xl bg-slate-50 p-4">
-                        <p className="text-xs text-slate-400">
+                      <div className={`rounded-2xl p-4 ${softCard}`}>
+                        <p className={`text-xs ${mutedText}`}>
                           الوزن
                         </p>
 
@@ -591,8 +1061,8 @@ export default function PetPage() {
                     )}
 
                     {visit.temperature !== null && (
-                      <div className="rounded-2xl bg-slate-50 p-4">
-                        <p className="text-xs text-slate-400">
+                      <div className={`rounded-2xl p-4 ${softCard}`}>
+                        <p className={`text-xs ${mutedText}`}>
                           الحرارة
                         </p>
 
@@ -603,8 +1073,10 @@ export default function PetPage() {
                     )}
 
                     {visit.notes && (
-                      <div className="rounded-2xl bg-slate-50 p-4 sm:col-span-2">
-                        <p className="text-xs text-slate-400">
+                      <div
+                        className={`rounded-2xl p-4 sm:col-span-2 ${softCard}`}
+                      >
+                        <p className={`text-xs ${mutedText}`}>
                           ملاحظات
                         </p>
 
@@ -617,12 +1089,44 @@ export default function PetPage() {
                   </div>
 
                 </div>
+
               ))}
 
             </div>
+
           )}
 
         </section>
+
+        {/* =========================
+            BOTTOM NAVIGATION
+        ========================= */}
+
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+
+          <Link
+            href="/"
+            className={`flex-1 rounded-2xl px-5 py-4 text-center text-sm font-bold transition ${
+              darkMode
+                ? "bg-slate-800 text-white hover:bg-slate-700"
+                : "bg-white text-slate-800 shadow-sm hover:shadow-md"
+            }`}
+          >
+            🏠 الرجوع للـ Dashboard
+          </Link>
+
+          <Link
+            href="/pets"
+            className={`flex-1 rounded-2xl px-5 py-4 text-center text-sm font-bold transition ${
+              darkMode
+                ? "bg-slate-800 text-white hover:bg-slate-700"
+                : "bg-white text-slate-800 shadow-sm hover:shadow-md"
+            }`}
+          >
+            🐾 كل الحيوانات
+          </Link>
+
+        </div>
 
       </div>
     </main>
