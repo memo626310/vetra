@@ -347,16 +347,15 @@ export default function Home() {
   };
 
   const navItems = [
-    ["ðŸ ", t.nav.home, "/dashboard"],
-    ["ðŸ‘¥", t.nav.clients, "/clients"],
-    ["ðŸ¾", t.nav.pets, "/pets"],
-    ["ðŸ“…", t.nav.appointments, "/appointments"],
-    ["ðŸ’‰", t.nav.vaccines, "/vaccinations"],
-    ["ðŸ“¦", t.nav.inventory, "/inventory/products"],
-    ["ðŸ’°", t.nav.finance, "/finance"],
-    ["ðŸ“Š", t.nav.reports, "/reports"],
-  ];
-
+  ["🏠", t.nav.home, "/dashboard"],
+  ["👥", t.nav.clients, "/clients"],
+  ["🐾", t.nav.pets, "/pets"],
+  ["📅", t.nav.appointments, "/appointments"],
+  ["💉", t.nav.vaccines, "/vaccinations"],
+  ["📦", t.nav.inventory, "/inventory/products"],
+  ["💰", t.nav.finance, "/finance"],
+  ["📊", t.nav.reports, "/reports"],
+];
   return (
     <main
       dir={isArabic ? "rtl" : "ltr"}
