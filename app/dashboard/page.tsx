@@ -446,7 +446,7 @@ export default function Home() {
           {/* Navigation */}
 
           <nav className="space-y-2">
-            {navItems.map(([icon, title], index) => {
+            {navItems.map(([icon, title, href], index) => {
               const isHome = index === 0;
               const isClients = index === 1;
               const isPets = index === 2;
