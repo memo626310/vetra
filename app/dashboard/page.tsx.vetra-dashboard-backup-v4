@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -347,14 +347,14 @@ export default function Home() {
   };
 
   const navItems = [
-    ["ðŸ ", t.nav.home, "/dashboard"],
-    ["ðŸ‘¥", t.nav.clients, "/clients"],
-    ["ðŸ¾", t.nav.pets, "/pets"],
-    ["ðŸ“…", t.nav.appointments, "/appointments"],
-    ["ðŸ’‰", t.nav.vaccines, "/vaccinations"],
-    ["ðŸ“¦", t.nav.inventory, "/inventory/products"],
-    ["ðŸ’°", t.nav.finance, "/finance"],
-    ["ðŸ“Š", t.nav.reports, "/reports"],
+    ["🏠", t.nav.home],
+    ["👥", t.nav.clients],
+    ["🐾", t.nav.pets],
+    ["📅", t.nav.appointments],
+    ["💉", t.nav.vaccines],
+    ["📦", t.nav.inventory],
+    ["💰", t.nav.finance],
+    ["📊", t.nav.reports],
   ];
 
   return (
@@ -454,7 +454,15 @@ export default function Home() {
               return (
                 <button
                   key={title}
-                  onClick={() => goTo(href)}
+                  onClick={() => {
+                    if (isClients) {
+                      goTo("/clients");
+                    }
+
+                    if (isPets) {
+                      goTo("/pets");
+                    }
+                  }}
                   className={`group w-full rounded-2xl px-5 py-4 text-base font-medium transition-all duration-300 hover:translate-x-1 ${
                     isArabic
                       ? "text-right"
@@ -497,7 +505,6 @@ export default function Home() {
             }`}
           >
             <button
-              onClick={() => goTo("/settings")}
               className={`group w-full rounded-2xl px-5 py-4 text-base font-medium transition-all duration-300 hover:translate-x-1 ${
                 darkMode
                   ? "text-slate-500 hover:bg-white/[0.04] hover:text-white"
@@ -742,36 +749,20 @@ export default function Home() {
                 <button
                   key={title}
                   onClick={() => {
-                    switch (index) {
-                      case 0:
-                        goTo("/visits/new");
-                        break;
-                      case 1:
-                        goTo("/clients");
-                        break;
-                      case 2:
-                        goTo("/pets");
-                        break;
-                      case 3:
-                        goTo("/appointments");
-                        break;
-                      case 4:
-                        goTo("/vaccinations");
-                        break;
-                      case 5:
-                        goTo("/inventory/products");
-                        break;
-                      case 6:
-                        goTo("/barcode-test");
-                        break;
-                      case 7:
-                        goTo("/finance");
-                        break;
-                      case 8:
-                        goTo("/reports");
-                        break;
-                      default:
-                        goTo("/dashboard");
+                    if (index === 0) {
+                      goTo("/visits/new");
+                    }
+
+                    if (index === 1) {
+                      goTo("/clients");
+                    }
+
+                    if (index === 2) {
+                      goTo("/pets");
+                    }
+
+                    if (index === 6) {
+                      goTo("/barcode-test");
                     }
                   }}
                   className={`group relative min-h-[220px] overflow-hidden rounded-[32px] p-7 transition-all duration-300 ease-out hover:-translate-y-2 hover:scale-[1.01] active:scale-[0.98] ${

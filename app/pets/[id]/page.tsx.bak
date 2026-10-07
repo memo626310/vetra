@@ -312,11 +312,7 @@ export default function PetPage() {
     if (!pet) return;
 
     const confirmed = window.confirm(
-      `âš ï¸ Ø­Ø°Ù Ù†Ù‡Ø§Ø¦ÙŠ Ù„Ù„Ø­ÙŠÙˆØ§Ù†\n\n` +
-      `Ø£Ù†Øª Ø¹Ù„Ù‰ ÙˆØ´Ùƒ Ø­Ø°Ù "${pet.name}" Ù†Ù‡Ø§Ø¦ÙŠÙ‹Ø§.\n\n` +
-      `Ø³ÙŠØªÙ… Ø­Ø°Ù Ø§Ù„Ø­ÙŠÙˆØ§Ù† ÙˆÙƒÙ„ Ø§Ù„ÙƒØ´ÙˆÙØ§Øª ÙˆØ§Ù„ØªØ·Ø¹ÙŠÙ…Ø§Øª ÙˆØ§Ù„Ø£Ø¯ÙˆÙŠØ© Ø§Ù„Ù…Ø±ØªØ¨Ø·Ø© Ø¨Ù‡ØŒ ` +
-      `ÙˆØ£ÙŠ ÙÙˆØ§ØªÙŠØ± Ù…Ø±ØªØ¨Ø·Ø© Ø¨Ø§Ù„Ø²ÙŠØ§Ø±Ø§Øª Ø§Ù„Ù…Ø­Ø°ÙˆÙØ©. Ù„Ø§ ÙŠÙ…ÙƒÙ† Ø§Ù„ØªØ±Ø§Ø¬Ø¹ Ø¹Ù† Ù‡Ø°Ø§ Ø§Ù„Ø¥Ø¬Ø±Ø§Ø¡.\n\n` +
-      `Ù‡Ù„ ØªØ±ÙŠØ¯ Ø§Ù„Ù…ØªØ§Ø¨Ø¹Ø©ØŸ`
+      `⚠️ تحذير\n\nهل أنت متأكد من حذف "${pet.name}" نهائيًا؟\n\nالحذف لا يمكن التراجع عنه.`
     );
 
     if (!confirmed) return;
@@ -327,128 +323,42 @@ export default function PetPage() {
     try {
       const db = await getClinicDb();
 
-      // ---------------------------------------------------------
-      // Collect all visits first. Related rows must be removed
-      // before deleting the parent visits/pet.
-      // ---------------------------------------------------------
+      // =========================
+      // CHECK MEDICAL HISTORY
+      // =========================
+
       const {
-        data: visitRows,
-        error: visitsLoadError,
+        count,
+        error: visitsCheckError,
       } = await db
         .from("visits")
-        .select("id")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
         .eq("pet_id", pet.id);
 
-      if (visitsLoadError) {
-        throw visitsLoadError;
+      if (visitsCheckError) {
+        console.error("VISITS CHECK ERROR:", visitsCheckError);
+
+        setError(
+          "تعذر التأكد من وجود زيارات للحيوان. لم يتم حذف الحيوان."
+        );
+
+        return;
       }
 
-      const visitIds = (visitRows || [])
-        .map((row) => row.id)
-        .filter(Boolean);
+      if ((count ?? 0) > 0) {
+        setError(
+          `لا يمكن حذف ${pet.name} لأنه لديه ${count} زيارة مسجلة. استخدم "اعتبار الحيوان متوفى" بدل الحذف للحفاظ على التاريخ الطبي.`
+        );
 
-      // ---------------------------------------------------------
-      // Remove invoices linked to this pet / its visits.
-      // invoice_items must be deleted before invoices.
-      // ---------------------------------------------------------
-      const invoiceIdSet = new Set<string>();
-
-      const { data: petInvoices, error: petInvoicesError } = await db
-        .from("invoices")
-        .select("id")
-        .eq("pet_id", pet.id);
-
-      if (petInvoicesError) {
-        throw petInvoicesError;
+        return;
       }
 
-      for (const invoice of petInvoices || []) {
-        if (invoice.id) invoiceIdSet.add(invoice.id);
-      }
-
-      if (visitIds.length > 0) {
-        const { data: visitInvoices, error: visitInvoicesError } = await db
-          .from("invoices")
-          .select("id")
-          .in("visit_id", visitIds);
-
-        if (visitInvoicesError) {
-          throw visitInvoicesError;
-        }
-
-        for (const invoice of visitInvoices || []) {
-          if (invoice.id) invoiceIdSet.add(invoice.id);
-        }
-      }
-
-      const invoiceIds = [...invoiceIdSet];
-
-      if (invoiceIds.length > 0) {
-        const { error: invoiceItemsDeleteError } = await db
-          .from("invoice_items")
-          .delete()
-          .in("invoice_id", invoiceIds);
-
-        if (invoiceItemsDeleteError) {
-          throw invoiceItemsDeleteError;
-        }
-
-        const { error: invoicesDeleteError } = await db
-          .from("invoices")
-          .delete()
-          .in("id", invoiceIds);
-
-        if (invoicesDeleteError) {
-          throw invoicesDeleteError;
-        }
-      }
-
-      // ---------------------------------------------------------
-      // Remove visit children.
-      // ---------------------------------------------------------
-      if (visitIds.length > 0) {
-        const { error: visitMedicationsDeleteError } = await db
-          .from("visit_medications")
-          .delete()
-          .in("visit_id", visitIds);
-
-        if (visitMedicationsDeleteError) {
-          throw visitMedicationsDeleteError;
-        }
-
-        const { error: vaccinationsByVisitDeleteError } = await db
-          .from("vaccinations")
-          .delete()
-          .in("visit_id", visitIds);
-
-        if (vaccinationsByVisitDeleteError) {
-          throw vaccinationsByVisitDeleteError;
-        }
-      }
-
-      // Vaccinations may also be linked directly to the pet.
-      const { error: vaccinationsByPetDeleteError } = await db
-        .from("vaccinations")
-        .delete()
-        .eq("pet_id", pet.id);
-
-      if (vaccinationsByPetDeleteError) {
-        throw vaccinationsByPetDeleteError;
-      }
-
-      // ---------------------------------------------------------
-      // Finally remove the medical history, then the pet itself.
-      // ---------------------------------------------------------
-      if (visitIds.length > 0) {
-        const { error: visitsDeleteError } = await db
-          .from("visits")
-          .delete()
-          .in("id", visitIds);
-
-        if (visitsDeleteError) {
-          throw visitsDeleteError;
-        }
-      }
+      // =========================
+      // DELETE PET
+      // =========================
 
       const { error: deleteError } = await db
         .from("pets")
@@ -456,22 +366,31 @@ export default function PetPage() {
         .eq("id", pet.id);
 
       if (deleteError) {
-        throw deleteError;
+        console.error("PET DELETE ERROR:", deleteError);
+
+        setError(
+          deleteError.message ||
+            "تعذر حذف الحيوان."
+        );
+
+        return;
       }
 
+      // Go back to pets list
       window.location.href = "/pets";
     } catch (err) {
-      console.error("PET CASCADE DELETE ERROR:", err);
+      console.error("PET DELETE ERROR:", err);
 
       setError(
         err instanceof Error
           ? err.message
-          : "Ø­ØµÙ„ Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ø­Ø°Ù Ø§Ù„Ø­ÙŠÙˆØ§Ù† ÙˆØ¨ÙŠØ§Ù†Ø§ØªÙ‡ Ø§Ù„Ù…Ø±ØªØ¨Ø·Ø©."
+          : "حصل خطأ أثناء حذف الحيوان."
       );
     } finally {
       setDeletingPet(false);
     }
   }
+
   // =========================
   // LOADING
   // =========================
