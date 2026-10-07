@@ -391,16 +391,6 @@ export default function PrescriptionPage() {
       `Owner: ${client?.name || "-"}`,
       visit.diagnosis ? `Diagnosis: ${visit.diagnosis}` : "",
       medicationText ? `Treatment:\n${medicationText}` : visit.treatment ? `Treatment:\n${visit.treatment}` : "",
-      visit.examination ? `Examination:\n${visit.examination}` : "",
-      visit.notes ? `Notes:\n${visit.notes}` : "",
-      visit.weight != null || visit.temperature != null || visit.heart_rate != null || visit.respiratory_rate != null
-        ? `Vitals:\n${[
-            visit.weight != null ? `Weight: ${visit.weight} kg` : "",
-            visit.temperature != null ? `Temperature: ${visit.temperature} Â°C` : "",
-            visit.heart_rate != null ? `Heart rate: ${visit.heart_rate} bpm` : "",
-            visit.respiratory_rate != null ? `Respiratory rate: ${visit.respiratory_rate} rpm` : "",
-          ].filter(Boolean).join(" | ")}`
-        : "",
       vaccinations.length
         ? `Vaccination:\n${vaccinations.map((item) => `- ${item.vaccine_name}${item.next_dose_at ? ` - next dose ${formatDate(item.next_dose_at)}` : ""}`).join("\n")}`
         : "",

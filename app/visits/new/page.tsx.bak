@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
-import { BSAVAFormularyPicker, type FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
 
 type Language = "en" | "ar";
 
@@ -914,7 +913,6 @@ export default function NewVisitPage() {
   const [medicationSearch, setMedicationSearch] = useState("");
   const [selectedMedicationId, setSelectedMedicationId] = useState("");
   const [medicationDrafts, setMedicationDrafts] = useState<MedicationDraft[]>([]);
-  const [formularyDrafts, setFormularyDrafts] = useState<FormularyVisitDraft[]>([]);
   const [vaccinations, setVaccinations] = useState<VaccinationDraft[]>([]);
 
   const t = translations[language];
@@ -1191,11 +1189,8 @@ export default function NewVisitPage() {
     });
   }, [medications, medicationSearch, petDetails?.species]);
 
-  function calculateMedicationDraft(
-    med: Medication,
-    weightOverride?: number
-  ): MedicationDraft | null {
-    const w = weightOverride ?? Number(weight);
+  function calculateMedicationDraft(med: Medication): MedicationDraft | null {
+    const w = Number(weight);
     if (!Number.isFinite(w) || w <= 0 || med.dose_value == null) return null;
 
     const doseType = (med.dose_type || "mg_kg").toLowerCase();
@@ -1241,28 +1236,6 @@ export default function NewVisitPage() {
       duration_days: med.duration_days,
       instructions: med.instructions,
     };
-  }
-  function handleWeightChange(nextWeight: string) {
-    setWeight(nextWeight);
-
-    const nextNumericWeight = Number(nextWeight);
-    if (!Number.isFinite(nextNumericWeight) || nextNumericWeight <= 0) {
-      return;
-    }
-
-    setMedicationDrafts((current) =>
-      current.map((draft) => {
-        const med = medications.find((item) => item.id === draft.medication_id);
-        if (!med) return draft;
-
-        const recalculated = calculateMedicationDraft(
-          med,
-          nextNumericWeight
-        );
-
-        return recalculated ? { ...recalculated, id: draft.id } : draft;
-      })
-    );
   }
 
   function addMedication() {
@@ -1351,15 +1324,7 @@ export default function NewVisitPage() {
         const volume = draft.calculated_volume != null ? ` (${draft.calculated_volume} ${draft.volume_unit})` : "";
         return `${med?.name || "Medication"}: ${dose}${volume}${draft.route ? `, ${draft.route}` : ""}${draft.frequency ? `, ${draft.frequency}` : ""}${draft.duration_days ? ` for ${draft.duration_days} days` : ""}`;
       }).join("\n");
-      const formularyText = formularyDrafts.map((draft) => {
-        const dose = draft.appliedDose.trim()
-          ? `${draft.appliedDose.trim()} ${draft.adminDoseUnit || draft.doseUnit}`.trim()
-          : draft.doseExpression;
-        return [draft.drugName, dose, draft.frequency, draft.route]
-          .filter(Boolean)
-          .join(" - ");
-      }).join("\n");
-      const finalTreatment = [treatment.trim(), medicationText, formularyText].filter(Boolean).join("\n\n");
+      const finalTreatment = [treatment.trim(), medicationText].filter(Boolean).join("\n\n");
       const finalExamination =
         examStatus === "normal"
           ? "Normal"
@@ -1392,60 +1357,48 @@ export default function NewVisitPage() {
         .single();
 
       if (visitError || !visit) throw visitError || new Error(t.saveError);
-      try {
 
-        if (medicationDrafts.length) {
-          const medicationRows = medicationDrafts.map((draft) => ({
-            clinic_id: clinicContext.clinic_id,
-            visit_id: visit.id,
-            medication_id: draft.medication_id,
-            weight_kg: draft.weight_kg,
-            calculated_dose: draft.calculated_dose,
-            calculated_dose_unit: draft.calculated_dose_unit,
-            dose_per_kg: draft.dose_per_kg,
-            concentration: draft.concentration,
-            concentration_unit: draft.concentration_unit,
-            calculated_volume: draft.calculated_volume,
-            volume_unit: draft.volume_unit,
-            route: draft.route,
-            frequency: draft.frequency,
-            duration_days: draft.duration_days,
-            instructions: draft.instructions,
-          }));
-          const { error: medError } = await db.from("visit_medications").insert(medicationRows);
-          if (medError) throw medError;
-        }
-
-        const validVaccinations = vaccinations.filter((v) => v.vaccine_name.trim());
-        if (validVaccinations.length) {
-          const vaccineRows = validVaccinations.map((v) => ({
-            clinic_id: clinicContext.clinic_id,
-            visit_id: visit.id,
-            pet_id: selectedPetId,
-            client_id: selectedClientId,
-            vaccine_name: v.vaccine_name.trim(),
-            vaccine_type: v.vaccine_type.trim() || null,
-            administered_at: v.administered_at ? new Date(v.administered_at).toISOString() : new Date().toISOString(),
-            next_dose_at: v.next_dose_at ? new Date(v.next_dose_at).toISOString() : null,
-            dose: v.dose.trim() || null,
-            route: v.route.trim() || null,
-            batch_number: v.batch_number.trim() || null,
-            manufacturer: v.manufacturer.trim() || null,
-            notes: v.notes.trim() || null,
-          }));
-          const { error: vaccineError } = await db.from("vaccinations").insert(vaccineRows);
-          if (vaccineError) throw vaccineError;
-        }
-
-      } catch (relatedSaveError) {
-        await db.from("visit_medications").delete().eq("visit_id", visit.id);
-        await db.from("vaccinations").delete().eq("visit_id", visit.id);
-        await db.from("visits").delete().eq("id", visit.id);
-        throw relatedSaveError;
+      if (medicationDrafts.length) {
+        const medicationRows = medicationDrafts.map((draft) => ({
+          clinic_id: clinicContext.clinic_id,
+          visit_id: visit.id,
+          medication_id: draft.medication_id,
+          weight_kg: draft.weight_kg,
+          calculated_dose: draft.calculated_dose,
+          calculated_dose_unit: draft.calculated_dose_unit,
+          dose_per_kg: draft.dose_per_kg,
+          concentration: draft.concentration,
+          concentration_unit: draft.concentration_unit,
+          calculated_volume: draft.calculated_volume,
+          volume_unit: draft.volume_unit,
+          route: draft.route,
+          frequency: draft.frequency,
+          duration_days: draft.duration_days,
+          instructions: draft.instructions,
+        }));
+        const { error: medError } = await db.from("visit_medications").insert(medicationRows);
+        if (medError) throw medError;
       }
 
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("vetra-data-version", String(Date.now()));
+      const validVaccinations = vaccinations.filter((v) => v.vaccine_name.trim());
+      if (validVaccinations.length) {
+        const vaccineRows = validVaccinations.map((v) => ({
+          clinic_id: clinicContext.clinic_id,
+          visit_id: visit.id,
+          pet_id: selectedPetId,
+          client_id: selectedClientId,
+          vaccine_name: v.vaccine_name.trim(),
+          vaccine_type: v.vaccine_type.trim() || null,
+          administered_at: v.administered_at ? new Date(v.administered_at).toISOString() : new Date().toISOString(),
+          next_dose_at: v.next_dose_at ? new Date(v.next_dose_at).toISOString() : null,
+          dose: v.dose.trim() || null,
+          route: v.route.trim() || null,
+          batch_number: v.batch_number.trim() || null,
+          manufacturer: v.manufacturer.trim() || null,
+          notes: v.notes.trim() || null,
+        }));
+        const { error: vaccineError } = await db.from("vaccinations").insert(vaccineRows);
+        if (vaccineError) throw vaccineError;
       }
 
       setMessage(t.visitSaved);
@@ -1463,7 +1416,6 @@ export default function NewVisitPage() {
       setHeartRate("");
       setRespiratoryRate("");
       setMedicationDrafts([]);
-      setFormularyDrafts([]);
       setVaccinations([]);
 
       await loadVisits(selectedPetId);
@@ -2568,7 +2520,7 @@ export default function NewVisitPage() {
                   </label>
                   <WheelPicker
                     value={weight}
-                    onChange={handleWeightChange}
+                    onChange={setWeight}
                     min={0.1}
                     max={100}
                     step={0.1}
@@ -2670,16 +2622,6 @@ export default function NewVisitPage() {
                   />
                 </div>
 
-                <div className="lg:col-span-2">
-                  <BSAVAFormularyPicker
-                    language={language}
-                    darkMode={darkMode}
-                    petSpecies={petDetails?.species}
-                    weightKg={weight ? Number(weight) : null}
-                    drafts={formularyDrafts}
-                    onChange={setFormularyDrafts}
-                  />
-                </div>
                 <div className="lg:col-span-2">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <label className={`block text-sm font-semibold ${darkMode ? "text-slate-300" : "text-slate-700"}`}>{t.treatment}</label>
