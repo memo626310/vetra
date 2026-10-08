@@ -12,13 +12,8 @@ async function issuePetOwnerAccess(
   clientCode: string,
   phone: string
 ): Promise<PetOwnerAccess> {
-  const normalizedCode = clientCode
-    .trim()
-    .replace(/\s+/g, "");
-
-  const normalizedPhone = phone
-    .trim()
-    .replace(/\s+/g, "");
+  const normalizedCode = clientCode.trim().replace(/\s+/g, "");
+  const normalizedPhone = phone.trim().replace(/\s+/g, "");
 
   const { data, error } = await vetraCore.rpc(
     "issue_pet_owner_access_token",
@@ -29,9 +24,7 @@ async function issuePetOwnerAccess(
   );
 
   if (error) {
-    throw new Error(
-      `Pet Owner access failed: ${error.message}`
-    );
+    throw new Error(`Pet Owner access failed: ${error.message}`);
   }
 
   const row = Array.isArray(data)
@@ -44,9 +37,7 @@ async function issuePetOwnerAccess(
     !row.database_publishable_key ||
     !row.clinic_id
   ) {
-    throw new Error(
-      "Invalid Pet Owner access response."
-    );
+    throw new Error("Invalid Pet Owner access response.");
   }
 
   return row;
@@ -56,13 +47,8 @@ export async function getClientPortalDb(
   clientCode: string,
   phone: string
 ): Promise<SupabaseClient> {
-  const normalizedCode = clientCode
-    .trim()
-    .replace(/\s+/g, "");
-
-  const normalizedPhone = phone
-    .trim()
-    .replace(/\s+/g, "");
+  const normalizedCode = clientCode.trim().replace(/\s+/g, "");
+  const normalizedPhone = phone.trim().replace(/\s+/g, "");
 
   if (!/^[0-9]{6}$/.test(normalizedCode)) {
     throw new Error("Invalid Client ID format.");
@@ -84,10 +70,7 @@ export async function getClientPortalDb(
   async function getAccessToken(): Promise<string> {
     const now = Date.now();
 
-    if (
-      cachedToken &&
-      now - tokenIssuedAt < 25 * 60 * 1000
-    ) {
+    if (cachedToken && now - tokenIssuedAt < 25 * 60 * 1000) {
       return cachedToken;
     }
 
@@ -98,7 +81,6 @@ export async function getClientPortalDb(
       ).then((freshAccess) => {
         cachedToken = freshAccess.access_token;
         tokenIssuedAt = Date.now();
-
         return cachedToken;
       });
     }
@@ -117,6 +99,12 @@ export async function getClientPortalDb(
       auth: {
         persistSession: false,
         autoRefreshToken: false,
+      },
+      global: {
+        headers: {
+          "x-vetra-client-code": normalizedCode,
+          "x-vetra-client-phone": normalizedPhone,
+        },
       },
       accessToken: getAccessToken,
     }

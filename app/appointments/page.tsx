@@ -388,8 +388,7 @@ export default function AppointmentsPage() {
       if (sResult.data) {
         setSettings(sResult.data as Settings);
       } else {
-        const initial: Settings = {
-          id: "",
+        const initialPayload = {
           clinic_id: context.clinic_id,
           online_booking_enabled: true,
           today_booking_enabled: true,
@@ -400,7 +399,16 @@ export default function AppointmentsPage() {
           booking_end_time: "21:00:00",
           default_duration_minutes: 30,
         };
-        setSettings(initial);
+
+        const { data: createdSettings, error: createSettingsError } = await db
+          .from("appointment_settings")
+          .insert(initialPayload)
+          .select("*")
+          .single();
+
+        if (createSettingsError) throw createSettingsError;
+
+        setSettings(createdSettings as Settings);
       }
     } catch (e) {
       console.error("APPOINTMENTS LOAD ERROR:", e);
