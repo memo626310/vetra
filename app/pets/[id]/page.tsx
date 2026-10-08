@@ -39,10 +39,34 @@ type Visit = {
   notes: string | null;
 };
 
+type Vaccination = {
+  id: string;
+  pet_id: string;
+  vaccine_name: string | null;
+  vaccine_type: string | null;
+  administered_at: string | null;
+  next_dose_at: string | null;
+  dose: string | null;
+  route: string | null;
+  batch_number: string | null;
+  manufacturer: string | null;
+  notes: string | null;
+};
+
+type VaccineCircle = {
+  id: string;
+  name: string;
+  record: Vaccination | null;
+  due: string | null;
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export default function PetPage() {
   const [pet, setPet] = useState<Pet | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [visits, setVisits] = useState<Visit[]>([]);
+  const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -51,6 +75,7 @@ export default function PetPage() {
   const [deletingPet, setDeletingPet] = useState(false);
 
   const [darkMode, setDarkMode] = useState(false);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
 
   // =========================
   // DARK MODE
@@ -70,6 +95,18 @@ export default function PetPage() {
     setDarkMode(nextMode);
     localStorage.setItem("vetra-dark-mode", String(nextMode));
   }
+
+  // =========================
+  // LIVE COUNTDOWN REFRESH
+  // =========================
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 60_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   // =========================
   // LOAD PET
@@ -167,6 +204,36 @@ export default function PetPage() {
           setVisits((visitsData || []) as Visit[]);
         }
 
+        // =========================
+        // GET VACCINATIONS
+        // =========================
+
+        const {
+          data: vaccinationsData,
+          error: vaccinationsError,
+        } = await db
+          .from("vaccinations")
+          .select(
+            "id, pet_id, vaccine_name, vaccine_type, administered_at, next_dose_at, dose, route, batch_number, manufacturer, notes"
+          )
+          .eq("pet_id", petId)
+          .order("administered_at", {
+            ascending: false,
+          });
+
+        if (vaccinationsError) {
+          console.error(
+            "VACCINATIONS LOAD ERROR:",
+            vaccinationsError
+          );
+
+          setVaccinations([]);
+        } else {
+          setVaccinations(
+            (vaccinationsData || []) as Vaccination[]
+          );
+        }
+
         setLoading(false);
       } catch (err) {
         console.error("PET PAGE ERROR:", err);
@@ -191,11 +258,11 @@ export default function PetPage() {
   function getSpeciesIcon(species: string) {
     const value = species.toLowerCase();
 
-    if (value === "cat" || value === "قط") {
+    if (value.includes("cat") || value.includes("قط")) {
       return "🐱";
     }
 
-    if (value === "dog" || value === "كلب") {
+    if (value.includes("dog") || value.includes("كلب")) {
       return "🐶";
     }
 
@@ -205,9 +272,17 @@ export default function PetPage() {
   function getSpeciesName(species: string) {
     const value = species.toLowerCase();
 
-    if (value === "cat") return "قط";
-    if (value === "dog") return "كلب";
-    if (value === "other") return "أخرى";
+    if (value.includes("cat") || value.includes("قط")) {
+      return "قط";
+    }
+
+    if (value.includes("dog") || value.includes("كلب")) {
+      return "كلب";
+    }
+
+    if (value.includes("other")) {
+      return "أخرى";
+    }
 
     return species;
   }
@@ -220,6 +295,10 @@ export default function PetPage() {
 
     let years = today.getFullYear() - birth.getFullYear();
     let months = today.getMonth() - birth.getMonth();
+
+    if (today.getDate() < birth.getDate()) {
+      months--;
+    }
 
     if (months < 0) {
       years--;
@@ -245,11 +324,446 @@ export default function PetPage() {
     });
   }
 
+  function formatVaccinationDate(date: string) {
+    const parts = date.slice(0, 10).split("-").map(Number);
+
+    if (parts.length === 3 && parts.every(Number.isFinite)) {
+      const [year, month, day] = parts;
+
+      return new Date(year, month - 1, day).toLocaleDateString(
+        "ar-EG",
+        {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        }
+      );
+    }
+
+    return new Date(date).toLocaleDateString("ar-EG", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
   function formatTime(date: string) {
     return new Date(date).toLocaleTimeString("ar-EG", {
       hour: "2-digit",
       minute: "2-digit",
     });
+  }
+
+  function dateOnly(date: string) {
+    const parts = date.slice(0, 10).split("-").map(Number);
+
+    if (parts.length === 3 && parts.every(Number.isFinite)) {
+      const [year, month, day] = parts;
+      return new Date(year, month - 1, day).getTime();
+    }
+
+    const d = new Date(date);
+
+    return new Date(
+      d.getFullYear(),
+      d.getMonth(),
+      d.getDate()
+    ).getTime();
+  }
+
+  function daysUntil(date: string, now = currentTime) {
+    const today = new Date(now);
+
+    const todayStart = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate()
+    ).getTime();
+
+    const dueStart = dateOnly(date);
+
+    return Math.ceil((dueStart - todayStart) / DAY_MS);
+  }
+
+  function addDays(date: string, days: number) {
+    const d = new Date(date);
+
+    d.setDate(d.getDate() + days);
+
+    return d.toISOString();
+  }
+
+  function addYears(date: string, years: number) {
+    const d = new Date(date);
+
+    d.setFullYear(d.getFullYear() + years);
+
+    return d.toISOString();
+  }
+
+  function recordText(vaccine: Vaccination) {
+    return `${vaccine.vaccine_name || ""} ${
+      vaccine.vaccine_type || ""
+    } ${vaccine.notes || ""}`.toLowerCase();
+  }
+
+  function isViral(vaccine: Vaccination) {
+    const value = recordText(vaccine);
+
+    return [
+      "ثلاثي",
+      "رباعي",
+      "فيروسي",
+      "فيروسى",
+      "viral",
+      "triple",
+      "quad",
+      "fvr",
+      "fvrcp",
+      "f3",
+      "f4",
+    ].some((key) => value.includes(key));
+  }
+
+  function isRabies(vaccine: Vaccination) {
+    const value = recordText(vaccine);
+
+    return ["سعار", "rabies", "rabis"].some((key) =>
+      value.includes(key)
+    );
+  }
+
+  function isDeworm(vaccine: Vaccination) {
+    const value = recordText(vaccine);
+
+    return [
+      "ديدان",
+      "deworm",
+      "worm",
+      "internal parasite",
+      "anthelmint",
+    ].some((key) => value.includes(key));
+  }
+
+  function isParasite(vaccine: Vaccination) {
+    const value = recordText(vaccine);
+
+    return [
+      "حشرات",
+      "flea",
+      "fleas",
+      "tick",
+      "ticks",
+      "ecto",
+      "external parasite",
+      "براغيث",
+      "قراد",
+    ].some((key) => value.includes(key));
+  }
+
+  function latestRecord(
+    records: Vaccination[],
+    matcher: (vaccine: Vaccination) => boolean
+  ) {
+    return (
+      records
+        .filter(
+          (vaccine) =>
+            matcher(vaccine) && vaccine.administered_at
+        )
+        .sort(
+          (a, b) =>
+            +new Date(b.administered_at as string) -
+            +new Date(a.administered_at as string)
+        )[0] || null
+    );
+  }
+
+  function getVaccinationDue(vaccine: Vaccination) {
+    if (vaccine.next_dose_at) {
+      return vaccine.next_dose_at;
+    }
+
+    if (!vaccine.administered_at) {
+      return null;
+    }
+
+    if (isViral(vaccine)) {
+      return addYears(vaccine.administered_at, 1);
+    }
+
+    if (isRabies(vaccine)) {
+      return addYears(vaccine.administered_at, 1);
+    }
+
+    if (isDeworm(vaccine)) {
+      return addDays(vaccine.administered_at, 60);
+    }
+
+    return null;
+  }
+
+  function getVaccineCircles(): VaccineCircle[] {
+    const circles: VaccineCircle[] = [];
+
+    const viral = latestRecord(vaccinations, isViral);
+    const rabies = latestRecord(vaccinations, isRabies);
+    const deworm = latestRecord(vaccinations, isDeworm);
+    const parasite = latestRecord(vaccinations, isParasite);
+
+    circles.push({
+      id: "viral",
+      name: "الفيروسي",
+      record: viral,
+      due: viral ? getVaccinationDue(viral) : null,
+    });
+
+    circles.push({
+      id: "rabies",
+      name: "السعار",
+      record: rabies,
+      due: rabies ? getVaccinationDue(rabies) : null,
+    });
+
+    circles.push({
+      id: "deworm",
+      name: "الديدان",
+      record: deworm,
+      due: deworm ? getVaccinationDue(deworm) : null,
+    });
+
+    circles.push({
+      id: "parasite",
+      name: "الحشرات",
+      record: parasite,
+      due: parasite ? getVaccinationDue(parasite) : null,
+    });
+
+    const knownIds = new Set(
+      [viral, rabies, deworm, parasite]
+        .filter(Boolean)
+        .map((item) => item!.id)
+    );
+
+    vaccinations
+      .filter((vaccine) => !knownIds.has(vaccine.id))
+      .forEach((vaccine) => {
+        circles.push({
+          id: `extra-${vaccine.id}`,
+          name:
+            vaccine.vaccine_name ||
+            vaccine.vaccine_type ||
+            "تطعيم",
+          record: vaccine,
+          due: getVaccinationDue(vaccine),
+        });
+      });
+
+    return circles;
+  }
+
+  function getCircleState(due: string | null) {
+    if (!due) {
+      return "none";
+    }
+
+    const days = daysUntil(due);
+
+    if (days < 0) {
+      return "overdue";
+    }
+
+    if (days === 0) {
+      return "today";
+    }
+
+    if (days === 1) {
+      return "tomorrow";
+    }
+
+    return "upcoming";
+  }
+
+  function VaccinationCircle({
+    item,
+  }: {
+    item: VaccineCircle;
+  }) {
+    const state = getCircleState(item.due);
+    const days = item.due ? daysUntil(item.due) : null;
+
+    const radius = 42;
+    const circumference = 2 * Math.PI * radius;
+
+    let progress = 0.08;
+
+    if (days !== null) {
+      if (days <= 0) {
+        progress = 1;
+      } else {
+        progress = Math.max(
+          0.08,
+          Math.min(1, days / 365)
+        );
+      }
+    }
+
+    const dashOffset =
+      circumference * (1 - progress);
+
+    let ringColor = "stroke-emerald-400";
+    let numberColor = "text-emerald-400";
+
+    if (state === "today") {
+      ringColor = "stroke-amber-400";
+      numberColor = "text-amber-400";
+    }
+
+    if (state === "tomorrow") {
+      ringColor = "stroke-cyan-400";
+      numberColor = "text-cyan-400";
+    }
+
+    if (state === "overdue") {
+      ringColor = "stroke-rose-400";
+      numberColor = "text-rose-400";
+    }
+
+    let value = "—";
+    let label = "لا يوجد موعد";
+
+    if (state === "upcoming" && days !== null) {
+      value = String(days);
+      label = "يوم متبقي";
+    }
+
+    if (state === "tomorrow") {
+      value = "1";
+      label = "بكرة";
+    }
+
+    if (state === "today") {
+      value = "💉";
+      label = "اليوم";
+    }
+
+    if (state === "overdue" && days !== null) {
+      value = String(Math.abs(days));
+      label = "يوم متأخر";
+    }
+
+    return (
+      <div
+        className={`min-w-[170px] shrink-0 rounded-[1.7rem] border p-4 ${
+          darkMode
+            ? "border-white/[.06] bg-white/[.035]"
+            : "border-slate-100 bg-slate-50"
+        }`}
+      >
+        <div className="flex flex-col items-center">
+          <div className="relative h-32 w-32">
+            <svg
+              viewBox="0 0 100 100"
+              className="absolute inset-0 h-full w-full -rotate-90"
+            >
+              <circle
+                cx="50"
+                cy="50"
+                r={radius}
+                fill="none"
+                strokeWidth="7"
+                className={
+                  darkMode
+                    ? "stroke-slate-700"
+                    : "stroke-slate-200"
+                }
+              />
+
+              <circle
+                cx="50"
+                cy="50"
+                r={radius}
+                fill="none"
+                strokeWidth="7"
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={dashOffset}
+                className={ringColor}
+              />
+            </svg>
+
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+              <div
+                className={`text-2xl font-black ${numberColor}`}
+              >
+                {value}
+              </div>
+
+              <div
+                className={`mt-1 text-[10px] font-bold ${
+                  darkMode
+                    ? "text-slate-300"
+                    : "text-slate-600"
+                }`}
+              >
+                {label}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 text-center">
+            <div className="truncate text-sm font-black">
+              {item.name}
+            </div>
+
+            {item.record && (
+              <div
+                className={`mt-1 text-[10px] ${
+                  darkMode
+                    ? "text-slate-400"
+                    : "text-slate-500"
+                }`}
+              >
+                آخر جرعة:{" "}
+                {item.record.administered_at
+                  ? formatVaccinationDate(
+                      item.record.administered_at
+                    )
+                  : "—"}
+              </div>
+            )}
+
+            {item.due && (
+              <div
+                className={`mt-1 text-[10px] font-bold ${
+                  state === "overdue"
+                    ? "text-rose-400"
+                    : darkMode
+                    ? "text-slate-300"
+                    : "text-slate-600"
+                }`}
+              >
+                {state === "overdue"
+                  ? "موعد الجرعة عدى"
+                  : "الجرعة القادمة"}
+              </div>
+            )}
+
+            {item.due && (
+              <div
+                className={`mt-0.5 text-[10px] ${
+                  darkMode
+                    ? "text-slate-500"
+                    : "text-slate-400"
+                }`}
+              >
+                {formatVaccinationDate(item.due)}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // =========================
@@ -285,7 +799,11 @@ export default function PetPage() {
         .single();
 
       if (updateError) {
-        console.error("DECEASED UPDATE ERROR:", updateError);
+        console.error(
+          "DECEASED UPDATE ERROR:",
+          updateError
+        );
+
         setError(updateError.message);
         return;
       }
@@ -312,11 +830,12 @@ export default function PetPage() {
     if (!pet) return;
 
     const confirmed = window.confirm(
-      `âš ï¸ Ø­Ø°Ù Ù†Ù‡Ø§Ø¦ÙŠ Ù„Ù„Ø­ÙŠÙˆØ§Ù†\n\n` +
-      `Ø£Ù†Øª Ø¹Ù„Ù‰ ÙˆØ´Ùƒ Ø­Ø°Ù "${pet.name}" Ù†Ù‡Ø§Ø¦ÙŠÙ‹Ø§.\n\n` +
-      `Ø³ÙŠØªÙ… Ø­Ø°Ù Ø§Ù„Ø­ÙŠÙˆØ§Ù† ÙˆÙƒÙ„ Ø§Ù„ÙƒØ´ÙˆÙØ§Øª ÙˆØ§Ù„ØªØ·Ø¹ÙŠÙ…Ø§Øª ÙˆØ§Ù„Ø£Ø¯ÙˆÙŠØ© Ø§Ù„Ù…Ø±ØªØ¨Ø·Ø© Ø¨Ù‡ØŒ ` +
-      `ÙˆØ£ÙŠ ÙÙˆØ§ØªÙŠØ± Ù…Ø±ØªØ¨Ø·Ø© Ø¨Ø§Ù„Ø²ÙŠØ§Ø±Ø§Øª Ø§Ù„Ù…Ø­Ø°ÙˆÙØ©. Ù„Ø§ ÙŠÙ…ÙƒÙ† Ø§Ù„ØªØ±Ø§Ø¬Ø¹ Ø¹Ù† Ù‡Ø°Ø§ Ø§Ù„Ø¥Ø¬Ø±Ø§Ø¡.\n\n` +
-      `Ù‡Ù„ ØªØ±ÙŠØ¯ Ø§Ù„Ù…ØªØ§Ø¨Ø¹Ø©ØŸ`
+      `⚠️ حذف نهائي للحيوان\n\n` +
+        `أنت على وشك حذف "${pet.name}" نهائيًا.\n\n` +
+        `سيتم حذف الحيوان وكل الكشوفات والتطعيمات والأدوية المرتبطة به، ` +
+        `وأي فواتير مرتبطة بالزيارات المحذوفة.\n\n` +
+        `لا يمكن التراجع عن هذا الإجراء.\n\n` +
+        `هل تريد المتابعة؟`
     );
 
     if (!confirmed) return;
@@ -327,10 +846,10 @@ export default function PetPage() {
     try {
       const db = await getClinicDb();
 
-      // ---------------------------------------------------------
-      // Collect all visits first. Related rows must be removed
-      // before deleting the parent visits/pet.
-      // ---------------------------------------------------------
+      // =========================
+      // GET VISITS
+      // =========================
+
       const {
         data: visitRows,
         error: visitsLoadError,
@@ -347,13 +866,16 @@ export default function PetPage() {
         .map((row) => row.id)
         .filter(Boolean);
 
-      // ---------------------------------------------------------
-      // Remove invoices linked to this pet / its visits.
-      // invoice_items must be deleted before invoices.
-      // ---------------------------------------------------------
+      // =========================
+      // GET INVOICES
+      // =========================
+
       const invoiceIdSet = new Set<string>();
 
-      const { data: petInvoices, error: petInvoicesError } = await db
+      const {
+        data: petInvoices,
+        error: petInvoicesError,
+      } = await db
         .from("invoices")
         .select("id")
         .eq("pet_id", pet.id);
@@ -363,11 +885,16 @@ export default function PetPage() {
       }
 
       for (const invoice of petInvoices || []) {
-        if (invoice.id) invoiceIdSet.add(invoice.id);
+        if (invoice.id) {
+          invoiceIdSet.add(invoice.id);
+        }
       }
 
       if (visitIds.length > 0) {
-        const { data: visitInvoices, error: visitInvoicesError } = await db
+        const {
+          data: visitInvoices,
+          error: visitInvoicesError,
+        } = await db
           .from("invoices")
           .select("id")
           .in("visit_id", visitIds);
@@ -377,14 +904,22 @@ export default function PetPage() {
         }
 
         for (const invoice of visitInvoices || []) {
-          if (invoice.id) invoiceIdSet.add(invoice.id);
+          if (invoice.id) {
+            invoiceIdSet.add(invoice.id);
+          }
         }
       }
 
       const invoiceIds = [...invoiceIdSet];
 
+      // =========================
+      // DELETE INVOICE ITEMS
+      // =========================
+
       if (invoiceIds.length > 0) {
-        const { error: invoiceItemsDeleteError } = await db
+        const {
+          error: invoiceItemsDeleteError,
+        } = await db
           .from("invoice_items")
           .delete()
           .in("invoice_id", invoiceIds);
@@ -393,7 +928,13 @@ export default function PetPage() {
           throw invoiceItemsDeleteError;
         }
 
-        const { error: invoicesDeleteError } = await db
+        // =========================
+        // DELETE INVOICES
+        // =========================
+
+        const {
+          error: invoicesDeleteError,
+        } = await db
           .from("invoices")
           .delete()
           .in("id", invoiceIds);
@@ -403,11 +944,14 @@ export default function PetPage() {
         }
       }
 
-      // ---------------------------------------------------------
-      // Remove visit children.
-      // ---------------------------------------------------------
+      // =========================
+      // DELETE VISIT MEDICATIONS
+      // =========================
+
       if (visitIds.length > 0) {
-        const { error: visitMedicationsDeleteError } = await db
+        const {
+          error: visitMedicationsDeleteError,
+        } = await db
           .from("visit_medications")
           .delete()
           .in("visit_id", visitIds);
@@ -416,7 +960,13 @@ export default function PetPage() {
           throw visitMedicationsDeleteError;
         }
 
-        const { error: vaccinationsByVisitDeleteError } = await db
+        // =========================
+        // DELETE VACCINES BY VISIT
+        // =========================
+
+        const {
+          error: vaccinationsByVisitDeleteError,
+        } = await db
           .from("vaccinations")
           .delete()
           .in("visit_id", visitIds);
@@ -426,8 +976,13 @@ export default function PetPage() {
         }
       }
 
-      // Vaccinations may also be linked directly to the pet.
-      const { error: vaccinationsByPetDeleteError } = await db
+      // =========================
+      // DELETE VACCINES BY PET
+      // =========================
+
+      const {
+        error: vaccinationsByPetDeleteError,
+      } = await db
         .from("vaccinations")
         .delete()
         .eq("pet_id", pet.id);
@@ -436,11 +991,14 @@ export default function PetPage() {
         throw vaccinationsByPetDeleteError;
       }
 
-      // ---------------------------------------------------------
-      // Finally remove the medical history, then the pet itself.
-      // ---------------------------------------------------------
+      // =========================
+      // DELETE VISITS
+      // =========================
+
       if (visitIds.length > 0) {
-        const { error: visitsDeleteError } = await db
+        const {
+          error: visitsDeleteError,
+        } = await db
           .from("visits")
           .delete()
           .in("id", visitIds);
@@ -449,6 +1007,10 @@ export default function PetPage() {
           throw visitsDeleteError;
         }
       }
+
+      // =========================
+      // DELETE PET
+      // =========================
 
       const { error: deleteError } = await db
         .from("pets")
@@ -461,17 +1023,21 @@ export default function PetPage() {
 
       window.location.href = "/pets";
     } catch (err) {
-      console.error("PET CASCADE DELETE ERROR:", err);
+      console.error(
+        "PET CASCADE DELETE ERROR:",
+        err
+      );
 
       setError(
         err instanceof Error
           ? err.message
-          : "Ø­ØµÙ„ Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ø­Ø°Ù Ø§Ù„Ø­ÙŠÙˆØ§Ù† ÙˆØ¨ÙŠØ§Ù†Ø§ØªÙ‡ Ø§Ù„Ù…Ø±ØªØ¨Ø·Ø©."
+          : "حصل خطأ أثناء حذف الحيوان وبياناته المرتبطة."
       );
     } finally {
       setDeletingPet(false);
     }
   }
+
   // =========================
   // LOADING
   // =========================
@@ -488,14 +1054,20 @@ export default function PetPage() {
       >
         <div
           className={`mx-auto max-w-6xl rounded-3xl p-10 text-center shadow-sm ${
-            darkMode ? "bg-slate-900" : "bg-white"
+            darkMode
+              ? "bg-slate-900"
+              : "bg-white"
           }`}
         >
-          <div className="mb-3 text-4xl">🐾</div>
+          <div className="mb-3 text-4xl">
+            🐾
+          </div>
 
           <p
             className={`font-semibold ${
-              darkMode ? "text-slate-400" : "text-slate-500"
+              darkMode
+                ? "text-slate-400"
+                : "text-slate-500"
             }`}
           >
             جاري تحميل الملف الطبي...
@@ -520,7 +1092,6 @@ export default function PetPage() {
         }`}
       >
         <div className="mx-auto max-w-6xl">
-
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <Link
               href="/pets"
@@ -561,10 +1132,14 @@ export default function PetPage() {
 
           <div
             className={`rounded-3xl p-10 text-center shadow-sm ${
-              darkMode ? "bg-slate-900" : "bg-white"
+              darkMode
+                ? "bg-slate-900"
+                : "bg-white"
             }`}
           >
-            <div className="mb-4 text-5xl">❌</div>
+            <div className="mb-4 text-5xl">
+              ❌
+            </div>
 
             <h1 className="text-2xl font-bold">
               تعذر فتح الملف الطبي
@@ -595,6 +1170,8 @@ export default function PetPage() {
     ? "bg-slate-800"
     : "bg-slate-50";
 
+  const vaccineCircles = getVaccineCircles();
+
   return (
     <main
       dir="rtl"
@@ -611,7 +1188,6 @@ export default function PetPage() {
         ========================= */}
 
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-
           <Link
             href="/pets"
             className={`text-sm font-semibold transition ${
@@ -624,9 +1200,6 @@ export default function PetPage() {
           </Link>
 
           <div className="flex flex-wrap gap-2">
-
-            {/* DASHBOARD */}
-
             <Link
               href="/"
               className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
@@ -638,8 +1211,6 @@ export default function PetPage() {
               🏠 Dashboard
             </Link>
 
-            {/* DARK MODE */}
-
             <button
               type="button"
               onClick={toggleDarkMode}
@@ -648,11 +1219,14 @@ export default function PetPage() {
                   ? "bg-slate-800 text-yellow-300 hover:bg-slate-700"
                   : "bg-white text-slate-700 shadow-sm hover:shadow-md"
               }`}
-              title={darkMode ? "الوضع الفاتح" : "الوضع الداكن"}
+              title={
+                darkMode
+                  ? "الوضع الفاتح"
+                  : "الوضع الداكن"
+              }
             >
               {darkMode ? "☀️" : "🌙"}
             </button>
-
           </div>
         </div>
 
@@ -664,14 +1238,13 @@ export default function PetPage() {
           className={`mb-6 rounded-3xl p-5 shadow-sm sm:p-6 ${cardClass}`}
         >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-
             <div className="flex min-w-0 items-center gap-4 sm:gap-5">
-
-              {/* PHOTO */}
 
               <div
                 className={`flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-3xl text-6xl sm:h-28 sm:w-28 ${
-                  darkMode ? "bg-slate-800" : "bg-slate-100"
+                  darkMode
+                    ? "bg-slate-800"
+                    : "bg-slate-100"
                 }`}
               >
                 {pet.photo_url ? (
@@ -685,12 +1258,8 @@ export default function PetPage() {
                 )}
               </div>
 
-              {/* INFO */}
-
               <div className="min-w-0">
-
                 <div className="flex flex-wrap items-center gap-2">
-
                   <h1 className="text-2xl font-bold sm:text-3xl">
                     {pet.name}
                   </h1>
@@ -700,16 +1269,19 @@ export default function PetPage() {
                       🕊️ متوفى
                     </span>
                   )}
-
                 </div>
 
                 <p className={`mt-2 ${mutedText}`}>
                   {getSpeciesName(pet.species)}
-                  {pet.breed ? ` • ${pet.breed}` : ""}
+                  {pet.breed
+                    ? ` • ${pet.breed}`
+                    : ""}
                 </p>
 
                 {client && (
-                  <p className={`mt-2 text-sm ${mutedText}`}>
+                  <p
+                    className={`mt-2 text-sm ${mutedText}`}
+                  >
                     المالك:{" "}
                     <Link
                       href={`/clients/${client.id}`}
@@ -729,16 +1301,10 @@ export default function PetPage() {
                     هذا الحيوان مسجل كمتوفى ولا يمكن تسجيل زيارات جديدة له.
                   </p>
                 )}
-
               </div>
             </div>
 
-            {/* ACTIONS */}
-
             <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:flex-wrap">
-
-              {/* EDIT */}
-
               <Link
                 href={`/pets/${pet.id}/edit`}
                 className={`rounded-2xl px-5 py-3 text-center text-sm font-semibold transition ${
@@ -750,8 +1316,6 @@ export default function PetPage() {
                 ✏️ تعديل البيانات
               </Link>
 
-              {/* NEW VISIT */}
-
               {!pet.is_deceased && (
                 <Link
                   href={`/visits/new?pet=${pet.id}`}
@@ -760,27 +1324,26 @@ export default function PetPage() {
                   🩺 زيارة جديدة
                 </Link>
               )}
-
             </div>
-
           </div>
         </section>
 
         {/* =========================
-            STATUS / DANGER ACTIONS
+            STATUS
         ========================= */}
 
         <section
           className={`mb-6 rounded-3xl p-5 shadow-sm ${cardClass}`}
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
             <div>
               <h2 className="font-bold">
                 حالة الحيوان
               </h2>
 
-              <p className={`mt-1 text-sm ${mutedText}`}>
+              <p
+                className={`mt-1 text-sm ${mutedText}`}
+              >
                 {pet.is_deceased
                   ? "الحيوان مسجل كمتوفى. تظل بياناته وتاريخه الطبي محفوظين."
                   : "الحيوان نشط ويمكن تسجيل زيارات جديدة له."}
@@ -788,9 +1351,6 @@ export default function PetPage() {
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row">
-
-              {/* DECEASED */}
-
               <button
                 type="button"
                 onClick={handleToggleDeceased}
@@ -812,8 +1372,6 @@ export default function PetPage() {
                   : "🕊️ تسجيل كمتوفى"}
               </button>
 
-              {/* DELETE */}
-
               <button
                 type="button"
                 onClick={handleDeletePet}
@@ -824,7 +1382,6 @@ export default function PetPage() {
                   ? "جاري الحذف..."
                   : "🗑️ حذف الحيوان"}
               </button>
-
             </div>
           </div>
         </section>
@@ -844,7 +1401,6 @@ export default function PetPage() {
         ========================= */}
 
         <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
           <div className={`rounded-3xl p-5 shadow-sm ${cardClass}`}>
             <p className={`text-sm ${mutedText}`}>
               الجنس
@@ -891,7 +1447,71 @@ export default function PetPage() {
               {pet.microchip || "غير موجود"}
             </p>
           </div>
+        </section>
 
+        {/* =========================
+            VACCINATIONS
+        ========================= */}
+
+        <section
+          className={`mb-6 rounded-[2rem] p-5 shadow-sm sm:p-6 ${cardClass}`}
+        >
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">
+                💉 التطعيمات
+              </h2>
+
+              <p
+                className={`mt-1 text-sm ${mutedText}`}
+              >
+                مواعيد الجرعات القادمة للحيوان
+              </p>
+            </div>
+
+            <div
+              className={`w-fit rounded-2xl px-4 py-2 text-sm font-semibold ${
+                darkMode
+                  ? "bg-slate-800 text-slate-200"
+                  : "bg-slate-100 text-slate-700"
+              }`}
+            >
+              {vaccinations.length} تطعيم
+            </div>
+          </div>
+
+          {vaccinations.length === 0 ? (
+            <div
+              className={`rounded-3xl border border-dashed p-8 text-center ${
+                darkMode
+                  ? "border-slate-700 bg-slate-800/40"
+                  : "border-slate-200 bg-slate-50"
+              }`}
+            >
+              <div className="mb-3 text-5xl">
+                💉
+              </div>
+
+              <h3 className="font-bold">
+                مفيش تطعيمات مسجلة
+              </h3>
+
+              <p
+                className={`mt-2 text-sm ${mutedText}`}
+              >
+                أول تطعيم للحيوان هيظهر هنا.
+              </p>
+            </div>
+          ) : (
+            <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-2">
+              {vaccineCircles.map((item) => (
+                <VaccinationCircle
+                  key={item.id}
+                  item={item}
+                />
+              ))}
+            </div>
+          )}
         </section>
 
         {/* =========================
@@ -902,13 +1522,11 @@ export default function PetPage() {
           <section
             className={`mb-6 rounded-3xl p-6 shadow-sm ${cardClass}`}
           >
-
             <h2 className="mb-5 text-xl font-bold">
               👤 بيانات المالك
             </h2>
 
             <div className="grid gap-5 sm:grid-cols-3">
-
               <div>
                 <p className={`text-sm ${mutedText}`}>
                   الاسم
@@ -941,9 +1559,7 @@ export default function PetPage() {
                   {client.email || "غير موجود"}
                 </p>
               </div>
-
             </div>
-
           </section>
         )}
 
@@ -955,7 +1571,6 @@ export default function PetPage() {
           <section
             className={`mb-6 rounded-3xl p-6 shadow-sm ${cardClass}`}
           >
-
             <h2 className="mb-3 text-xl font-bold">
               📝 ملاحظات
             </h2>
@@ -969,7 +1584,6 @@ export default function PetPage() {
             >
               {pet.notes}
             </p>
-
           </section>
         )}
 
@@ -980,15 +1594,15 @@ export default function PetPage() {
         <section
           className={`rounded-3xl p-5 shadow-sm sm:p-6 ${cardClass}`}
         >
-
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
             <div>
               <h2 className="text-2xl font-bold">
                 التاريخ الطبي
               </h2>
 
-              <p className={`mt-1 text-sm ${mutedText}`}>
+              <p
+                className={`mt-1 text-sm ${mutedText}`}
+              >
                 جميع الزيارات المسجلة للحيوان
               </p>
             </div>
@@ -1002,15 +1616,12 @@ export default function PetPage() {
             >
               {visits.length} زيارة
             </div>
-
           </div>
 
           {visits.length === 0 ? (
-
             <div
               className={`rounded-2xl p-8 text-center ${softCard}`}
             >
-
               <div className="mb-3 text-5xl">
                 🩺
               </div>
@@ -1019,7 +1630,9 @@ export default function PetPage() {
                 مفيش زيارات مسجلة
               </h3>
 
-              <p className={`mt-2 text-sm ${mutedText}`}>
+              <p
+                className={`mt-2 text-sm ${mutedText}`}
+              >
                 أول زيارة للحيوان هتظهر هنا.
               </p>
 
@@ -1031,15 +1644,10 @@ export default function PetPage() {
                   تسجيل أول زيارة
                 </Link>
               )}
-
             </div>
-
           ) : (
-
             <div className="space-y-5">
-
               {visits.map((visit, index) => (
-
                 <div
                   key={visit.id}
                   className={`relative border-r-2 pr-5 sm:pr-6 ${
@@ -1048,7 +1656,6 @@ export default function PetPage() {
                       : "border-slate-200"
                   }`}
                 >
-
                   <div
                     className={`absolute -right-[9px] top-1 h-4 w-4 rounded-full border-4 ${
                       darkMode
@@ -1058,16 +1665,21 @@ export default function PetPage() {
                   />
 
                   <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-
                     <div>
                       <p className="font-bold">
                         زيارة #{visits.length - index}
                       </p>
 
-                      <p className={`text-sm ${mutedText}`}>
-                        {formatDate(visit.visit_date)}
+                      <p
+                        className={`text-sm ${mutedText}`}
+                      >
+                        {formatDate(
+                          visit.visit_date
+                        )}
                         {" • "}
-                        {formatTime(visit.visit_date)}
+                        {formatTime(
+                          visit.visit_date
+                        )}
                       </p>
                     </div>
 
@@ -1076,14 +1688,16 @@ export default function PetPage() {
                         {visit.fee} ج.م
                       </div>
                     )}
-
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-
                     {visit.reason && (
-                      <div className={`rounded-2xl p-4 ${softCard}`}>
-                        <p className={`text-xs ${mutedText}`}>
+                      <div
+                        className={`rounded-2xl p-4 ${softCard}`}
+                      >
+                        <p
+                          className={`text-xs ${mutedText}`}
+                        >
                           سبب الزيارة
                         </p>
 
@@ -1094,8 +1708,12 @@ export default function PetPage() {
                     )}
 
                     {visit.examination && (
-                      <div className={`rounded-2xl p-4 ${softCard}`}>
-                        <p className={`text-xs ${mutedText}`}>
+                      <div
+                        className={`rounded-2xl p-4 ${softCard}`}
+                      >
+                        <p
+                          className={`text-xs ${mutedText}`}
+                        >
                           الفحص
                         </p>
 
@@ -1106,8 +1724,12 @@ export default function PetPage() {
                     )}
 
                     {visit.diagnosis && (
-                      <div className={`rounded-2xl p-4 ${softCard}`}>
-                        <p className={`text-xs ${mutedText}`}>
+                      <div
+                        className={`rounded-2xl p-4 ${softCard}`}
+                      >
+                        <p
+                          className={`text-xs ${mutedText}`}
+                        >
                           التشخيص
                         </p>
 
@@ -1118,8 +1740,12 @@ export default function PetPage() {
                     )}
 
                     {visit.treatment && (
-                      <div className={`rounded-2xl p-4 ${softCard}`}>
-                        <p className={`text-xs ${mutedText}`}>
+                      <div
+                        className={`rounded-2xl p-4 ${softCard}`}
+                      >
+                        <p
+                          className={`text-xs ${mutedText}`}
+                        >
                           العلاج
                         </p>
 
@@ -1130,8 +1756,12 @@ export default function PetPage() {
                     )}
 
                     {visit.weight !== null && (
-                      <div className={`rounded-2xl p-4 ${softCard}`}>
-                        <p className={`text-xs ${mutedText}`}>
+                      <div
+                        className={`rounded-2xl p-4 ${softCard}`}
+                      >
+                        <p
+                          className={`text-xs ${mutedText}`}
+                        >
                           الوزن
                         </p>
 
@@ -1142,8 +1772,12 @@ export default function PetPage() {
                     )}
 
                     {visit.temperature !== null && (
-                      <div className={`rounded-2xl p-4 ${softCard}`}>
-                        <p className={`text-xs ${mutedText}`}>
+                      <div
+                        className={`rounded-2xl p-4 ${softCard}`}
+                      >
+                        <p
+                          className={`text-xs ${mutedText}`}
+                        >
                           الحرارة
                         </p>
 
@@ -1157,7 +1791,9 @@ export default function PetPage() {
                       <div
                         className={`rounded-2xl p-4 sm:col-span-2 ${softCard}`}
                       >
-                        <p className={`text-xs ${mutedText}`}>
+                        <p
+                          className={`text-xs ${mutedText}`}
+                        >
                           ملاحظات
                         </p>
 
@@ -1166,17 +1802,11 @@ export default function PetPage() {
                         </p>
                       </div>
                     )}
-
                   </div>
-
                 </div>
-
               ))}
-
             </div>
-
           )}
-
         </section>
 
         {/* =========================
@@ -1184,7 +1814,6 @@ export default function PetPage() {
         ========================= */}
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-
           <Link
             href="/"
             className={`flex-1 rounded-2xl px-5 py-4 text-center text-sm font-bold transition ${
@@ -1206,9 +1835,7 @@ export default function PetPage() {
           >
             🐾 كل الحيوانات
           </Link>
-
         </div>
-
       </div>
     </main>
   );
