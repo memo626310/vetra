@@ -174,8 +174,7 @@ export async function buildPrescriptionPdfBlob(
   element: HTMLElement
 ): Promise<Blob> {
   const canvas = await capturePrescription(element);
-  const { jsPDF } = await import("jspdf");
-
+  const { default: jsPDF } = await import("jspdf");
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "mm",

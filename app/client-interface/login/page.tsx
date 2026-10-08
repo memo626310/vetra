@@ -96,24 +96,23 @@ export default function ClientLoginPage() {
         return;
       }
 
-      window.sessionStorage.setItem(
-        "vetra-client-id",
-        client.id
-      );
+     window.localStorage.removeItem("vetra-client-id");
+window.localStorage.removeItem("vetra-client-code");
+window.localStorage.removeItem("vetra-client-phone");
 
-      window.sessionStorage.setItem(
-        "vetra-client-code",
-        client.client_code
-      );
+window.sessionStorage.removeItem("vetra-client-id");
+window.sessionStorage.removeItem("vetra-client-code");
+window.sessionStorage.removeItem("vetra-client-phone");
 
-      window.sessionStorage.setItem(
-        "vetra-client-phone",
-        normalizedPhone
-      );
+window.localStorage.setItem("vetra-client-id", client.id);
+window.localStorage.setItem("vetra-client-code", client.client_code);
+window.localStorage.setItem("vetra-client-phone", normalizedPhone);
 
-      router.replace(
-        `/client-interface/${client.id}`
-      );
+window.sessionStorage.setItem("vetra-client-id", client.id);
+window.sessionStorage.setItem("vetra-client-code", client.client_code);
+window.sessionStorage.setItem("vetra-client-phone", normalizedPhone);
+
+router.replace(`/client-interface/${client.id}`);
     } catch (error) {
       console.error(
         "PET OWNER LOGIN ERROR:",
@@ -263,7 +262,7 @@ export default function ClientLoginPage() {
                   onChange={(e) =>
                     setPhone(e.target.value)
                   }
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 dark:border-white/10 dark:bg-white/5"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-slate-500"
                   placeholder="010XXXXXXXX"
                   dir="ltr"
                 />
@@ -287,8 +286,7 @@ export default function ClientLoginPage() {
                         .slice(0, 6)
                     )
                   }
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 font-bold tracking-[0.18em] outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 dark:border-white/10 dark:bg-white/5"
-                  placeholder="012746"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 font-bold tracking-[0.18em] text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-slate-500"
                   dir="ltr"
                 />
               </label>
