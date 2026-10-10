@@ -65,10 +65,8 @@ export default function ClientPage() {
         return;
       }
 
-      // Get the active clinic database from VETRA Core.
       const db = await getClinicDb();
 
-      // Load client from the Clinic Database.
       const {
         data: clientData,
         error: clientError,
@@ -90,7 +88,6 @@ export default function ClientPage() {
         return;
       }
 
-      // Load this client's pets from the same Clinic Database.
       const {
         data: petsData,
         error: petsError,
@@ -155,7 +152,6 @@ export default function ClientPage() {
     setSavingPet(true);
 
     try {
-      // Always use the current clinic database.
       const db = await getClinicDb();
 
       const {
@@ -178,10 +174,7 @@ export default function ClientPage() {
         .single();
 
       if (insertError) {
-        console.error(
-          "PET INSERT ERROR:",
-          insertError
-        );
+        console.error("PET INSERT ERROR:", insertError);
 
         setError(insertError.message);
         setSavingPet(false);
@@ -336,6 +329,15 @@ export default function ClientPage() {
                 )}
               </div>
             </div>
+
+            {/* Edit Client Button */}
+            <Link
+              href={`/clients/${client.id}/edit`}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white shadow-sm transition hover:bg-blue-700 hover:shadow-md"
+            >
+              <span aria-hidden="true">✏️</span>
+              <span>تعديل بيانات العميل</span>
+            </Link>
           </div>
 
           {client.notes && (
