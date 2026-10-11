@@ -147,11 +147,26 @@ export default function NewVisitPage() {
         .order("created_at", { ascending: false });
 
       if (error) {
-        console.error("LOAD CLIENTS ERROR:", error);
-        setMessage(error.message);
-      } else {
-        setClients(data || []);
-      }
+  console.error("LOAD CLIENTS ERROR:", {
+    message: error.message,
+    code: error.code,
+    details: error.details,
+    hint: error.hint,
+  });
+
+  setMessage(
+    [
+      error.message,
+      error.code ? `Code: ${error.code}` : "",
+      error.details ? `Details: ${error.details}` : "",
+      error.hint ? `Hint: ${error.hint}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ")
+  );
+} else {
+  setClients(data || []);
+}
     } catch (error) {
       console.error("LOAD CLIENTS ERROR:", error);
       setMessage(error instanceof Error ? error.message : t.loadError);
@@ -425,8 +440,9 @@ export default function NewVisitPage() {
     );
   }
 
-  function addMedication() {
-    const med = medications.find((item) => item.id === selectedMedicationId);
+  function addMedication(medicationId?: string) {
+    const targetMedicationId = medicationId || selectedMedicationId;
+    const med = medications.find((item) => item.id === targetMedicationId);
     if (!med) return;
     const draft = calculateMedicationDraft(med);
     if (!draft) {
@@ -435,6 +451,7 @@ export default function NewVisitPage() {
     }
     setMedicationDrafts((current) => [...current, draft]);
     setSelectedMedicationId("");
+    setMedicationSearch("");
   }
 
   function removeMedication(id: string) {
@@ -880,8 +897,6 @@ export default function NewVisitPage() {
                 setFormularyDrafts={setFormularyDrafts}
                 medicationSearch={medicationSearch}
                 setMedicationSearch={setMedicationSearch}
-                selectedMedicationId={selectedMedicationId}
-                setSelectedMedicationId={setSelectedMedicationId}
                 filteredMedications={filteredMedications}
                 addMedication={addMedication}
                 medications={medications}

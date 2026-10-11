@@ -1,6 +1,16 @@
+import { useEffect, useState } from "react";
 import { BSAVAFormularyPicker, type FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
 import type { Language, Medication, MedicationDraft, PetDetails, VaccinationDraft, VisitTranslations } from "./new-visit-types";
 import { getVaccinationStageOptions, calculateNextVaccinationDose } from "./new-visit-utils";
+
+type DrugEyeResult = {
+  id: string;
+  name: string;
+  price: string | null;
+  activeIngredient: string | null;
+  category: string | null;
+  manufacturer: string | null;
+};
 
 type Props = {
   language: Language;
@@ -12,10 +22,8 @@ type Props = {
   setFormularyDrafts: (value: FormularyVisitDraft[]) => void;
   medicationSearch: string;
   setMedicationSearch: (value: string) => void;
-  selectedMedicationId: string;
-  setSelectedMedicationId: (value: string) => void;
   filteredMedications: Medication[];
-  addMedication: () => void;
+  addMedication: (medicationId?: string) => void;
   medications: Medication[];
   medicationDrafts: MedicationDraft[];
   removeMedication: (id: string) => void;
@@ -36,12 +44,65 @@ type Props = {
 
 export default function NewVisitTreatmentFields({
   language, darkMode, t, petDetails, weight, formularyDrafts, setFormularyDrafts,
-  medicationSearch, setMedicationSearch, selectedMedicationId, setSelectedMedicationId,
+  medicationSearch, setMedicationSearch,
   filteredMedications, addMedication, medications, medicationDrafts, removeMedication,
   treatment, setTreatment, vaccinations, addVaccination, updateVaccination, removeVaccination,
   resetVaccinationNextDoseToAutomatic, visitNotes, setVisitNotes, followUp, setFollowUp,
   followUpDetails, setFollowUpDetails,
 }: Props) {
+  const [showTreatmentNotes, setShowTreatmentNotes] = useState(Boolean(treatment));
+  const [drugEyeResults, setDrugEyeResults] = useState<DrugEyeResult[]>([]);
+  const [drugEyeLoading, setDrugEyeLoading] = useState(false);
+  const [drugEyeError, setDrugEyeError] = useState("");
+  const [drugEyeResultQuery, setDrugEyeResultQuery] = useState("");
+  const query = medicationSearch.trim().replace(/\s+/g, " ");
+  const matchingMedications = query ? filteredMedications.slice(0, 8) : [];
+
+  // Query DrugEye from VETRA's own route after a short pause. Abort stale requests
+  // so a slow response for an earlier query never replaces the latest results.
+  useEffect(() => {
+    const normalizedQuery = medicationSearch.trim().replace(/\s+/g, " ");
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    setDrugEyeError("");
+    setDrugEyeResults([]);
+    setDrugEyeResultQuery("");
+    setDrugEyeLoading(false);
+
+    if (normalizedQuery.length < 2) {
+      return () => controller.abort();
+    }
+
+    timer = setTimeout(async () => {
+      setDrugEyeLoading(true);
+      try {
+        const response = await fetch(`/api/drug-eye/search?q=${encodeURIComponent(normalizedQuery)}`, {
+          method: "GET",
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const payload = await response.json() as { results?: DrugEyeResult[]; error?: string };
+        if (!response.ok) throw new Error(payload.error || `DrugEye search failed (${response.status}).`);
+        if (controller.signal.aborted) return;
+        setDrugEyeResults(Array.isArray(payload.results) ? payload.results : []);
+        setDrugEyeResultQuery(normalizedQuery);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setDrugEyeResults([]);
+        setDrugEyeResultQuery(normalizedQuery);
+        setDrugEyeError(error instanceof Error && error.message ? error.message : "DrugEye search is unavailable.");
+      } finally {
+        if (!controller.signal.aborted) setDrugEyeLoading(false);
+      }
+    }, 350);
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      controller.abort();
+    };
+  }, [medicationSearch]);
+
   return (<>
                 <div className="lg:col-span-2">
                   <BSAVAFormularyPicker
@@ -55,38 +116,126 @@ export default function NewVisitTreatmentFields({
                 </div>
                 <div className="lg:col-span-2">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <label className={`block text-sm font-semibold ${darkMode ? "text-slate-300" : "text-slate-700"}`}>{t.treatment}</label>
+                    <div>
+                      <label className={`block text-sm font-semibold ${darkMode ? "text-slate-300" : "text-slate-700"}`}>{t.treatment}</label>
+                      <p className={`mt-1 text-xs ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                        {language === "ar" ? "ابحث في مكتبة VETRA وDrugEye. نتائج VETRA تُضاف مباشرةً، ونتائج DrugEye مرجعية." : "Search VETRA and DrugEye. VETRA results can be added directly; DrugEye results are reference information."}
+                      </p>
+                    </div>
                     <span className="rounded-full bg-blue-500/10 px-3 py-1 text-[11px] font-bold text-blue-600 dark:text-blue-300">Medication Library + dose calculator</span>
                   </div>
 
-                  <div className={`rounded-2xl border p-4 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-slate-50"}`}>
-                    <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                      <div>
-                        <input value={medicationSearch} onChange={(e) => setMedicationSearch(e.target.value)} placeholder={language === "ar" ? "ابحث عن دواء..." : "Search medication..."} className={`mb-2 w-full rounded-xl border px-3 py-2 text-sm outline-none ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`} />
-                        <select value={selectedMedicationId} onChange={(e) => setSelectedMedicationId(e.target.value)} className={`w-full rounded-xl border px-3 py-3 text-sm outline-none ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`}>
-                          <option value="">{language === "ar" ? "اختار دواء من المكتبة" : "Select medication from library"}</option>
-                          {filteredMedications.map((med) => (
-                            <option key={med.id} value={med.id}>{med.name}{med.active_ingredient ? ` — ${med.active_ingredient}` : ""}</option>
+                  <div className={`rounded-2xl border p-3 sm:p-4 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-slate-50"}`}>
+                    <div className="relative">
+                      <input
+                        value={medicationSearch}
+                        onChange={(e) => setMedicationSearch(e.target.value)}
+                        placeholder={language === "ar" ? "ابحث باسم الدواء أو المادة الفعالة..." : "Search by medication or active ingredient..."}
+                        autoComplete="off"
+                        className={`w-full rounded-xl border px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 ${darkMode ? "border-slate-700 bg-slate-900 text-white placeholder:text-slate-500" : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"}`}
+                      />
+                      {query && (
+                        <div className={`absolute inset-x-0 top-full z-30 mt-1 max-h-[min(70vh,30rem)] overflow-y-auto rounded-xl border shadow-xl ${darkMode ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"}`}>
+                          {matchingMedications.length > 0 && (
+                            <>
+                              <div className={`sticky top-0 z-10 border-b px-3 py-2 text-[11px] font-bold uppercase tracking-wide ${darkMode ? "border-slate-800 bg-slate-900 text-slate-400" : "border-slate-100 bg-slate-50 text-slate-500"}`}>
+                                {language === "ar" ? "مكتبة أدوية VETRA" : "VETRA medication library"}
+                              </div>
+                              {matchingMedications.map((med) => (
+                                <button
+                                  key={med.id}
+                                  type="button"
+                                  onClick={() => addMedication(med.id)}
+                                  className={`flex w-full items-center justify-between gap-3 border-b px-3 py-3 text-left last:border-b-0 ${darkMode ? "border-slate-800 hover:bg-slate-800" : "border-slate-100 hover:bg-blue-50"}`}
+                                >
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-sm font-semibold">{med.name}</span>
+                                    {med.active_ingredient && <span className="mt-0.5 block truncate text-xs text-slate-500">{med.active_ingredient}</span>}
+                                  </span>
+                                  <span className="shrink-0 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-bold text-white">{language === "ar" ? "+ إضافة" : "+ Add"}</span>
+                                </button>
+                              ))}
+                            </>
+                          )}
+
+                          {matchingMedications.length === 0 && (
+                            <div className={`px-3 py-2 text-xs ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              {language === "ar" ? "لا توجد نتيجة مطابقة في مكتبة VETRA." : "No matching result in VETRA's library."}
+                            </div>
+                          )}
+
+                          <div className={`sticky top-0 z-10 flex items-center justify-between gap-3 border-y px-3 py-2 text-[11px] font-bold uppercase tracking-wide ${darkMode ? "border-slate-800 bg-slate-900 text-sky-300" : "border-slate-100 bg-sky-50 text-sky-800"}`}>
+                            <span>DrugEye</span>
+                            <span className="font-medium normal-case tracking-normal">
+                              {query.length < 2
+                                ? (language === "ar" ? "اكتب حرفين على الأقل" : "Type at least 2 characters")
+                                : drugEyeLoading
+                                  ? (language === "ar" ? "جاري البحث…" : "Searching…")
+                                  : drugEyeResultQuery === query && !drugEyeError
+                                    ? `${drugEyeResults.length} ${language === "ar" ? "نتيجة" : "results"}`
+                                    : ""}
+                            </span>
+                          </div>
+
+                          {query.length >= 2 && drugEyeLoading && drugEyeResultQuery !== query && (
+                            <div className={`px-3 py-3 text-sm ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              {language === "ar" ? "بنبحث في DrugEye…" : "Searching DrugEye…"}
+                            </div>
+                          )}
+
+                          {drugEyeResultQuery === query && Boolean(drugEyeError) && (
+                            <div className="px-3 py-3 text-sm text-rose-600">
+                              {language === "ar" ? "تعذر البحث في DrugEye: " : "DrugEye search failed: "}{drugEyeError}
+                            </div>
+                          )}
+
+                          {query.length >= 2 && drugEyeResultQuery === query && !drugEyeLoading && !drugEyeError && drugEyeResults.length === 0 && (
+                            <div className={`px-3 py-3 text-sm ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              {language === "ar" ? "لا توجد نتائج من DrugEye لهذا البحث." : "No DrugEye results for this search."}
+                            </div>
+                          )}
+
+                          {drugEyeResultQuery === query && drugEyeResults.map((result) => (
+                            <div key={result.id} className={`border-b px-3 py-3 last:border-b-0 ${darkMode ? "border-slate-800" : "border-slate-100"}`}>
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className={`text-sm font-semibold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{result.name}</div>
+                                  {result.activeIngredient && <div className="mt-1 text-xs text-slate-500">{result.activeIngredient}</div>}
+                                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                                    {result.manufacturer && <span>{result.manufacturer}</span>}
+                                    {result.category && <span>{result.category}</span>}
+                                  </div>
+                                </div>
+                                {result.price && <span className="shrink-0 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">{result.price}</span>}
+                              </div>
+                            </div>
                           ))}
-                        </select>
-                      </div>
-                      <button type="button" onClick={addMedication} className="self-end rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700">+ {language === "ar" ? "إضافة دواء" : "Add medication"}</button>
+
+                          <div className={`border-t px-3 py-2 text-[11px] leading-5 ${darkMode ? "border-slate-800 text-slate-400" : "border-slate-100 text-slate-500"}`}>
+                            {language === "ar"
+                              ? "نتائج DrugEye مرجعية فقط. لإضافة الدواء وحساب جرعته، استخدم دواءً مسجلاً في مكتبة VETRA ببيانات جرعة معتمدة."
+                              : "DrugEye results are for reference only. Prescribing and dose calculation require a medication configured in VETRA."}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {medicationDrafts.length > 0 && (
-                      <div className="mt-4 space-y-2">
+                      <div className="mt-3 space-y-2">
                         {medicationDrafts.map((draft) => {
                           const med = medications.find((item) => item.id === draft.medication_id);
                           const outside = (med?.dose_min != null && draft.dose_per_kg != null && draft.dose_per_kg < Number(med.dose_min)) || (med?.dose_max != null && draft.dose_per_kg != null && draft.dose_per_kg > Number(med.dose_max));
                           return (
-                            <div key={draft.id} className={`rounded-xl border p-3 ${darkMode ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"}`}>
+                            <div key={draft.id} className={`rounded-xl border px-3 py-2.5 ${darkMode ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"}`}>
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <div className="font-bold">{med?.name || "Medication"}</div>
-                                  <div className="mt-1 text-xs text-slate-500">Dose: {draft.calculated_dose} {draft.calculated_dose_unit}{draft.calculated_volume != null ? ` • ${draft.calculated_volume} ${draft.volume_unit}` : ""} {draft.route ? ` • ${draft.route}` : ""} {draft.frequency ? ` • ${draft.frequency}` : ""} {draft.duration_days ? ` • ${draft.duration_days} days` : ""}</div>
-                                  {outside && <div className="mt-1 text-xs font-bold text-amber-600">⚠ Dose is outside the configured protocol range.</div>}
+                                  <div className="text-sm font-bold">{med?.name || "Medication"}</div>
+                                  <div className={`mt-1 text-xs leading-5 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                                    {language === "ar" ? "الجرعة:" : "Dose:"} {draft.calculated_dose} {draft.calculated_dose_unit}{draft.calculated_volume != null ? ` • ${draft.calculated_volume} ${draft.volume_unit}` : ""}{draft.route ? ` • ${draft.route}` : ""}{draft.frequency ? ` • ${draft.frequency}` : ""}{draft.duration_days ? ` • ${draft.duration_days} ${language === "ar" ? "يوم" : "days"}` : ""}
+                                  </div>
+                                  {outside && <div className="mt-1 text-xs font-bold text-amber-600">⚠ {language === "ar" ? "الجرعة خارج النطاق المسجل للدواء." : "Dose is outside the configured protocol range."}</div>}
                                 </div>
-                                <button type="button" onClick={() => removeMedication(draft.id)} className="rounded-lg px-2 py-1 text-rose-500 hover:bg-rose-50">✕</button>
+                                <button type="button" aria-label={language === "ar" ? "حذف الدواء" : "Remove medication"} onClick={() => removeMedication(draft.id)} className="rounded-lg px-2 py-1 text-rose-500 hover:bg-rose-50">✕</button>
                               </div>
                             </div>
                           );
@@ -94,7 +243,31 @@ export default function NewVisitTreatmentFields({
                       </div>
                     )}
 
-                    <textarea rows={4} value={treatment} onChange={(e) => setTreatment(e.target.value)} placeholder={t.treatmentPlaceholder} className={`mt-4 w-full resize-none rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${darkMode ? "border-slate-700 bg-slate-900 text-white placeholder:text-slate-500" : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"}`} />
+                    <div className="mt-3 border-t pt-3" style={{ borderColor: darkMode ? "#334155" : "#e2e8f0" }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowTreatmentNotes((value) => !value)}
+                        className={`text-xs font-semibold ${darkMode ? "text-blue-300 hover:text-blue-200" : "text-blue-700 hover:text-blue-800"}`}
+                      >
+                        {showTreatmentNotes
+                          ? (language === "ar" ? "− إخفاء ملاحظات العلاج" : "− Hide treatment note")
+                          : (language === "ar" ? "+ إضافة ملاحظات علاج اختيارية" : "+ Add optional treatment note")}
+                      </button>
+                      {showTreatmentNotes && (
+                        <div className="mt-2">
+                          <label className={`mb-1.5 block text-xs font-medium ${darkMode ? "text-slate-300" : "text-slate-600"}`}>
+                            {language === "ar" ? "خطة علاج أو تعليمات إضافية (اختياري)" : "Additional treatment plan / instructions (optional)"}
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={treatment}
+                            onChange={(e) => setTreatment(e.target.value)}
+                            placeholder={language === "ar" ? "اكتب أي تعليمات إضافية غير موجودة في الأدوية المضافة..." : "Add instructions not covered by the selected medications..."}
+                            className={`w-full resize-y rounded-xl border px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 ${darkMode ? "border-slate-700 bg-slate-900 text-white placeholder:text-slate-500" : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"}`}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
