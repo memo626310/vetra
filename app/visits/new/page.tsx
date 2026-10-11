@@ -6,7 +6,7 @@ import Link from "next/link";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import type { FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
 import type {
-  Language, Client, Pet, Visit, Medication, MedicationDraft,
+  Language, Client, Pet, Visit, Medication, MedicationDraft, ExternalMedicationDraft,
   VaccinationDraft, PetDetails,
 } from "@/components/visits/new-visit-types";
 import { translations } from "@/components/visits/new-visit-types";
@@ -75,6 +75,7 @@ export default function NewVisitPage() {
   const [selectedMedicationId, setSelectedMedicationId] = useState("");
   const [medicationDrafts, setMedicationDrafts] = useState<MedicationDraft[]>([]);
   const [formularyDrafts, setFormularyDrafts] = useState<FormularyVisitDraft[]>([]);
+  const [externalMedicationDrafts, setExternalMedicationDrafts] = useState<ExternalMedicationDraft[]>([]);
   const [vaccinations, setVaccinations] = useState<VaccinationDraft[]>([]);
 
   const t = translations[language];
@@ -147,26 +148,11 @@ export default function NewVisitPage() {
         .order("created_at", { ascending: false });
 
       if (error) {
-  console.error("LOAD CLIENTS ERROR:", {
-    message: error.message,
-    code: error.code,
-    details: error.details,
-    hint: error.hint,
-  });
-
-  setMessage(
-    [
-      error.message,
-      error.code ? `Code: ${error.code}` : "",
-      error.details ? `Details: ${error.details}` : "",
-      error.hint ? `Hint: ${error.hint}` : "",
-    ]
-      .filter(Boolean)
-      .join(" · ")
-  );
-} else {
-  setClients(data || []);
-}
+        console.error("LOAD CLIENTS ERROR:", error);
+        setMessage(error.message);
+      } else {
+        setClients(data || []);
+      }
     } catch (error) {
       console.error("LOAD CLIENTS ERROR:", error);
       setMessage(error instanceof Error ? error.message : t.loadError);
@@ -571,7 +557,16 @@ export default function NewVisitPage() {
           .filter(Boolean)
           .join(" - ");
       }).join("\n");
-      const finalTreatment = [treatment.trim(), medicationText, formularyText].filter(Boolean).join("\n\n");
+      const externalMedicationText = externalMedicationDrafts.map((draft) => {
+        const details = [draft.doseText, draft.route, draft.frequency, draft.duration, draft.instructions]
+          .map((value) => String(value || "").trim())
+          .filter(Boolean);
+        const metadata = [draft.activeIngredient, draft.manufacturer, draft.bsavaDrugName ? `BSAVA reference: ${draft.bsavaDrugName}` : null, draft.weightKg != null ? `weight snapshot ${draft.weightKg} kg` : null]
+          .filter(Boolean)
+          .join("; ");
+        return `[DrugEye / manual dose — clinician entered] ${draft.productName}${metadata ? ` (${metadata})` : ""}: ${details.join(" - ")}`;
+      }).join("\n");
+      const finalTreatment = [treatment.trim(), medicationText, formularyText, externalMedicationText].filter(Boolean).join("\n\n");
       const finalExamination =
         examStatus === "normal"
           ? "Normal"
@@ -895,6 +890,9 @@ export default function NewVisitPage() {
                 weight={weight}
                 formularyDrafts={formularyDrafts}
                 setFormularyDrafts={setFormularyDrafts}
+                externalMedicationDrafts={externalMedicationDrafts}
+                onAddManualExternalMedication={(draft) => setExternalMedicationDrafts((current) => [...current, draft])}
+                onRemoveManualExternalMedication={(id) => setExternalMedicationDrafts((current) => current.filter((draft) => draft.id !== id))}
                 medicationSearch={medicationSearch}
                 setMedicationSearch={setMedicationSearch}
                 filteredMedications={filteredMedications}

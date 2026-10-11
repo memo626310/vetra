@@ -72,6 +72,23 @@ export type MedicationDraft = {
   instructions: string | null;
 };
 
+
+export type ExternalMedicationDraft = {
+  id: string;
+  productName: string;
+  activeIngredient: string | null;
+  manufacturer: string | null;
+  price: string | null;
+  doseText: string;
+  route: string;
+  frequency: string;
+  duration: string;
+  instructions: string;
+  weightKg: number | null;
+  source: "DrugEye";
+  bsavaDrugName: string | null;
+};
+
 export type VaccinationDraft = {
   id: string;
   vaccine_name: string;

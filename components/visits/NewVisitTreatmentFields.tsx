@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { BSAVAFormularyPicker, type FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
-import type { Language, Medication, MedicationDraft, PetDetails, VaccinationDraft, VisitTranslations } from "./new-visit-types";
+import type { ExternalMedicationDraft, Language, Medication, MedicationDraft, PetDetails, VaccinationDraft, VisitTranslations } from "./new-visit-types";
 import { getVaccinationStageOptions, calculateNextVaccinationDose } from "./new-visit-utils";
+import DrugEyeProductLinks from "./DrugEyeProductLinks";
 
 type DrugEyeResult = {
   id: string;
@@ -20,6 +21,9 @@ type Props = {
   weight: string;
   formularyDrafts: FormularyVisitDraft[];
   setFormularyDrafts: (value: FormularyVisitDraft[]) => void;
+  externalMedicationDrafts: ExternalMedicationDraft[];
+  onAddManualExternalMedication: (draft: ExternalMedicationDraft) => void;
+  onRemoveManualExternalMedication: (id: string) => void;
   medicationSearch: string;
   setMedicationSearch: (value: string) => void;
   filteredMedications: Medication[];
@@ -44,6 +48,7 @@ type Props = {
 
 export default function NewVisitTreatmentFields({
   language, darkMode, t, petDetails, weight, formularyDrafts, setFormularyDrafts,
+  externalMedicationDrafts, onAddManualExternalMedication, onRemoveManualExternalMedication,
   medicationSearch, setMedicationSearch,
   filteredMedications, addMedication, medications, medicationDrafts, removeMedication,
   treatment, setTreatment, vaccinations, addVaccination, updateVaccination, removeVaccination,
@@ -195,26 +200,27 @@ export default function NewVisitTreatmentFields({
                             </div>
                           )}
 
-                          {drugEyeResultQuery === query && drugEyeResults.map((result) => (
-                            <div key={result.id} className={`border-b px-3 py-3 last:border-b-0 ${darkMode ? "border-slate-800" : "border-slate-100"}`}>
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className={`text-sm font-semibold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{result.name}</div>
-                                  {result.activeIngredient && <div className="mt-1 text-xs text-slate-500">{result.activeIngredient}</div>}
-                                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
-                                    {result.manufacturer && <span>{result.manufacturer}</span>}
-                                    {result.category && <span>{result.category}</span>}
-                                  </div>
-                                </div>
-                                {result.price && <span className="shrink-0 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">{result.price}</span>}
-                              </div>
-                            </div>
-                          ))}
+                          <DrugEyeProductLinks
+                            results={drugEyeResultQuery === query ? drugEyeResults : []}
+                            language={language}
+                            darkMode={darkMode}
+                            medications={medications}
+                            petSpecies={petDetails?.species}
+                            weightKg={weight.trim() ? Number(weight) : null}
+                            onAddMedication={addMedication}
+                            onAddBsavaDraft={(draft) => {
+                              const duplicate = formularyDrafts.some((item) => item.drugId === draft.drugId && item.route === draft.route && item.doseExpression === draft.doseExpression);
+                              if (duplicate) return false;
+                              setFormularyDrafts([...formularyDrafts, draft]);
+                              return true;
+                            }}
+                            onAddManualDraft={onAddManualExternalMedication}
+                          />
 
                           <div className={`border-t px-3 py-2 text-[11px] leading-5 ${darkMode ? "border-slate-800 text-slate-400" : "border-slate-100 text-slate-500"}`}>
                             {language === "ar"
-                              ? "نتائج DrugEye مرجعية فقط. لإضافة الدواء وحساب جرعته، استخدم دواءً مسجلاً في مكتبة VETRA ببيانات جرعة معتمدة."
-                              : "DrugEye results are for reference only. Prescribing and dose calculation require a medication configured in VETRA."}
+                              ? "لو فيه بروتوكول BSAVA مناسب، احسب الجرعة بوزن الحيوان؛ ولو مفيش، سجّل جرعة يدوية يحددها الطبيب."
+                              : "Use a compatible BSAVA protocol for weight-based calculation; otherwise record a clinician-entered manual dose."}
                           </div>
                         </div>
                       )}
@@ -240,6 +246,28 @@ export default function NewVisitTreatmentFields({
                             </div>
                           );
                         })}
+                      </div>
+                    )}
+
+                    {externalMedicationDrafts.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <div className={`text-[11px] font-bold uppercase tracking-wide ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
+                          {language === "ar" ? "أدوية خارجية بجرعة يدوية" : "External medications with manual dose"}
+                        </div>
+                        {externalMedicationDrafts.map((draft) => (
+                          <div key={draft.id} className={`rounded-xl border px-3 py-2.5 ${darkMode ? "border-amber-900/70 bg-slate-900" : "border-amber-200 bg-amber-50/50"}`}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-bold">{draft.productName}</div>
+                                {draft.activeIngredient && <div className="mt-0.5 text-xs text-slate-500">{draft.activeIngredient}</div>}
+                                <div className="mt-1 text-xs leading-5">{language === "ar" ? "الجرعة اليدوية:" : "Manual dose:"} {draft.doseText}{draft.route ? ` · ${draft.route}` : ""}{draft.frequency ? ` · ${draft.frequency}` : ""}{draft.duration ? ` · ${draft.duration}` : ""}</div>
+                                {draft.instructions && <div className="mt-1 text-xs text-slate-500">{draft.instructions}</div>}
+                                <div className="mt-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300">{language === "ar" ? "راجع الوحدات والجرعة قبل حفظ الكشف — لا يوجد حساب تلقائي لهذا الإدخال." : "Verify dose and units before saving — no automatic calculation for this entry."}</div>
+                              </div>
+                              <button type="button" aria-label={language === "ar" ? "حذف العلاج الخارجي" : "Remove external medication"} onClick={() => onRemoveManualExternalMedication(draft.id)} className="rounded-lg px-2 py-1 text-rose-500 hover:bg-rose-50">✕</button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
 
