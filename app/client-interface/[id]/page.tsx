@@ -371,21 +371,54 @@ function getRabiesStatus(records: Vaccine[], petBirth: string | null): ProtocolS
     : { points: 2, max: 2, status: state, due, reset: false, record: rabies };
 }
 
+
 function getParasiteStatus(records: Vaccine[]): ProtocolStatus {
   const record = latestRecord(records, isParasite);
+
+  // No recorded dose = no score point.
   if (!record) {
-    return { points: 1, max: 1, status: "current", due: null, reset: false, record: null };
+    return {
+      points: 0,
+      max: 1,
+      status: "due",
+      due: todayDateOnly(),
+      reset: false,
+      record: null,
+    };
   }
 
   if (!record.next_dose_at) {
-    return { points: 1, max: 1, status: "current", due: null, reset: false, record };
+    return {
+      points: 1,
+      max: 1,
+      status: "current",
+      due: null,
+      reset: false,
+      record,
+    };
   }
 
   const state = protocolState(record.next_dose_at);
+
   return state === "overdue"
-    ? { points: 0, max: 1, status: "overdue", due: record.next_dose_at, reset: false, record }
-    : { points: 1, max: 1, status: state, due: record.next_dose_at, reset: false, record };
+    ? {
+        points: 0,
+        max: 1,
+        status: "overdue",
+        due: record.next_dose_at,
+        reset: false,
+        record,
+      }
+    : {
+        points: 1,
+        max: 1,
+        status: state,
+        due: record.next_dose_at,
+        reset: false,
+        record,
+      };
 }
+
 
 function getProtocolStatus(records: Vaccine[], pet: Pet | null) {
   return {
@@ -699,7 +732,11 @@ export default function ClientInterfaceIdPage(){
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {scoreItems.map((item)=><div key={item.label} className={dark?"rounded-xl border border-white/[.05] bg-white/[.025] px-3 py-2":"rounded-xl border border-slate-100 bg-white/80 px-3 py-2"}>
               <div className="flex items-center justify-between gap-2"><span className="truncate text-[10px] font-bold text-slate-400">{item.label}</span><span className={item.done?"text-emerald-400":"text-cyan-300"}>{item.done ? "✓" : "•"}</span></div>
-              <div className="mt-1 text-[9px] font-semibold text-slate-500">{item.done ? "✓" : item.status === "grace" ? (lang==="ar" ? "فترة السماح 7 أيام" : "7-day grace period") : item.status === "overdue" ? (lang==="ar" ? "متأخر — يحتاج إعادة" : "Overdue — reset needed") : item.status === "not_due" ? (lang==="ar" ? "لسه مش مستحق" : "Not due yet") : (lang==="ar" ? "منتظم" : "On track")}</div>
+              <div className="mt-1 text-[9px] font-semibold text-slate-500">{item.done ? "✓" : item.status === "grace" ? (lang==="ar" ? "فترة السماح 7 أيام" : "7-day grace period") : item.status === "overdue" ? (lang==="ar" ? "متأخر — يحتاج إعادة" : "Overdue — reset needed") :item.status === "due"
+  ? (lang === "ar"
+      ? "لم تُسجّل جرعة بعد"
+      : "No dose recorded yet")
+  : item.status === "not_due" ? (lang==="ar" ? "لسه مش مستحق" : "Not due yet") : (lang==="ar" ? "منتظم" : "On track")}</div>
             </div>)}
           </div>
           {catCareScore !== null && scoreRemaining>0&&<div className="mt-3 text-center text-[10px] font-bold text-slate-500">{lang==="ar"?`إيه اللي ناقص؟ تعالى كمّل ${scoreRemaining} ${t.scoreMissing} 👀`: `${scoreRemaining} ${t.scoreMissing} to go — can you reach 10/10? 👀`}</div>}
