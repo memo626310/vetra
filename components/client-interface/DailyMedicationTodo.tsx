@@ -361,7 +361,7 @@ export default function DailyMedicationTodo({
   }
 
   return (
-    <section className={`mt-5 rounded-[2rem] p-5 sm:p-6 ${surface}`}>
+    <section id="daily-medication-todo" className={`mt-5 scroll-mt-24 rounded-[2rem] p-5 sm:p-6 ${surface}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-bold text-cyan-400">{text(lang, "متابعة العلاج", "TREATMENT TRACKER")}</p>

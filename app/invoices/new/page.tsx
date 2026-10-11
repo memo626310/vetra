@@ -29,6 +29,13 @@ type Product = {
   category?: { name: string } | null;
 };
 
+type FinancialAccount = {
+  id: string;
+  name: string;
+  account_type: "cash" | "bank" | "wallet" | "card" | "other";
+  requires_session: boolean;
+  is_default: boolean;
+};
 type InvoiceLine = {
   key: string;
   item_type: "product" | "service";
@@ -75,6 +82,9 @@ export default function NewInvoicePage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>([]);
+  const [financialAccountId, setFinancialAccountId] = useState("");
+  const [openRegisterAccountIds, setOpenRegisterAccountIds] = useState<string[]>([]);
 
   const [clientId, setClientId] = useState("");
   const [petId, setPetId] = useState("");
@@ -138,7 +148,7 @@ export default function NewInvoicePage() {
 
     setAuthorized(true);
 
-    const [clientsResult, productsResult, settingsResult] =
+    const [clientsResult, productsResult, settingsResult, accountsResult, sessionsResult] =
       await Promise.all([
         db
           .from("clients")
@@ -164,6 +174,17 @@ export default function NewInvoicePage() {
           .eq("clinic_id", context.clinic_id)
           .limit(1)
           .maybeSingle(),
+        db
+          .from("financial_accounts")
+          .select("id,name,account_type,requires_session,is_default")
+          .eq("clinic_id", context.clinic_id)
+          .eq("is_active", true)
+          .order("name"),
+        db
+          .from("cash_register_sessions")
+          .select("account_id")
+          .eq("clinic_id", context.clinic_id)
+          .eq("status", "open"),
       ]);
 
     if (clientsResult.error) {
@@ -181,6 +202,16 @@ export default function NewInvoicePage() {
     if (settingsResult.data?.consultation_fee != null) {
       setConsultationFee(Number(settingsResult.data.consultation_fee));
     }
+    if (!accountsResult.error) {
+      setFinancialAccounts((accountsResult.data || []) as FinancialAccount[]);
+    } else {
+      setMessage(accountsResult.error.message);
+    }
+    if (!sessionsResult.error) {
+      setOpenRegisterAccountIds((sessionsResult.data || []).map((row) => row.account_id));
+    } else {
+      setMessage(sessionsResult.error.message);
+    }
 
     setLoading(false);
   }
@@ -188,6 +219,26 @@ export default function NewInvoicePage() {
   useEffect(() => {
     if (ready) loadPage();
   }, [ready]);
+  useEffect(() => {
+    if (!financialAccounts.length) {
+      setFinancialAccountId("");
+      return;
+    }
+    const preferredType = paymentMethod === "cash" ? "cash"
+      : paymentMethod === "card" ? "card"
+      : paymentMethod === "wallet" ? "wallet"
+      : paymentMethod === "bank_transfer" ? "bank"
+      : paymentMethod === "other" ? null : "cash";
+    const candidates = preferredType
+      ? financialAccounts.filter((account) => account.account_type === preferredType)
+      : financialAccounts;
+    const preferred = candidates.find((account) => account.is_default) || candidates[0];
+    setFinancialAccountId((current) =>
+      current && candidates.some((account) => account.id === current)
+        ? current
+        : preferred?.id || ""
+    );
+  }, [paymentMethod, financialAccounts]);
 
   useEffect(() => {
     if (!clientId) {
@@ -493,8 +544,34 @@ export default function NewInvoicePage() {
       );
       return;
     }
+    if (!issueAfterSave && paid > 0) {
+      setMessage(
+        language === "ar"
+          ? "التحصيل يتسجل مع إصدار الفاتورة فقط. صفّر المدفوع لحفظ مسودة، أو أصدر الفاتورة لتسجيله في الخزنة."
+          : "A receipt is posted only when the invoice is issued. Set paid amount to zero to save a draft, or issue the invoice to record the receipt."
+      );
+      return;
+    }
 
-    setSaving(true);
+    if (paid > 0 && (!paymentMethod || !financialAccountId)) {
+      setMessage(
+        language === "ar"
+          ? "اختار طريقة الدفع والحساب المالي قبل تسجيل التحصيل."
+          : "Choose a payment method and financial account before recording a receipt."
+      );
+      return;
+    }
+
+    const selectedFinancialAccount = financialAccounts.find((account) => account.id === financialAccountId);
+    if (issueAfterSave && paid > 0 && selectedFinancialAccount?.requires_session && !openRegisterAccountIds.includes(financialAccountId)) {
+      setMessage(
+        language === "ar"
+          ? "افتح وردية الخزنة من صفحة الخزن قبل إصدار فاتورة بها تحصيل نقدي."
+          : "Open the cash register session from Cash Registers before issuing an invoice with a cash receipt."
+      );
+      return;
+    }
+setSaving(true);
 
     const {
       data: { user },
@@ -522,17 +599,14 @@ export default function NewInvoicePage() {
         pet_id: petId || null,
         visit_id: visitId || null,
         status: "draft",
-        payment_method: paymentMethod || null,
+        payment_method: null,
         subtotal,
         discount: invoiceDiscount,
         total,
-        paid_amount: paid,
+        paid_amount: 0,
         notes: notes.trim() || null,
         issued_at: issueAfterSave ? new Date().toISOString() : null,
-        paid_at:
-          issueAfterSave && paid >= total && total > 0
-            ? new Date().toISOString()
-            : null,
+        paid_at: null,
         created_by: user.id,
         updated_by: user.id,
       })
@@ -593,9 +667,30 @@ export default function NewInvoicePage() {
         setSaving(false);
         return;
       }
-    }
+    }    if (issueAfterSave && paid > 0) {
+      const { error: receiptError } = await db.rpc("vetra_record_invoice_payment", {
+        p_invoice_id: invoice.id,
+        p_account_id: financialAccountId,
+        p_amount: paid,
+        p_payment_method: paymentMethod,
+        p_reference: null,
+        p_notes: notes.trim() || null,
+        p_session_id: null,
+        p_idempotency_key: `initial-invoice-payment:${invoice.id}`,
+      });
 
-    setSuccess(
+      if (receiptError) {
+        setMessage(
+          language === "ar"
+            ? `تم إصدار الفاتورة، لكن التحصيل لم يُسجل في الخزنة: ${receiptError.message}. سجّل التحصيل من صفحة المالية.`
+            : `The invoice was issued, but the receipt was not posted: ${receiptError.message}. Record it from the Finance page.`
+        );
+        setSaving(false);
+        setTimeout(() => router.push(`/invoices/${invoice.id}`), 1200);
+        return;
+      }
+    }
+setSuccess(
       language === "ar"
         ? issueAfterSave
           ? "تم إصدار الفاتورة بنجاح."
@@ -1150,6 +1245,42 @@ export default function NewInvoicePage() {
                     <option value="bank_transfer">Bank transfer</option>
                     <option value="other">Other</option>
                   </select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-500">
+                    {language === "ar" ? "الحساب المستلم للمبلغ" : "Account receiving payment"}
+                  </label>
+                  <select
+                    value={financialAccountId}
+                    onChange={(e) => setFinancialAccountId(e.target.value)}
+                    className={`w-full rounded-2xl border px-4 py-3 outline-none ${
+                      darkMode
+                        ? "border-white/[0.07] bg-[#0F1115]"
+                        : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <option value="">
+                      {language === "ar" ? "اختار الخزنة أو الحساب" : "Select a receiving account"}
+                    </option>
+                    {financialAccounts
+                      .filter((account) => {
+                        if (paymentMethod === "cash") return account.account_type === "cash";
+                        if (paymentMethod === "card") return account.account_type === "card";
+                        if (paymentMethod === "wallet") return account.account_type === "wallet";
+                        if (paymentMethod === "bank_transfer") return account.account_type === "bank";
+                        return true;
+                      })
+                      .map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.name}{account.requires_session ? (language === "ar" ? " · وردية خزنة" : " · Register session") : ""}
+                        </option>
+                      ))}
+                  </select>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {language === "ar"
+                      ? "لو طريقة الدفع نقدي، لازم تكون الوردية مفتوحة قبل إصدار الفاتورة."
+                      : "For cash payments, the register session must be open before issuing the invoice."}
+                  </p>
                 </div>
 
                 <div>
