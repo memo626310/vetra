@@ -1,0 +1,489 @@
+import { useMemo } from "react";
+import type { Language, PetDetails, Visit, VisitTranslations } from "./new-visit-types";
+import { VitalCard } from "./NewVisitClinicalWidgets";
+import { calculateAge, formatDate, genderLabel, speciesLabel } from "./new-visit-utils";
+
+type VitalReading = { value: number; visit: Visit };
+type VitalData = {
+  weight: VitalReading[];
+  temperature: VitalReading[];
+  heartRate: VitalReading[];
+  respiratoryRate: VitalReading[];
+};
+
+type Props = {
+  petDetails: PetDetails;
+  visits: Visit[];
+  language: Language;
+  darkMode: boolean;
+  t: VisitTranslations;
+  resetSelection: () => void;
+  onOldVisitSelect: (visit: Visit) => void;
+};
+
+export default function NewVisitPatientOverview({
+  petDetails, visits, language, darkMode, t, resetSelection, onOldVisitSelect,
+}: Props) {
+  const latestVisit = visits[0] || null;
+  const setSelectedOldVisit = onOldVisitSelect;
+  const vitalData = useMemo<VitalData>(() => ({
+    weight: visits.filter((visit) => visit.weight !== null).map((visit) => ({ value: Number(visit.weight), visit })),
+    temperature: visits.filter((visit) => visit.temperature !== null).map((visit) => ({ value: Number(visit.temperature), visit })),
+    heartRate: visits.filter((visit) => visit.heart_rate !== null).map((visit) => ({ value: Number(visit.heart_rate), visit })),
+    respiratoryRate: visits.filter((visit) => visit.respiratory_rate !== null).map((visit) => ({ value: Number(visit.respiratory_rate), visit })),
+  }), [visits]);
+  const latestWeight = vitalData.weight[0]?.value ?? null;
+  const previousWeight = vitalData.weight[1]?.value ?? null;
+  const latestTemperature = vitalData.temperature[0]?.value ?? null;
+  const previousTemperature = vitalData.temperature[1]?.value ?? null;
+  const latestHeartRate = vitalData.heartRate[0]?.value ?? null;
+  const previousHeartRate = vitalData.heartRate[1]?.value ?? null;
+  const latestRespiratoryRate = vitalData.respiratoryRate[0]?.value ?? null;
+  const previousRespiratoryRate = vitalData.respiratoryRate[1]?.value ?? null;
+
+  return (<>
+            {/* PATIENT HEADER */}
+            <section
+              className={`overflow-hidden rounded-3xl border shadow-sm transition-all duration-300 ${
+                darkMode
+                  ? "border-slate-800 bg-slate-900"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <div className="flex flex-col gap-5 p-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-3xl text-white shadow-lg shadow-blue-500/20">
+                    {petDetails.species?.toLowerCase() === "cat"
+                      ? "🐱"
+                      : petDetails.species?.toLowerCase() ===
+                        "dog"
+                      ? "🐶"
+                      : "🐾"}
+                  </div>
+
+                  <div>
+                    <div
+                      className={`mb-1 text-2xl font-bold ${
+                        darkMode ? "text-white" : "text-slate-900"
+                      }`}
+                    >
+                      {petDetails.name}
+                    </div>
+
+                    <div
+                      className={`text-sm ${
+                        darkMode
+                          ? "text-slate-400"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {speciesLabel(petDetails.species, t)}
+                      {petDetails.breed
+                        ? ` • ${petDetails.breed}`
+                        : ""}
+                      {petDetails.gender
+                        ? ` • ${genderLabel(
+                            petDetails.gender,
+                            t
+                          )}`
+                        : ""}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={resetSelection}
+                  className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                    darkMode
+                      ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  ← {t.changeSelection}
+                </button>
+              </div>
+            </section>
+
+            {/* PATIENT SUMMARY */}
+            <section>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2
+                    className={`text-xl font-bold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {t.patientSummary}
+                  </h2>
+
+                  <p
+                    className={`mt-1 text-sm ${
+                      darkMode
+                        ? "text-slate-500"
+                        : "text-slate-500"
+                    }`}
+                  >
+                    {t.previousVisits}: {visits.length}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div
+                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                    darkMode
+                      ? "border-slate-800 bg-slate-900"
+                      : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="mb-3 text-xl">👤</div>
+
+                  <div
+                    className={`text-xs ${
+                      darkMode
+                        ? "text-slate-500"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {t.owner}
+                  </div>
+
+                  <div
+                    className={`mt-1 font-semibold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {petDetails.client?.name || "—"}
+                  </div>
+
+                  {petDetails.client?.phone && (
+                    <div
+                      className={`mt-1 text-xs ${
+                        darkMode
+                          ? "text-slate-500"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {petDetails.client.phone}
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                    darkMode
+                      ? "border-slate-800 bg-slate-900"
+                      : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="mb-3 text-xl">🐾</div>
+
+                  <div
+                    className={`text-xs ${
+                      darkMode
+                        ? "text-slate-500"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {t.breed}
+                  </div>
+
+                  <div
+                    className={`mt-1 font-semibold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {petDetails.breed || "—"}
+                  </div>
+                </div>
+
+                <div
+                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                    darkMode
+                      ? "border-slate-800 bg-slate-900"
+                      : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="mb-3 text-xl">🎂</div>
+
+                  <div
+                    className={`text-xs ${
+                      darkMode
+                        ? "text-slate-500"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {t.birthDate}
+                  </div>
+
+                  <div
+                    className={`mt-1 font-semibold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {petDetails.birth_date
+                      ? calculateAge(
+                          petDetails.birth_date,
+                          language
+                        )
+                      : "—"}
+                  </div>
+
+                  {petDetails.birth_date && (
+                    <div
+                      className={`mt-1 text-xs ${
+                        darkMode
+                          ? "text-slate-500"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {formatDate(
+                        petDetails.birth_date,
+                        language
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                    darkMode
+                      ? "border-slate-800 bg-slate-900"
+                      : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="mb-3 text-xl">🆔</div>
+
+                  <div
+                    className={`text-xs ${
+                      darkMode
+                        ? "text-slate-500"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {t.microchip}
+                  </div>
+
+                  <div
+                    className={`mt-1 break-all font-semibold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {petDetails.microchip || "—"}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* IMPORTANT NOTES */}
+            <section
+              className={`rounded-2xl border p-5 transition-all duration-300 ${
+                darkMode
+                  ? "border-amber-900/50 bg-amber-950/20"
+                  : "border-amber-200 bg-amber-50"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="text-xl">⚠️</div>
+
+                <div>
+                  <h3
+                    className={`font-bold ${
+                      darkMode
+                        ? "text-amber-300"
+                        : "text-amber-900"
+                    }`}
+                  >
+                    {t.importantNotes}
+                  </h3>
+
+                  <p
+                    className={`mt-1 whitespace-pre-wrap text-sm ${
+                      darkMode
+                        ? "text-amber-200/70"
+                        : "text-amber-800/80"
+                    }`}
+                  >
+                    {petDetails.notes || t.noNotes}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            {/* LAST VISIT SUMMARY */}
+            <section className="grid gap-4 lg:grid-cols-3">
+              <div
+                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  darkMode
+                    ? "border-slate-800 bg-slate-900"
+                    : "border-slate-200 bg-white"
+                }`}
+              >
+                <div className="mb-3 flex items-center gap-2">
+                  <span>📅</span>
+
+                  <h3
+                    className={`font-bold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {t.lastVisit}
+                  </h3>
+                </div>
+
+                <div
+                  className={`text-sm ${
+                    darkMode
+                      ? "text-slate-400"
+                      : "text-slate-600"
+                  }`}
+                >
+                  {latestVisit
+                    ? formatDate(
+                        latestVisit.visit_date,
+                        language
+                      )
+                    : t.noPreviousVisits}
+                </div>
+              </div>
+
+              <div
+                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  darkMode
+                    ? "border-slate-800 bg-slate-900"
+                    : "border-slate-200 bg-white"
+                }`}
+              >
+                <div className="mb-3 flex items-center gap-2">
+                  <span>🩺</span>
+
+                  <h3
+                    className={`font-bold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {t.lastDiagnosis}
+                  </h3>
+                </div>
+
+                <div
+                  className={`line-clamp-3 text-sm ${
+                    darkMode
+                      ? "text-slate-400"
+                      : "text-slate-600"
+                  }`}
+                >
+                  {latestVisit?.diagnosis ||
+                    t.noDiagnosis}
+                </div>
+              </div>
+
+              <div
+                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  darkMode
+                    ? "border-slate-800 bg-slate-900"
+                    : "border-slate-200 bg-white"
+                }`}
+              >
+                <div className="mb-3 flex items-center gap-2">
+                  <span>💊</span>
+
+                  <h3
+                    className={`font-bold ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {t.lastTreatment}
+                  </h3>
+                </div>
+
+                <div
+                  className={`line-clamp-3 text-sm ${
+                    darkMode
+                      ? "text-slate-400"
+                      : "text-slate-600"
+                  }`}
+                >
+                  {latestVisit?.treatment ||
+                    t.noTreatment}
+                </div>
+              </div>
+            </section>
+
+            {/* VITAL GRAPHS */}
+            <section>
+              <div className="mb-4">
+                <h2
+                  className={`text-xl font-bold ${
+                    darkMode ? "text-white" : "text-slate-900"
+                  }`}
+                >
+                  📈 {t.trends}
+                </h2>
+
+                <p
+                  className={`mt-1 text-sm ${
+                    darkMode
+                      ? "text-slate-500"
+                      : "text-slate-500"
+                  }`}
+                >
+                  Click any point to open that examination.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <VitalCard
+                  title={t.weight}
+                  icon="⚖️"
+                  latest={latestWeight}
+                  previous={previousWeight}
+                  unit={t.kg}
+                  color="#3b82f6"
+                  values={vitalData.weight}
+                  onPointClick={setSelectedOldVisit}
+                  darkMode={darkMode}
+                />
+
+                <VitalCard
+                  title={t.temperature}
+                  icon="🌡️"
+                  latest={latestTemperature}
+                  previous={previousTemperature}
+                  unit={t.celsius}
+                  color="#f97316"
+                  values={vitalData.temperature}
+                  onPointClick={setSelectedOldVisit}
+                  darkMode={darkMode}
+                />
+
+                <VitalCard
+                  title={t.heartRate}
+                  icon="❤️"
+                  latest={latestHeartRate}
+                  previous={previousHeartRate}
+                  unit={t.bpm}
+                  color="#ef4444"
+                  values={vitalData.heartRate}
+                  onPointClick={setSelectedOldVisit}
+                  darkMode={darkMode}
+                />
+
+                <VitalCard
+                  title={t.respiratoryRate}
+                  icon="🫁"
+                  latest={latestRespiratoryRate}
+                  previous={previousRespiratoryRate}
+                  unit={t.rpm}
+                  color="#8b5cf6"
+                  values={vitalData.respiratoryRate}
+                  onPointClick={setSelectedOldVisit}
+                  darkMode={darkMode}
+                />
+              </div>
+            </section>
+
+
+  </>);
+}
