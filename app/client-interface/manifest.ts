@@ -11,30 +11,30 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     display_override: ["standalone"],
     orientation: "portrait",
-    background_color: "#F8FAFC",
+    background_color: "#08182D",
     theme_color: "#0B2540",
     lang: "en",
     dir: "auto",
     categories: ["medical", "lifestyle"],
     icons: [
       {
-        src: "/client-interface/icons/icon-192",
+        src: "/vetra-icons/vetra-client-icon-192.png",
         sizes: "192x192",
         type: "image/png",
         purpose: "any",
       },
-{
-  src: "/PATH/TO/YOUR-ICON.png",
-  sizes: "192x192",
-  type: "image/png",
-  purpose: "any",
-},
-{
-  src: "/PATH/TO/YOUR-ICON.png",
-  sizes: "192x192",
-  type: "image/png",
-  purpose: "maskable",
-},
+      {
+        src: "/vetra-icons/vetra-client-icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/vetra-icons/vetra-client-icon-maskable-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
+      },
     ],
   };
 }
