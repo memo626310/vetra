@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -10,6 +10,7 @@ export default function ClientLoginPage() {
   const [dark, setDark] = useState(false);
   const [phone, setPhone] = useState("");
   const [clientCode, setClientCode] = useState("");
+  const [keepSignedIn, setKeepSignedIn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -96,23 +97,19 @@ export default function ClientLoginPage() {
         return;
       }
 
-     window.localStorage.removeItem("vetra-client-id");
-window.localStorage.removeItem("vetra-client-code");
-window.localStorage.removeItem("vetra-client-phone");
+      const ownerSessionStorage = keepSignedIn ? window.localStorage : window.sessionStorage;
+      const otherStorage = keepSignedIn ? window.sessionStorage : window.localStorage;
+      const ownerSessionKeys = ["vetra-client-id", "vetra-client-code", "vetra-client-phone"];
 
-window.sessionStorage.removeItem("vetra-client-id");
-window.sessionStorage.removeItem("vetra-client-code");
-window.sessionStorage.removeItem("vetra-client-phone");
+      ownerSessionKeys.forEach((key) => {
+        otherStorage.removeItem(key);
+      });
 
-window.localStorage.setItem("vetra-client-id", client.id);
-window.localStorage.setItem("vetra-client-code", client.client_code);
-window.localStorage.setItem("vetra-client-phone", normalizedPhone);
+      ownerSessionStorage.setItem("vetra-client-id", client.id);
+      ownerSessionStorage.setItem("vetra-client-code", client.client_code);
+      ownerSessionStorage.setItem("vetra-client-phone", normalizedPhone);
 
-window.sessionStorage.setItem("vetra-client-id", client.id);
-window.sessionStorage.setItem("vetra-client-code", client.client_code);
-window.sessionStorage.setItem("vetra-client-phone", normalizedPhone);
-
-router.replace(`/client-interface/${client.id}`);
+      router.replace(`/client-interface/${client.id}`);
     } catch (error) {
       console.error(
         "PET OWNER LOGIN ERROR:",
@@ -291,6 +288,17 @@ router.replace(`/client-interface/${client.id}`);
                 />
               </label>
 
+              <label className="flex cursor-pointer items-center gap-3 select-none text-sm">
+                <input
+                  type="checkbox"
+                  checked={keepSignedIn}
+                  onChange={(event) => setKeepSignedIn(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 accent-cyan-500"
+                />
+                <span className="font-semibold text-slate-600 dark:text-slate-300">
+                  {ar ? "\u0627\u0628\u0642\u0646\u064a \u0645\u0633\u062c\u0644 \u0627\u0644\u062f\u062e\u0648\u0644" : "Keep me signed in"}
+                </span>
+              </label>
               {message && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
                   {message}

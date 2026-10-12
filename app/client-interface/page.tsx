@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -18,6 +18,16 @@ export default function ClientPortalPage() {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
+    const rememberedClientId =
+      window.localStorage.getItem("vetra-client-id") ??
+      window.sessionStorage.getItem("vetra-client-id");
+
+    if (rememberedClientId) {
+      setShowWelcome(false);
+      router.replace(`/client-interface/${encodeURIComponent(rememberedClientId)}`);
+      return;
+    }
+
     const savedLanguage = window.localStorage.getItem("vetra-language");
     const savedTheme = window.localStorage.getItem("vetra-theme");
     const welcomed = window.localStorage.getItem("vetra-welcome-seen");
@@ -40,7 +50,7 @@ export default function ClientPortalPage() {
       window.clearTimeout(exitTimer);
       window.clearTimeout(hideTimer);
     };
-  }, []);
+  }, [router]);
 
   const ar = language === "ar";
 

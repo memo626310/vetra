@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -60,13 +60,9 @@ function getOwnerSession() {
     return persistent;
   }
 
-  // One-time migration for owners who logged in before persistent sessions.
-  const legacy = read(window.sessionStorage);
-  if (legacy.id && legacy.code && legacy.phone) {
-    window.localStorage.setItem("vetra-client-id", legacy.id);
-    window.localStorage.setItem("vetra-client-code", legacy.code);
-    window.localStorage.setItem("vetra-client-phone", legacy.phone);
-    return legacy;
+  const temporary = read(window.sessionStorage);
+  if (temporary.id && temporary.code && temporary.phone) {
+    return temporary;
   }
 
   return { id: null, code: null, phone: null };
