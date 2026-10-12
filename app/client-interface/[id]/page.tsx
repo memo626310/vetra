@@ -382,8 +382,7 @@ function getParasiteStatus(records: Vaccine[]): ProtocolStatus {
     return {
       points: 0,
       max: 1,
-      status: "due",
-      due: todayDateOnly(),
+      status: "due", due: null,
       reset: false,
       record: null,
     };
@@ -639,9 +638,9 @@ export default function ClientInterfaceIdPage(){
           : t.scoreStart;
   const scoreItems = catProtocol ? [
     {label:t.scoreMonthly,points:visitPoints,max:2,done:visitPoints===2,status:monthlyStatus},
-    {label:t.scoreViral,points:catProtocol.viral.points,max:3,done:catProtocol.viral.points===3,status:catProtocol.viral.status},
-    {label:t.scoreRabies,points:catProtocol.rabies.points,max:2,done:catProtocol.rabies.points===2,status:catProtocol.rabies.status},
-    {label:t.scoreDeworm,points:catProtocol.deworm.points,max:2,done:catProtocol.deworm.points===2,status:catProtocol.deworm.status},
+    {label:t.scoreViral,points:catProtocol.viral.points,max:3,done:catProtocol.viral.points===3&&catProtocol.viral.status!=="not_due",status:catProtocol.viral.status},
+    {label:t.scoreRabies,points:catProtocol.rabies.points,max:2,done:catProtocol.rabies.points===2&&catProtocol.rabies.status!=="not_due",status:catProtocol.rabies.status},
+    {label:t.scoreDeworm,points:catProtocol.deworm.points,max:2,done:catProtocol.deworm.points===2&&catProtocol.deworm.status!=="not_due",status:catProtocol.deworm.status},
     {label:t.scoreParasite,points:catProtocol.parasite.points,max:1,done:catProtocol.parasite.points===1,status:catProtocol.parasite.status},
   ] : [];
 
@@ -733,12 +732,8 @@ export default function ClientInterfaceIdPage(){
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {scoreItems.map((item)=><div key={item.label} className={dark?"rounded-xl border border-white/[.05] bg-white/[.025] px-3 py-2":"rounded-xl border border-slate-100 bg-white/80 px-3 py-2"}>
-              <div className="flex items-center justify-between gap-2"><span className="truncate text-[10px] font-bold text-slate-400">{item.label}</span><span className={item.done?"text-emerald-400":"text-cyan-300"}>{item.done ? "✓" : "•"}</span></div>
-              <div className="mt-1 text-[9px] font-semibold text-slate-500">{item.done ? "✓" : item.status === "grace" ? (lang==="ar" ? "فترة السماح 7 أيام" : "7-day grace period") : item.status === "overdue" ? (lang==="ar" ? "متأخر — يحتاج إعادة" : "Overdue — reset needed") :item.status === "due"
-  ? (lang === "ar"
-      ? "لم تُسجّل جرعة بعد"
-      : "No dose recorded yet")
-  : item.status === "not_due" ? (lang==="ar" ? "لسه مش مستحق" : "Not due yet") : (lang==="ar" ? "منتظم" : "On track")}</div>
+              <div className="flex items-center justify-between gap-2"><span className="truncate text-[10px] font-bold text-slate-400">{item.label}</span><span className={item.status === "not_due" ? "text-slate-500" : item.done ? "text-emerald-400" : "text-cyan-300"}>{item.status === "not_due" ? "\u2014" : item.done ? "\u2713" : "\u2022"}</span></div>
+              <div className="mt-1 text-[9px] font-semibold text-slate-500">{item.status === "not_due" ? (lang==="ar" ? "\u063A\u064A\u0631 \u0645\u0633\u062A\u062D\u0642 \u0644\u0647\u0630\u0627 \u0627\u0644\u0639\u0645\u0631" : "Not due for this age") : item.done ? "\u2713" : item.status === "grace" ? (lang==="ar" ? "\u0641\u062A\u0631\u0629 \u0627\u0644\u0633\u0645\u0627\u062D 7 \u0623\u064A\u0627\u0645" : "7-day grace period") : item.status === "overdue" ? (lang==="ar" ? "\u0645\u062A\u0623\u062E\u0631 \u2014 \u064A\u062D\u062A\u0627\u062C \u0625\u0639\u0627\u062F\u0629" : "Overdue - reset needed") : item.status === "due" ? (lang==="ar" ? "\u0644\u0645 \u062A\u064F\u0633\u062C\u0651\u0644 \u062C\u0631\u0639\u0629 \u0628\u0639\u062F" : "No dose recorded yet") : (lang==="ar" ? "\u0645\u0646\u062A\u0638\u0645" : "On track")}</div>
             </div>)}
           </div>
           {catCareScore !== null && scoreRemaining>0&&<div className="mt-3 text-center text-[10px] font-bold text-slate-500">{lang==="ar"?`إيه اللي ناقص؟ تعالى كمّل ${scoreRemaining} ${t.scoreMissing} 👀`: `${scoreRemaining} ${t.scoreMissing} to go — can you reach 10/10? 👀`}</div>}
