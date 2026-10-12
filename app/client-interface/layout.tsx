@@ -13,9 +13,21 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
   },
   icons: {
+    icon: [
+      {
+        url: "/vetra-client-icons-20261012/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        url: "/vetra-client-icons-20261012/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+      },
+    ],
     apple: [
       {
-        url: "/client-interface/icons/icon-180",
+        url: "/vetra-client-icons-20261012/icon-180.png",
         sizes: "180x180",
         type: "image/png",
       },
