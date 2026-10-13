@@ -45,6 +45,7 @@ const translations = {
 
     cards: [
       ["زيارة جديدة", "ابدأ كشف جديد", "🩺"],
+      ["بيع سريع", "إنشاء فاتورة بيع بسرعة", "🛒"],
       ["العملاء", "أصحاب الحيوانات", "👥"],
       ["الحيوانات", "ملفات الحيوانات", "🐾"],
       ["المواعيد", "مواعيد اليوم والمتابعة", "📅"],
@@ -95,6 +96,7 @@ const translations = {
 
     cards: [
       ["New Visit", "Start a new visit", "🩺"],
+      ["Quick Sale", "Create a sales invoice fast", "🛒"],
       ["Clients", "Pet owners", "👥"],
       ["Pets", "Pet records", "🐾"],
       ["Appointments", "Today's appointments", "📅"],
@@ -732,10 +734,10 @@ export default function Home() {
             {t.cards.map((card, index) => {
               const [title, subtitle, icon] = card;
 
-              const colors =
++
                 cardColors[index];
 
-              const featured =
++
                 index === 0;
 
               return (
@@ -747,27 +749,30 @@ export default function Home() {
                         goTo("/visits/new");
                         break;
                       case 1:
-                        goTo("/clients");
+                        goTo("/invoices/new?mode=quick-sale");
                         break;
                       case 2:
-                        goTo("/pets");
+                        goTo("/clients");
                         break;
                       case 3:
-                        goTo("/appointments");
+                        goTo("/pets");
                         break;
                       case 4:
-                        goTo("/vaccinations");
+                        goTo("/appointments");
                         break;
                       case 5:
-                        goTo("/inventory/products");
+                        goTo("/vaccinations");
                         break;
                       case 6:
-                        goTo("/barcode-test");
+                        goTo("/inventory/products");
                         break;
                       case 7:
-                        goTo("/finance");
+                        goTo("/barcode-test");
                         break;
                       case 8:
+                        goTo("/finance");
+                        break;
+                      case 9:
                         goTo("/reports");
                         break;
                       default:
@@ -781,9 +786,13 @@ export default function Home() {
                   } ${
                     featured
                       ? "bg-[#0B2540] text-white shadow-lg shadow-slate-900/20 hover:bg-[#123B54] hover:shadow-xl hover:shadow-slate-900/30"
-                      : darkMode
-                        ? "border border-white/[0.06] bg-[#181B21] text-white shadow-sm hover:border-white/[0.10] hover:bg-[#1C2026] hover:shadow-xl"
-                        : "border border-slate-100 bg-white text-slate-800 shadow-sm hover:border-slate-200 hover:shadow-xl"
+                      : quickSale
+                        ? darkMode
+                          ? "border border-teal-400/20 bg-teal-500/10 text-white shadow-sm hover:border-teal-300/30 hover:bg-teal-500/[0.14] hover:shadow-md"
+                          : "border border-teal-100 bg-teal-50 text-slate-800 shadow-sm hover:border-teal-300 hover:shadow-md"
+                        : darkMode
+                          ? "border border-white/[0.06] bg-[#181B21] text-white shadow-sm hover:border-white/[0.10] hover:bg-[#1C2026] hover:shadow-xl"
+                          : "border border-slate-100 bg-white text-slate-800 shadow-sm hover:border-slate-200 hover:shadow-xl"
                   }`}
                 >
 
@@ -805,7 +814,11 @@ export default function Home() {
                     className={`relative mb-4 flex h-11 w-11 items-center justify-center rounded-2xl text-2xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 sm:mb-7 sm:h-16 sm:w-16 sm:rounded-3xl sm:text-3xl ${
                       featured
                         ? "bg-white/15"
-                        : `${darkMode ? colors.dark : colors.light} ${colors.icon}`
+                        : quickSale
+                          ? darkMode
+                            ? "bg-teal-500/15 text-teal-300"
+                            : "bg-teal-100 text-teal-700"
+                          : `${darkMode ? colors.dark : colors.light} ${colors.icon}`
                     }`}
                   >
                     <span className="transition-transform duration-500 group-hover:scale-110">
@@ -839,7 +852,9 @@ export default function Home() {
                     className={`relative mt-4 text-xs font-bold transition-all duration-300 sm:mt-6 sm:text-sm ${
                       featured
                         ? "text-white"
-                        : "text-teal-500 sm:translate-y-1 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100"
+                        : quickSale
+                          ? darkMode ? "text-teal-300" : "text-teal-700"
+                          : "text-teal-500 sm:translate-y-1 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100"
                     }`}
                   >
                     {t.open}{" "}

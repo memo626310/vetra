@@ -97,6 +97,7 @@ export default function NewInvoicePage() {
   const [notes, setNotes] = useState("");
 
   const [showScanner, setShowScanner] = useState(false);
+  const [quickSaleMode, setQuickSaleMode] = useState(false);
   const [serviceName, setServiceName] = useState("");
   const [servicePrice, setServicePrice] = useState("");
   const [consultationFee, setConsultationFee] = useState(100);
@@ -115,6 +116,7 @@ export default function NewInvoicePage() {
     setPetId(requestedPet);
     setRequestedPetId(requestedPet);
     setVisitId(params.get("visit") || "");
+    setQuickSaleMode(params.get("mode") === "quick-sale");
     setReady(true);
   }, []);
 
@@ -774,7 +776,7 @@ setSuccess(
               ← {language === "ar" ? "الفواتير" : "Invoices"}
             </button>
             <h1 className="text-3xl font-black">
-              {language === "ar" ? "فاتورة جديدة" : "New Invoice"}
+              {quickSaleMode
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               {language === "ar"
@@ -926,6 +928,26 @@ setSuccess(
                 <input
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    const query = productSearch.trim();
+                    if (!query) return;
+                    const exactBarcode = products.find(
+                      (product) => product.barcode?.trim().toLowerCase() === query.toLowerCase()
+                    );
+                    if (exactBarcode) {
+                      addProduct(exactBarcode);
+                      return;
+                    }
+                    if (filteredProducts.length === 1) {
+                      addProduct(filteredProducts[0]);
+                      return;
+                    }
+                    if (filteredProducts.length === 0) {
+                      void findProductByBarcode(query);
+                    }
+                  }}
                   placeholder={
                     language === "ar"
                       ? "اسم المنتج أو الباركود..."
