@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { usePwaInstall } from "@/components/PwaInstallProvider";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 
@@ -32,6 +33,33 @@ type BillingSettings = {
   auto_add_consultation_fee: boolean;
 };
 
+const BACKUP_TABLES = [
+  "clients",
+  "pets",
+  "visits",
+  "visit_medications",
+  "medications",
+  "vaccinations",
+  "appointments",
+  "appointment_settings",
+  "products",
+  "product_categories",
+  "inventory_movements",
+  "invoices",
+  "invoice_items",
+  "billing_settings",
+  "financial_accounts",
+  "cash_register_sessions",
+  "financial_transactions",
+  "legacy_import_batches",
+  "legacy_import_source_rows",
+  "legacy_import_id_map",
+] as const;
+
+const BACKUP_PAGE_SIZE = 500;
+const BACKUP_MAX_ROWS_PER_TABLE = 500_000;
+const BACKUP_MAX_TOTAL_ROWS = 1_000_000;
+
 const text = {
   ar: {
     title: "الإعدادات",
@@ -53,6 +81,30 @@ const text = {
     autoConsultation: "إضافة سعر الكشف تلقائيًا",
     autoConsultationHint: "عند إنهاء زيارة، يتم تجهيز بند الكشف في الفاتورة تلقائيًا.",
     appearance: "المظهر واللغة",
+    appDataTools: "التطبيق والبيانات",
+    appDataToolsHint: "تثبيت VETRA وإدارة نسخ بيانات العيادة.",
+    installTitle: "تثبيت برنامج VETRA",
+    installHint: "افتح VETRA كتطبيق مستقل للوصول الأسرع من الشاشة الرئيسية.",
+    installButton: "تثبيت البرنامج",
+    installHowTo: "طريقة التثبيت",
+    appInstalled: "مثبّت بالفعل على هذا الجهاز",
+    installAccepted: "تم طلب تثبيت VETRA.",
+    installDismissed: "لم يتم تأكيد التثبيت. يمكنك المحاولة مرة أخرى أو استخدام قائمة المتصفح.",
+    installIosHelp: "على iPhone أو iPad: افتح قائمة المشاركة في Safari ثم اختر «إضافة إلى الشاشة الرئيسية».",
+    installManualHelp: "افتح قائمة المتصفح (⋮ أو ⋯)، ثم اختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية» إن كانت متاحة.",
+    importTitle: "استيراد قاعدة بيانات من نظام آخر",
+    importHint: "افحص قاعدة النظام القديم واحفظ أرشيفها ثم راجع البيانات قبل نقلها إلى VETRA.",
+    importButton: "فتح صفحة الاستيراد",
+    backupTitle: "تصدير قاعدة البيانات / نسخة احتياطية",
+    backupHint: "نزّل ملف JSON ببيانات العيادة المتاحة لحسابك. احتفظ به في مكان آمن؛ الملف يحتوي على بيانات عملاء وحيوانات وفواتير.",
+    backupButton: "تصدير نسخة احتياطية",
+    backupConfirm: "سيتم تنزيل ملف يحتوي على بيانات العيادة، ومنها بيانات العملاء والحيوانات والفواتير والحركات المالية. احفظ الملف في مكان آمن ولا تشاركه مع غير المخولين. هل تريد المتابعة؟",
+    backupProgress: "جاري تجهيز نسخة من الجدول:",
+    backupSuccess: "تم تنزيل نسخة بيانات العيادة بنجاح.",
+    backupRows: "سجلًا",
+    backupError: "تعذر إنشاء النسخة الاحتياطية:",
+    backupTenantError: "توقف التصدير بسبب اختلاف معرف العيادة في البيانات؛ لم يتم تنزيل أي ملف.",
+    backupLimitError: "تجاوز حجم البيانات الحد الوقائي للتصدير. استخدم نسخة قاعدة بيانات كاملة من مزود قاعدة البيانات.",
     language: "اللغة",
     arabic: "العربية",
     english: "English",
@@ -105,6 +157,30 @@ const text = {
     autoConsultation: "Automatically add consultation fee",
     autoConsultationHint: "When a visit is completed, the consultation item is prepared automatically in the invoice.",
     appearance: "Appearance & language",
+    appDataTools: "App & data tools",
+    appDataToolsHint: "Install VETRA and manage clinic data backups.",
+    installTitle: "Install VETRA",
+    installHint: "Use VETRA as a standalone app for faster access from your home screen.",
+    installButton: "Install app",
+    installHowTo: "How to install",
+    appInstalled: "Already installed on this device",
+    installAccepted: "VETRA installation was accepted.",
+    installDismissed: "Installation was not confirmed. Try again or use the browser menu.",
+    installIosHelp: "On iPhone or iPad: open Safari's Share menu, then choose “Add to Home Screen”.",
+    installManualHelp: "Open your browser menu (⋮ or ⋯), then choose “Install app” or “Add to Home Screen” when available.",
+    importTitle: "Import a database from another system",
+    importHint: "Scan the legacy database, archive the source, and review the data before importing it into VETRA.",
+    importButton: "Open import page",
+    backupTitle: "Export database / backup",
+    backupHint: "Download a JSON file of clinic data available to your account. Store it securely; it contains client, pet, invoice, and financial data.",
+    backupButton: "Export backup",
+    backupConfirm: "This file contains clinic data, including clients, pets, invoices, and financial transactions. Keep it in a secure location and do not share it with unauthorized people. Continue?",
+    backupProgress: "Preparing backup for table:",
+    backupSuccess: "Clinic data backup downloaded successfully.",
+    backupRows: "records",
+    backupError: "Could not create the backup:",
+    backupTenantError: "Export stopped because a row returned a different clinic ID. No file was downloaded.",
+    backupLimitError: "The export exceeded the safety limit. Use a full database backup from your database provider.",
     language: "Language",
     arabic: "العربية",
     english: "English",
@@ -167,6 +243,10 @@ export default function SettingsPage() {
   const [changingPassword, setChangingPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [exportingBackup, setExportingBackup] = useState(false);
+  const [backupProgress, setBackupProgress] = useState("");
+  const [installHelp, setInstallHelp] = useState(false);
+  const [installStatus, setInstallStatus] = useState("");
 
   useEffect(() => {
     setDarkMode(localStorage.getItem("vetra-theme") !== "light");
@@ -244,6 +324,7 @@ export default function SettingsPage() {
   }, [ready, router, language]);
 
   const t = text[language];
+  const { canInstall, isInstalled, isIOS, installApp } = usePwaInstall();
   const isAdmin = context ? ["owner", "admin"].includes(context.role) : false;
 
   async function saveBilling() {
@@ -306,6 +387,124 @@ export default function SettingsPage() {
       setError(saveErr instanceof Error ? saveErr.message : t.saveError);
     } finally {
       setSavingBilling(false);
+    }
+  }
+
+  async function handleInstallApplication() {
+    setInstallStatus("");
+    if (isInstalled) return;
+    if (!canInstall) {
+      setInstallHelp((current) => !current);
+      return;
+    }
+
+    try {
+      const result = await installApp();
+      if (result === "accepted") {
+        setInstallStatus(t.installAccepted);
+        setInstallHelp(false);
+      } else if (result === "dismissed") {
+        setInstallStatus(t.installDismissed);
+      } else {
+        setInstallHelp(true);
+      }
+    } catch (installError) {
+      console.error("VETRA APP INSTALL ERROR:", installError);
+      setInstallHelp(true);
+    }
+  }
+
+  async function exportCurrentDatabase() {
+    if (!context || exportingBackup) return;
+    if (!window.confirm(t.backupConfirm)) return;
+
+    setExportingBackup(true);
+    setBackupProgress("");
+    setError("");
+    setMessage("");
+
+    try {
+      const db = await getClinicDb();
+      const tables: Record<string, Record<string, unknown>[]> = {};
+      let totalRows = 0;
+
+      for (const tableName of BACKUP_TABLES) {
+        const rowsForTable: Record<string, unknown>[] = [];
+        let offset = 0;
+
+        while (true) {
+          setBackupProgress(`${t.backupProgress} ${tableName} · ${(offset + 1).toLocaleString(language === "ar" ? "ar-EG" : "en-US")}`);
+          const { data, error: queryError } = await db
+            .from(tableName)
+            .select("*")
+            .order("id", { ascending: true })
+            .range(offset, offset + BACKUP_PAGE_SIZE - 1);
+
+          if (queryError) {
+            throw new Error(`${tableName}: ${queryError.message}`);
+          }
+
+          const pageRows = (data || []) as Record<string, unknown>[];
+          for (const row of pageRows) {
+            if (typeof row.clinic_id === "string" && row.clinic_id && row.clinic_id !== context.clinic_id) {
+              throw new Error(t.backupTenantError);
+            }
+          }
+
+          rowsForTable.push(...pageRows);
+          offset += pageRows.length;
+          totalRows += pageRows.length;
+
+          if (rowsForTable.length > BACKUP_MAX_ROWS_PER_TABLE || totalRows > BACKUP_MAX_TOTAL_ROWS) {
+            throw new Error(t.backupLimitError);
+          }
+          if (pageRows.length < BACKUP_PAGE_SIZE) break;
+        }
+
+        tables[tableName] = rowsForTable;
+      }
+
+      const rowCounts = Object.fromEntries(
+        Object.entries(tables).map(([tableName, rows]) => [tableName, rows.length])
+      );
+      const payload = {
+        format: "VETRA_CLINIC_DATA_BACKUP",
+        formatVersion: 1,
+        exportedAt: new Date().toISOString(),
+        clinic: {
+          id: context.clinic_id,
+          name: context.clinic_name,
+        },
+        rowCounts,
+        totalRows,
+        tables,
+        limitations: "Application data export only. This JSON does not include PostgreSQL schema, functions, triggers, RLS policies, authentication users, or external files; it is not a full SQL dump or one-click restore file.",
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const safeClinicName = (context.clinic_name || "VETRA")
+        .replace(/[^a-zA-Z0-9_-]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 50) || "VETRA";
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      anchor.href = objectUrl;
+      anchor.download = `VETRA-backup-${safeClinicName}-${timestamp}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+
+      setMessage(`${t.backupSuccess} ${totalRows.toLocaleString(language === "ar" ? "ar-EG" : "en-US")} ${t.backupRows}`);
+    } catch (backupError) {
+      console.error("VETRA BACKUP EXPORT ERROR:", backupError);
+      setError(`${t.backupError} ${backupError instanceof Error ? backupError.message : String(backupError)}`);
+    } finally {
+      setExportingBackup(false);
+      setBackupProgress("");
     }
   }
 
@@ -583,6 +782,68 @@ export default function SettingsPage() {
                   </button>
                 }
               />
+            </div>
+          </section>
+
+          {/* VETRA_SETTINGS_INSTALL_IMPORT_BACKUP_V1 */}
+          <section
+            className={`rounded-3xl border p-6 ${
+              darkMode
+                ? "border-white/[0.06] bg-[#13161B]"
+                : "border-slate-100 bg-white"
+            }`}
+          >
+            <h2 className="text-xl font-black">{t.appDataTools}</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-500">{t.appDataToolsHint}</p>
+
+            <div className="mt-5 space-y-4">
+              <div className={`rounded-2xl border p-4 ${darkMode ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-100 bg-slate-50"}`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <h3 className="font-bold">📲 {t.installTitle}</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">{t.installHint}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleInstallApplication()}
+                    disabled={isInstalled}
+                    className="shrink-0 rounded-xl bg-teal-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isInstalled ? `✓ ${t.appInstalled}` : canInstall ? `⬇ ${t.installButton}` : `⬇ ${isIOS ? t.installHowTo : t.installButton}`}
+                  </button>
+                </div>
+                {installHelp && (
+                  <p className={`mt-3 rounded-xl p-3 text-xs leading-6 ${darkMode ? "bg-white/[0.04] text-slate-300" : "bg-white text-slate-600"}`}>
+                    {isIOS ? t.installIosHelp : t.installManualHelp}
+                  </p>
+                )}
+                {installStatus && <p role="status" className="mt-3 text-xs font-semibold text-teal-500">{installStatus}</p>}
+              </div>
+
+              <div className={`rounded-2xl border p-4 ${darkMode ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-100 bg-slate-50"}`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <h3 className="font-bold">🗃️ {t.importTitle}</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">{t.importHint}</p>
+                  </div>
+                  <button type="button" onClick={() => router.push("/settings/import")} className="shrink-0 rounded-xl border border-violet-500/20 bg-violet-500/10 px-4 py-3 text-sm font-bold text-violet-500 transition hover:bg-violet-500/15">
+                    {t.importButton}
+                  </button>
+                </div>
+              </div>
+
+              <div className={`rounded-2xl border p-4 ${darkMode ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-100 bg-slate-50"}`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <h3 className="font-bold">💾 {t.backupTitle}</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">{t.backupHint}</p>
+                  </div>
+                  <button type="button" onClick={() => void exportCurrentDatabase()} disabled={exportingBackup || loading || !context} className="shrink-0 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                    {exportingBackup ? t.backupProgress : `⬇ ${t.backupButton}`}
+                  </button>
+                </div>
+                {backupProgress && <p role="status" className="mt-3 break-words rounded-xl bg-blue-500/10 p-3 text-xs font-semibold text-blue-500">{backupProgress}</p>}
+              </div>
             </div>
           </section>
 
