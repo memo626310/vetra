@@ -339,6 +339,9 @@ export default function LegacyImportReviewPage() {
   const [sourceRows, setSourceRows] = useState<SourceRow[]>([]);
   const [targetInvoiceNumbers, setTargetInvoiceNumbers] = useState<number[]>([]);
   const [importResult, setImportResult] = useState<Record<string, unknown> | null>(null);
+  // VETRA_REAL_IMPORT_PROGRESS_UI_V1 — percentage reflects committed import work units.
+  const [importPercent, setImportPercent] = useState(0);
+  const [importProgressLabel, setImportProgressLabel] = useState("");
   const [openTables, setOpenTables] = useState<Record<string, boolean>>({
     Customer: true,
     Product: true,
@@ -478,38 +481,156 @@ export default function LegacyImportReviewPage() {
 
   async function importReadyRows() {
     if (!selectedBatch || !report) return;
-    if (!window.confirm(`سيتم استيراد السجلات المتوافقة التي يمكن ربطها بأمان فقط. الفواتير أو الأرصدة غير المؤكدة والجداول التي لا يوجد لها مكان مناسب ستظل محفوظة في الأرشيف. لن يتم دمج العملاء تلقائيًا أو تعديل أرصدة المخزون غير المتحققة. متابعة استيراد الدفعة؟`)) return;
-    setImporting(true); setError(""); setMessage(""); setProgress("جاري استيراد البيانات المتوافقة في معاملة آمنة...");
+    if (!window.confirm("سيتم نقل السجلات المتوافقة فقط. سيُنفّذ الاستيراد على دفعات صغيرة، وسيتم حفظ تقدم كل دفعة بنجاح. البيانات غير المؤكدة أو غير المدعومة ستظل في الأرشيف. متابعة الاستيراد؟")) return;
+
+    setImporting(true);
+    setBusy(false);
+    setError("");
+    setMessage("");
+    setProgress("");
+    let latestPercent = importPercent;
+
+    const updatePercent = (percent: number, label: string) => {
+      latestPercent = Math.max(0, Math.min(100, Math.floor(percent)));
+      setImportPercent(latestPercent);
+      setImportProgressLabel(label);
+    };
+
     try {
       const client = await getClinicDb();
-      const { data, error: importError } = await client.rpc("vetra_import_legacy_batch", { p_batch_id: selectedBatch.id });
-      if (importError) {
-        if (/vetra_import_legacy_batch|function.*does not exist|Could not find the function/i.test(importError.message)) {
-          throw new Error("محرك الاستيراد الآمن لم يُثبّت في قاعدة البيانات بعد. شغّل ملف VETRA_TWO_PAGE_IMPORT_ENGINE.sql مرة واحدة في Shared Clinic Database، ثم أعد المحاولة.");
-        }
-        throw new Error(`لم يكتمل الاستيراد: ${importError.message}`);
+      const { data: currentBatch, error: progressReadError } = await client
+        .from("legacy_import_batches")
+        .select("summary")
+        .eq("id", selectedBatch.id)
+        .maybeSingle();
+      if (progressReadError) throw new Error(`تعذر قراءة آخر نقطة محفوظة للاستيراد: ${progressReadError.message}`);
+
+      const summary = (currentBatch?.summary || selectedBatch.summary || {}) as Record<string, unknown>;
+      const saved = (summary.lastImportProgress || {}) as Record<string, unknown>;
+      const savedPhase = String(saved.phase || "");
+      const savedCursor = Math.max(0, Number(saved.afterRow || 0));
+      const savedPhaseDone = saved.phaseDone === true || saved.phaseDone === "true";
+      const sourceCounts = selectedBatch.source_table_counts || {};
+      const rowCount = (name: string) => Math.max(0, Number(sourceCounts[name] || 0));
+      const categoryRows = rowCount("Category") + rowCount("Subcategory");
+      const clientRows = rowCount("Customer");
+      const productRows = rowCount("Product");
+      const invoiceRows = rowCount("SalesInvoices");
+      const totalRows = Math.max(1, categoryRows + clientRows + productRows + invoiceRows);
+      const percentFor = (done: number) => Math.min(99, Math.floor((done / totalRows) * 100));
+
+      if (savedPhase === "complete") {
+        const previousResult = summary.lastImportRun as Record<string, unknown> | undefined;
+        setImportResult(previousResult || {});
+        updatePercent(100, "الاستيراد مكتمل بالفعل.");
+        setMessage("الدفعة تم استيرادها بالفعل؛ لم نكرر إدخال السجلات.");
+        return;
       }
-      const result = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
-      setImportResult(result || {});
-      setMessage("انتهت عملية الاستيراد. التفاصيل أدناه توضح ما تم نقله وما تُرك محفوظًا للمراجعة.");
+
+      let phaseIndex = 0;
+      let invoiceCursor = 0;
+      let completedRows = 0;
+      switch (savedPhase) {
+        case "categories":
+          phaseIndex = 1;
+          completedRows = categoryRows;
+          break;
+        case "clients":
+          phaseIndex = 2;
+          completedRows = categoryRows + clientRows;
+          break;
+        case "products":
+          phaseIndex = 3;
+          completedRows = categoryRows + clientRows + productRows;
+          break;
+        case "invoices":
+          invoiceCursor = Math.min(invoiceRows, savedCursor);
+          completedRows = categoryRows + clientRows + productRows + invoiceCursor;
+          phaseIndex = savedPhaseDone ? 4 : 3;
+          break;
+        default:
+          phaseIndex = 0;
+          completedRows = 0;
+      }
+
+      const callImportStep = async (phase: string, afterRow = 0, limit = 20) => {
+        const { data, error: stepError } = await client.rpc("vetra_import_legacy_batch_progress", {
+          p_batch_id: selectedBatch.id,
+          p_phase: phase,
+          p_after_row: afterRow,
+          p_limit: limit,
+        });
+        if (stepError) {
+          if (/vetra_import_legacy_batch_progress|function.*does not exist|Could not find the function/i.test(stepError.message)) {
+            throw new Error("محرك الاستيراد المرحلي غير مثبت. شغّل ملف VETRA_IMPORT_PROGRESS_ENGINE.sql مرة واحدة في Shared Clinic Database، ثم أعد المحاولة.");
+          }
+          throw new Error(stepError.message);
+        }
+        const value = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
+        if (!value) throw new Error(`لم تُرجع خطوة ${phase} تأكيدًا للحفظ.`);
+        return value;
+      };
+
+      const phases = ["categories", "clients", "products", "invoices", "finalize"] as const;
+      for (let phaseNumber = phaseIndex; phaseNumber < phases.length; phaseNumber++) {
+        const phase = phases[phaseNumber];
+
+        if (phase === "invoices") {
+          let cursor = invoiceCursor;
+          while (cursor < invoiceRows) {
+            const chunkSize = Math.min(20, invoiceRows - cursor);
+            const startInvoice = cursor + 1;
+            const endInvoice = Math.min(invoiceRows, cursor + chunkSize);
+            updatePercent(percentFor(completedRows), `استيراد الفواتير: جاري حفظ الدفعة ${startInvoice}–${endInvoice} من ${invoiceRows.toLocaleString("en-US")}`);
+            const step = await callImportStep("invoices", cursor, chunkSize);
+            const serverCursor = Number(step.afterRow);
+            const nextCursor = Number.isFinite(serverCursor) ? Math.max(cursor + chunkSize, serverCursor) : cursor + chunkSize;
+            if (nextCursor <= cursor) throw new Error("لم يتقدم مؤشر الفواتير. أوقفنا العملية لمنع تكرار نفس الدفعة.");
+            cursor = Math.min(invoiceRows, nextCursor);
+            completedRows = categoryRows + clientRows + productRows + cursor;
+            updatePercent(percentFor(completedRows), `تم حفظ التقدم حتى الفاتورة ${cursor.toLocaleString("en-US")} من ${invoiceRows.toLocaleString("en-US")}`);
+          }
+          continue;
+        }
+
+        if (phase === "finalize") {
+          updatePercent(Math.max(99, percentFor(totalRows)), "التحقق من النتائج النهائية...");
+          const result = await callImportStep("finalize", 0, 20);
+          setImportResult(result);
+          updatePercent(100, "اكتمل الاستيراد بنجاح.");
+          setMessage("انتهت عملية الاستيراد. التفاصيل أدناه توضح ما تم نقله وما تُرك محفوظًا للمراجعة.");
+          continue;
+        }
+
+        const label = phase === "categories"
+          ? "استيراد التصنيفات"
+          : phase === "clients"
+            ? "استيراد العملاء"
+            : "استيراد المنتجات";
+        updatePercent(percentFor(completedRows), `${label}...`);
+        await callImportStep(phase, 0, 20);
+        completedRows += phase === "categories" ? categoryRows : phase === "clients" ? clientRows : productRows;
+        updatePercent(percentFor(completedRows), `اكتملت خطوة ${label}.`);
+      }
+
       await loadBatches();
-      // Keep this selected batch visible and rebuild the review without clearing the import summary.
-      const reviewBatch = batches.find((batch) => batch.id === selectedBatch.id) || selectedBatch;
-      const refreshed = { ...reviewBatch, status: "needs_review" } as Batch;
-      setBatches((current) => current.map((batch) => batch.id === refreshed.id ? refreshed : batch));
-      const [freshClient, context] = await Promise.all([getClinicDb(), getClinicContext()]);
-      const { data: updatedBatch, error: updatedBatchError } = await freshClient.from("legacy_import_batches")
+      const { data: updatedBatch, error: updatedBatchError } = await client
+        .from("legacy_import_batches")
         .select("id,source_file_name,source_sha256,source_size_bytes,audit_version,status,source_table_counts,summary,created_at,completed_at")
-        .eq("id", selectedBatch.id).maybeSingle();
+        .eq("id", selectedBatch.id)
+        .maybeSingle();
       if (!updatedBatchError && updatedBatch) {
         setBatches((current) => current.map((batch) => batch.id === selectedBatch.id ? updatedBatch as Batch : batch));
-        setClinicName(context.clinic_name || "العيادة الحالية");
+        setClinicName((current) => current || "العيادة الحالية");
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    } finally { setImporting(false); setProgress(""); }
+      const detail = caught instanceof Error ? caught.message : String(caught);
+      setError(`${detail}\nتوقف التنفيذ عند ${latestPercent}%. تم حفظ كل دفعة ناجحة بشكل مستقل؛ اضغط زر الاستيراد مرة أخرى لاستكمال العملية من آخر نقطة محفوظة، دون إعادة السجلات التي اكتملت.`);
+    } finally {
+      setImporting(false);
+      setProgress("");
+    }
   }
-
   function toggleTable(name: string) {
     setOpenTables((current) => ({ ...current, [name]: !current[name] }));
   }
@@ -615,7 +736,7 @@ export default function LegacyImportReviewPage() {
 
         <section className="mb-6 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-3 sm:flex-row">
-            <select value={selectedBatchId} onChange={(event) => { setSelectedBatchId(event.target.value); setReport(null); setSourceRows([]); setImportResult(null); }} disabled={busy || importing || batches.length === 0} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm">
+            <select value={selectedBatchId} onChange={(event) => { setSelectedBatchId(event.target.value); setReport(null); setSourceRows([]); setImportResult(null); setImportPercent(0); setImportProgressLabel(""); }} disabled={busy || importing || batches.length === 0} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm">
               <option value="">اختار قاعدة بيانات محفوظة</option>
               {batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.source_file_name} · {new Date(batch.created_at).toLocaleDateString("ar-EG")}</option>)}
             </select>
@@ -623,6 +744,13 @@ export default function LegacyImportReviewPage() {
             <button type="button" onClick={() => void runReview()} disabled={busy || importing || !selectedBatch} className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-extrabold text-white hover:bg-indigo-700 disabled:opacity-50">{busy ? "جاري الفحص..." : "فحص ومراجعة البيانات"}</button>
           </div>
           {progress && <p role="status" className="mt-4 rounded-xl bg-blue-50 p-3 text-sm font-semibold text-blue-900">{progress}</p>}
+          {(importing || importPercent > 0) && <section className="mt-4 rounded-2xl border border-violet-200 bg-violet-50 p-4" aria-live="polite">
+            <div className="flex items-center justify-between gap-3 text-sm"><span className="font-bold text-violet-950">{importProgressLabel || "جاري تجهيز الاستيراد..."}</span><strong className="shrink-0 text-lg tabular-nums text-violet-950">{importPercent}%</strong></div>
+            <div className="mt-3 h-3 overflow-hidden rounded-full bg-violet-100" role="progressbar" aria-label="نسبة تقدم الاستيراد" aria-valuemin={0} aria-valuemax={100} aria-valuenow={importPercent}>
+              <div className="h-full rounded-full bg-violet-600 transition-[width] duration-300" style={{ width: `${importPercent}%` }} />
+            </div>
+            <p className="mt-2 text-xs leading-5 text-violet-900">النسبة محسوبة من سجلات التصنيفات والعملاء والمنتجات والفواتير التي تم حفظ خطواتها بنجاح. كل دفعة مكتملة محفوظة، ويمكن استكمال العملية إذا حدث انقطاع.</p>
+          </section>}
           {error && <p role="alert" className="mt-4 whitespace-pre-wrap rounded-xl border border-red-200 bg-red-50 p-3 text-sm leading-6 text-red-800">{error}</p>}
           {message && !error && <p role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-900">{message}</p>}
           {canImport === false && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">المراجعة متاحة، لكن تنفيذ الاستيراد الفعلي متاح لمالك العيادة أو المسؤول فقط.</p>}
