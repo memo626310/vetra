@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -762,12 +762,12 @@ setSuccess(
   return (
     <main
       dir={language === "ar" ? "rtl" : "ltr"}
-      className={`min-h-screen ${
+      className={`min-h-screen w-full min-w-0 overflow-x-clip ${
         darkMode ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"
       }`}
     >
-      <div className="mx-auto max-w-[1500px] px-5 py-6 sm:px-8 lg:px-10">
-        <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mx-auto w-full min-w-0 max-w-[1500px] px-3 py-4 sm:px-6 sm:py-6 lg:px-10">
+        <header className="mb-5 flex min-w-0 flex-col gap-3 sm:mb-6 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <button
               onClick={() => router.push("/invoices")}
@@ -775,10 +775,10 @@ setSuccess(
             >
               ← {language === "ar" ? "الفواتير" : "Invoices"}
             </button>
-            <h1 className="text-3xl font-black">
+            <h1 className="break-words text-2xl font-black leading-tight sm:text-3xl">
               {quickSaleMode
-                ? (language === "ar" ? "Ø¨ÙŠØ¹ Ø³Ø±ÙŠØ¹" : "Quick Sale")
-                : (language === "ar" ? "ÙØ§ØªÙˆØ±Ø© Ø¬Ø¯ÙŠØ¯Ø©" : "New Invoice")}
+                ? (language === "ar" ? "بيع سريع" : "Quick Sale")
+                : (language === "ar" ? "فاتورة جديدة" : "New Invoice")}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               {language === "ar"
@@ -787,7 +787,7 @@ setSuccess(
             </p>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex shrink-0 flex-wrap gap-2 self-start">
             <button
               onClick={() => setDarkMode((v) => !v)}
               className={`rounded-2xl border px-4 py-3 ${
@@ -823,10 +823,10 @@ setSuccess(
           </div>
         )}
 
-        <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-          <div className="space-y-6">
+        <div className="grid min-w-0 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="min-w-0 space-y-4 sm:space-y-6">
             <section
-              className={`rounded-3xl border p-5 ${
+              className={`min-w-0 rounded-2xl border p-3 sm:rounded-3xl sm:p-5 ${
                 darkMode
                   ? "border-white/[0.06] bg-[#13161B]"
                   : "border-slate-100 bg-white"
@@ -836,7 +836,7 @@ setSuccess(
                 {language === "ar" ? "بيانات العميل" : "Customer"}
               </h2>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-500">
                     {language === "ar" ? "العميل *" : "Client *"}
@@ -897,7 +897,7 @@ setSuccess(
             </section>
 
             <section
-              className={`rounded-3xl border p-5 ${
+              className={`min-w-0 rounded-2xl border p-3 sm:rounded-3xl sm:p-5 ${
                 darkMode
                   ? "border-white/[0.06] bg-[#13161B]"
                   : "border-slate-100 bg-white"
@@ -917,7 +917,7 @@ setSuccess(
 
                 <button
                   onClick={() => setShowScanner(true)}
-                  className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
+                  className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 sm:w-auto sm:px-5"
                 >
                   📷 {language === "ar" ? "مسح باركود" : "Scan barcode"}
                 </button>
@@ -963,12 +963,12 @@ setSuccess(
                 />
               </div>
 
-              <div className="grid gap-2 md:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
                 {filteredProducts.map((product) => (
                   <button
                     key={product.id}
                     onClick={() => addProduct(product)}
-                    className={`flex items-center justify-between rounded-2xl border p-4 text-right transition hover:-translate-y-0.5 ${
+                    className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 text-right transition sm:p-4 sm:hover:-translate-y-0.5 ${
                       darkMode
                         ? "border-white/[0.06] bg-[#0F1115] hover:bg-[#171A20]"
                         : "border-slate-100 bg-slate-50 hover:bg-white hover:shadow-sm"
@@ -990,7 +990,7 @@ setSuccess(
             </section>
 
             <section
-              className={`rounded-3xl border p-5 ${
+              className={`min-w-0 rounded-2xl border p-3 sm:rounded-3xl sm:p-5 ${
                 darkMode
                   ? "border-white/[0.06] bg-[#13161B]"
                   : "border-slate-100 bg-white"
@@ -1017,12 +1017,12 @@ setSuccess(
                 </button>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-[1fr_180px_auto]">
+              <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px_auto]">
                 <input
                   value={serviceName}
                   onChange={(e) => setServiceName(e.target.value)}
                   placeholder={language === "ar" ? "اسم الخدمة" : "Service name"}
-                  className={`rounded-2xl border px-4 py-3.5 outline-none focus:border-blue-500 ${
+                  className={`min-w-0 w-full rounded-2xl border px-4 py-3.5 outline-none focus:border-blue-500 ${
                     darkMode
                       ? "border-white/[0.07] bg-[#0F1115]"
                       : "border-slate-200 bg-slate-50"
@@ -1034,7 +1034,7 @@ setSuccess(
                   type="number"
                   min="0"
                   placeholder={language === "ar" ? "السعر" : "Price"}
-                  className={`rounded-2xl border px-4 py-3.5 outline-none focus:border-blue-500 ${
+                  className={`min-w-0 w-full rounded-2xl border px-4 py-3.5 outline-none focus:border-blue-500 ${
                     darkMode
                       ? "border-white/[0.07] bg-[#0F1115]"
                       : "border-slate-200 bg-slate-50"
@@ -1060,7 +1060,7 @@ setSuccess(
                 {language === "ar" ? "بنود الفاتورة" : "Invoice items"}
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="max-w-full overflow-x-auto overscroll-x-contain">
                 <table className="w-full min-w-[850px] text-sm">
                   <thead>
                     <tr className="border-b text-right text-xs text-slate-500">
@@ -1202,9 +1202,9 @@ setSuccess(
             </section>
           </div>
 
-          <aside className="space-y-6">
+          <aside className="min-w-0 space-y-4 sm:space-y-6">
             <section
-              className={`sticky top-5 rounded-3xl border p-5 ${
+              className={`min-w-0 rounded-2xl border p-3 sm:rounded-3xl sm:p-5 xl:sticky xl:top-5 ${
                 darkMode
                   ? "border-white/[0.06] bg-[#13161B]"
                   : "border-slate-100 bg-white"
