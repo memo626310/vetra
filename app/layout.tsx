@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import AuthGuard from "@/components/AuthGuard";
+import ClinicMobileNavigation from "@/components/ClinicMobileNavigation";
 
 export const metadata: Metadata = {
   title: "VETRA",
@@ -16,6 +17,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <AuthGuard>{children}</AuthGuard>
+        <ClinicMobileNavigation />
       </body>
     </html>
   );

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -526,11 +526,11 @@ export default function Home() {
 
         {/* ================= MAIN ================= */}
 
-        <section className="flex-1 p-5 transition-colors duration-500 sm:p-8 lg:p-12">
+        <section className="min-w-0 flex-1 p-3 transition-colors duration-500 sm:p-8 lg:p-12">
 
           {/* ================= HEADER ================= */}
 
-          <header className="mb-10 flex items-start justify-between gap-4">
+          <header className="mb-6 flex items-start justify-between gap-3 sm:mb-10 sm:gap-4">
 
             <div className="min-w-0">
 
@@ -544,7 +544,7 @@ export default function Home() {
                 {formattedDate}
               </p>
 
-              <h2 className="text-2xl font-black tracking-tight sm:text-4xl">
+              <h2 className="text-xl font-black tracking-tight sm:text-4xl">
                 {t.welcome}، {doctorName}{" "}
 
                 <span className="inline-block transition-transform duration-300 hover:rotate-12">
@@ -553,7 +553,7 @@ export default function Home() {
               </h2>
 
               <p
-                className={`mt-3 max-w-2xl text-sm font-medium leading-7 transition-all duration-500 sm:text-base ${
+                className={`mt-2 max-w-2xl text-sm font-medium leading-6 transition-all duration-500 sm:mt-3 sm:text-base sm:leading-7 ${
                   darkMode
                     ? "text-slate-400"
                     : "text-slate-500"
@@ -726,7 +726,7 @@ export default function Home() {
 
           {/* ================= CARDS ================= */}
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-5 xl:grid-cols-4">
 
             {t.cards.map((card, index) => {
               const [title, subtitle, icon] = card;
@@ -773,7 +773,7 @@ export default function Home() {
                         goTo("/dashboard");
                     }
                   }}
-                  className={`group relative min-h-[220px] overflow-hidden rounded-[32px] p-7 transition-all duration-300 ease-out hover:-translate-y-2 hover:scale-[1.01] active:scale-[0.98] ${
+                  className={`group relative min-h-[164px] overflow-hidden rounded-3xl p-4 transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.005] active:scale-[0.98] sm:min-h-[220px] sm:rounded-[32px] sm:p-7 sm:hover:-translate-y-2 sm:hover:scale-[1.01] ${
                     isArabic
                       ? "text-right"
                       : "text-left"
@@ -801,7 +801,7 @@ export default function Home() {
                   {/* Icon */}
 
                   <div
-                    className={`relative mb-7 flex h-16 w-16 items-center justify-center rounded-3xl text-3xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 ${
+                    className={`relative mb-4 flex h-11 w-11 items-center justify-center rounded-2xl text-2xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 sm:mb-7 sm:h-16 sm:w-16 sm:rounded-3xl sm:text-3xl ${
                       featured
                         ? "bg-white/15"
                         : `${darkMode ? colors.dark : colors.light} ${colors.icon}`
@@ -814,14 +814,14 @@ export default function Home() {
 
                   {/* Title */}
 
-                  <h3 className="relative text-2xl font-black tracking-tight transition-transform duration-300 group-hover:translate-x-1">
+                  <h3 className="relative text-base font-black tracking-tight transition-transform duration-300 group-hover:translate-x-1 sm:text-2xl">
                     {title}
                   </h3>
 
                   {/* Subtitle */}
 
                   <p
-                    className={`relative mt-3 text-base font-medium leading-7 transition-colors duration-300 ${
+                    className={`relative mt-2 text-xs font-medium leading-5 transition-colors duration-300 sm:mt-3 sm:text-base sm:leading-7 ${
                       featured
                         ? "text-blue-100"
                         : darkMode
@@ -835,7 +835,7 @@ export default function Home() {
                   {/* Open */}
 
                   <div
-                    className={`relative mt-6 text-sm font-bold transition-all duration-300 ${
+                    className={`relative mt-4 text-xs font-bold transition-all duration-300 sm:mt-6 sm:text-sm ${
                       featured
                         ? "text-white"
                         : "translate-y-1 text-blue-500 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"

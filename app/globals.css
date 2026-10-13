@@ -24,3 +24,9 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+/* VETRA_CLINIC_MOBILE_SHELL_CSS */
+@media (max-width: 1023px) {
+  html.clinic-mobile-shell body {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+}
