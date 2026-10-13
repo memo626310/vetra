@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -733,12 +733,9 @@ export default function Home() {
 
             {t.cards.map((card, index) => {
               const [title, subtitle, icon] = card;
-
-+
-                cardColors[index];
-
-+
-                index === 0;
+              const colors = cardColors[index % cardColors.length];
+              const featured = index === 0;
+              const quickSale = index === 1;
 
               return (
                 <button

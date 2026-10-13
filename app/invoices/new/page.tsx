@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -777,6 +777,8 @@ setSuccess(
             </button>
             <h1 className="text-3xl font-black">
               {quickSaleMode
+                ? (language === "ar" ? "Ø¨ÙŠØ¹ Ø³Ø±ÙŠØ¹" : "Quick Sale")
+                : (language === "ar" ? "ÙØ§ØªÙˆØ±Ø© Ø¬Ø¯ÙŠØ¯Ø©" : "New Invoice")}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               {language === "ar"
