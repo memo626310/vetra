@@ -139,7 +139,7 @@ export default function ClientPage() {
     if (!client || generatingClientCode) return;
 
     const confirmed = window.confirm(
-      "سيتم توليد Client ID جديد بنفس كود بداية العيادة، مع تغيير رقم العميل فقط. الرقم القديم لن يصلح لتسجيل دخول جديد، ولن تتغير روابط الحيوانات أو الزيارات أو الفواتير. هل تريد المتابعة؟"
+      "Ø³ÙŠØªÙ… ØªÙˆÙ„ÙŠØ¯ Client ID Ø¬Ø¯ÙŠØ¯ Ø¨ØµÙŠØºØ© 01XXXX (ÙƒÙˆØ¯ Ø§Ù„Ø¹ÙŠØ§Ø¯Ø© 01 + Ø£Ø±Ø¨Ø¹Ø© Ø£Ø±Ù‚Ø§Ù…)ØŒ Ù…Ø¹ ØªØºÙŠÙŠØ± client_code ÙÙ‚Ø·. Ù„Ù† ØªØªØºÙŠØ± Ø±ÙˆØ§Ø¨Ø· Ø§Ù„Ø­ÙŠÙˆØ§Ù†Ø§Øª Ø£Ùˆ Ø§Ù„Ø²ÙŠØ§Ø±Ø§Øª Ø£Ùˆ Ø§Ù„ÙÙˆØ§ØªÙŠØ±. Ø§Ù„Ø±Ù‚Ù… Ø§Ù„Ù‚Ø¯ÙŠÙ… Ù„Ù† ÙŠØµÙ„Ø­ Ù„ØªØ³Ø¬ÙŠÙ„ Ø¯Ø®ÙˆÙ„ Ø¬Ø¯ÙŠØ¯. Ù‡Ù„ ØªØ±ÙŠØ¯ Ø§Ù„Ù…ØªØ§Ø¨Ø¹Ø©ØŸ"
     );
     if (!confirmed) return;
 
@@ -149,50 +149,20 @@ export default function ClientPage() {
 
     try {
       const db = await getClinicDb();
-      const currentCode = String(client.client_code || "").trim();
-
-      // VETRA Client ID format: 2-digit clinic prefix + 4-digit client suffix.
-      // Refuse to guess if this clinic's current records do not confirm that format.
-      if (!client.clinic_id || !/^\d{6}$/.test(currentCode)) {
-        throw new Error(
-          "لم يتم تغيير الرقم: Client ID الحالي لا يطابق صيغة العيادة (كود العيادة + 4 أرقام). راجع إعدادات الكود أولًا."
-        );
+      if (!client.clinic_id) {
+        throw new Error("Ù„Ù… ÙŠØªÙ… ØªØ­Ø¯ÙŠØ¯ Ø§Ù„Ø¹ÙŠØ§Ø¯Ø© Ù„Ù‡Ø°Ø§ Ø§Ù„Ø¹Ù…ÙŠÙ„Ø› Ù„Ù… ÙŠØªÙ… ØªØ¹Ø¯ÙŠÙ„ Ø£ÙŠ Ø¨ÙŠØ§Ù†Ø§Øª.");
       }
 
-      const { data: clinicClients, error: clinicClientsError } = await db
-        .from("clients")
-        .select("client_code")
-        .eq("clinic_id", client.clinic_id);
-
-      if (clinicClientsError) throw clinicClientsError;
-
-      const numericCodes = (clinicClients || [])
-        .map((row) => String(row.client_code || "").trim())
-        .filter((code) => /^\d{6}$/.test(code));
-      const clinicPrefixes = new Set(numericCodes.map((code) => code.slice(0, 2)));
-      const clinicPrefix = currentCode.slice(0, 2);
-
-      if (
-        numericCodes.length !== (clinicClients || []).length ||
-        !numericCodes.includes(currentCode) ||
-        clinicPrefixes.size !== 1 ||
-        !clinicPrefixes.has(clinicPrefix)
-      ) {
-        throw new Error(
-          "لم يتم تغيير الرقم: أكواد العملاء المسجلة لا تؤكد كود بداية موحدًا لهذه العيادة. لم يتم تعديل أي بيانات."
-        );
-      }
-
+      // Legacy client_code values are allowed; new codes must use 01 + four digits.
+      const clinicPrefix = "01";
       let lastError: Error | null = null;
-      for (let attempt = 0; attempt < 40; attempt += 1) {
+
+      for (let attempt = 0; attempt < 60; attempt += 1) {
         const random = new Uint32Array(1);
         window.crypto.getRandomValues(random);
-        const suffix = String(random[0] % 10000).padStart(4, "0");
-        const candidate = clinicPrefix + suffix;
+        const candidate = clinicPrefix + String(random[0] % 10000).padStart(4, "0");
+        if (candidate === String(client.client_code || "").trim()) continue;
 
-        if (candidate === currentCode) continue;
-
-        // Check globally too, in case the database has a global unique index.
         const { data: occupied, error: lookupError } = await db
           .from("clients")
           .select("id")
@@ -220,24 +190,24 @@ export default function ClientPage() {
           throw updateError;
         }
 
-        if (!updated?.client_code || !updated.client_code.startsWith(clinicPrefix) || !/^\d{6}$/.test(updated.client_code)) {
-          throw new Error("لم يتم تأكيد Client ID الجديد بالصيغة الصحيحة.");
+        const savedCode = String(updated?.client_code || "").trim();
+        if (!/^01\d{4}$/.test(savedCode)) {
+          throw new Error("Ù„Ù… ÙŠØªÙ… ØªØ£ÙƒÙŠØ¯ Client ID Ø§Ù„Ø¬Ø¯ÙŠØ¯ Ø¨ØµÙŠØºØ© 01XXXX.");
         }
 
-        setClient((current) => current ? { ...current, client_code: updated.client_code } : current);
-        setMessage("تم تغيير Client ID بنجاح مع الحفاظ على كود العيادة: " + updated.client_code);
+        setClient((current) => current ? { ...current, client_code: savedCode } : current);
+        setMessage("ØªÙ… ØªØºÙŠÙŠØ± Client ID Ø¨Ù†Ø¬Ø§Ø­: " + savedCode);
         return;
       }
 
-      throw lastError || new Error("لم يتم العثور على رقم متاح بنفس كود بداية العيادة. لم يتم تغيير الرقم.");
+      throw lastError || new Error("Ù„Ù… ÙŠØªÙ… Ø§Ù„Ø¹Ø«ÙˆØ± Ø¹Ù„Ù‰ Client ID Ù…ØªØ§Ø­ ÙŠØ¨Ø¯Ø£ Ø¨Ù€ 01. Ù„Ù… ÙŠØªÙ… ØªØºÙŠÙŠØ± Ø§Ù„Ø±Ù‚Ù….");
     } catch (err) {
       console.error("GENERATE CLIENT CODE ERROR:", err);
-      setError(err instanceof Error ? err.message : "تعذر تغيير Client ID.");
+      setError(err instanceof Error ? err.message : "ØªØ¹Ø°Ø± ØªØºÙŠÙŠØ± Client ID.");
     } finally {
       setGeneratingClientCode(false);
     }
   }
-
   async function addPet(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
