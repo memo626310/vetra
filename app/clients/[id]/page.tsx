@@ -8,6 +8,7 @@ import { getClinicDb } from "@/lib/clinic-db";
 type Client = {
   id: string;
   client_code: string;
+  clinic_id: string;
   name: string;
   phone: string | null;
   email: string | null;
@@ -138,7 +139,7 @@ export default function ClientPage() {
     if (!client || generatingClientCode) return;
 
     const confirmed = window.confirm(
-      "سيتم تغيير رقم دخول العميل إلى Client Interface. الرقم القديم لن يصلح لتسجيل دخول جديد. لن يتغير رقم العميل الداخلي أو أي روابط للحيوانات والزيارات والفواتير. هل تريد المتابعة؟"
+      "سيتم توليد Client ID جديد بنفس كود بداية العيادة، مع تغيير رقم العميل فقط. الرقم القديم لن يصلح لتسجيل دخول جديد، ولن تتغير روابط الحيوانات أو الزيارات أو الفواتير. هل تريد المتابعة؟"
     );
     if (!confirmed) return;
 
@@ -148,13 +149,50 @@ export default function ClientPage() {
 
     try {
       const db = await getClinicDb();
-      let lastError: Error | null = null;
+      const currentCode = String(client.client_code || "").trim();
 
-      for (let attempt = 0; attempt < 25; attempt += 1) {
+      // VETRA Client ID format: 2-digit clinic prefix + 4-digit client suffix.
+      // Refuse to guess if this clinic's current records do not confirm that format.
+      if (!client.clinic_id || !/^\d{6}$/.test(currentCode)) {
+        throw new Error(
+          "لم يتم تغيير الرقم: Client ID الحالي لا يطابق صيغة العيادة (كود العيادة + 4 أرقام). راجع إعدادات الكود أولًا."
+        );
+      }
+
+      const { data: clinicClients, error: clinicClientsError } = await db
+        .from("clients")
+        .select("client_code")
+        .eq("clinic_id", client.clinic_id);
+
+      if (clinicClientsError) throw clinicClientsError;
+
+      const numericCodes = (clinicClients || [])
+        .map((row) => String(row.client_code || "").trim())
+        .filter((code) => /^\d{6}$/.test(code));
+      const clinicPrefixes = new Set(numericCodes.map((code) => code.slice(0, 2)));
+      const clinicPrefix = currentCode.slice(0, 2);
+
+      if (
+        numericCodes.length !== (clinicClients || []).length ||
+        !numericCodes.includes(currentCode) ||
+        clinicPrefixes.size !== 1 ||
+        !clinicPrefixes.has(clinicPrefix)
+      ) {
+        throw new Error(
+          "لم يتم تغيير الرقم: أكواد العملاء المسجلة لا تؤكد كود بداية موحدًا لهذه العيادة. لم يتم تعديل أي بيانات."
+        );
+      }
+
+      let lastError: Error | null = null;
+      for (let attempt = 0; attempt < 40; attempt += 1) {
         const random = new Uint32Array(1);
         window.crypto.getRandomValues(random);
-        const candidate = String(100000 + (random[0] % 900000));
+        const suffix = String(random[0] % 10000).padStart(4, "0");
+        const candidate = clinicPrefix + suffix;
 
+        if (candidate === currentCode) continue;
+
+        // Check globally too, in case the database has a global unique index.
         const { data: occupied, error: lookupError } = await db
           .from("clients")
           .select("id")
@@ -163,12 +201,13 @@ export default function ClientPage() {
           .maybeSingle();
 
         if (lookupError) throw lookupError;
-        if (occupied || candidate === client.client_code) continue;
+        if (occupied) continue;
 
         const { data: updated, error: updateError } = await db
           .from("clients")
           .update({ client_code: candidate })
           .eq("id", client.id)
+          .eq("clinic_id", client.clinic_id)
           .select("id, client_code")
           .single();
 
@@ -181,14 +220,16 @@ export default function ClientPage() {
           throw updateError;
         }
 
-        if (!updated?.client_code) throw new Error("تم تنفيذ الطلب لكن لم يتم تأكيد رقم العميل الجديد.");
+        if (!updated?.client_code || !updated.client_code.startsWith(clinicPrefix) || !/^\d{6}$/.test(updated.client_code)) {
+          throw new Error("لم يتم تأكيد Client ID الجديد بالصيغة الصحيحة.");
+        }
 
         setClient((current) => current ? { ...current, client_code: updated.client_code } : current);
-        setMessage("تم تغيير Client ID بنجاح. رقم الدخول الجديد: " + updated.client_code);
+        setMessage("تم تغيير Client ID بنجاح مع الحفاظ على كود العيادة: " + updated.client_code);
         return;
       }
 
-      throw lastError || new Error("لم نتمكن من العثور على رقم متاح بعد عدة محاولات. جرّب مرة أخرى.");
+      throw lastError || new Error("لم يتم العثور على رقم متاح بنفس كود بداية العيادة. لم يتم تغيير الرقم.");
     } catch (err) {
       console.error("GENERATE CLIENT CODE ERROR:", err);
       setError(err instanceof Error ? err.message : "تعذر تغيير Client ID.");

@@ -55,6 +55,7 @@ const translations = {
       ["استعلام سريع", "ابحث عن منتج بالباركود", "🔎"],
       ["المالية", "الدخل والمصروفات", "💰"],
       ["التقارير", "ملخص العيادة", "📊"],
+      ["سجل الزيارات", "عرض وتعديل الكشوفات السابقة", "📋"],
     ],
 
     open: "فتح",
@@ -107,6 +108,7 @@ const translations = {
       ["Quick Lookup", "Find a product by barcode", "🔎"],
       ["Finance", "Income and expenses", "💰"],
       ["Reports", "Clinic summary", "📊"],
+      ["Visit History", "Review and edit previous visits", "📋"],
     ],
 
     open: "Open",
@@ -774,6 +776,9 @@ export default function Home() {
                         break;
                       case 9:
                         goTo("/reports");
+                        break;
+                      case 10:
+                        goTo("/dashboard/visits");
                         break;
                       default:
                         goTo("/dashboard");

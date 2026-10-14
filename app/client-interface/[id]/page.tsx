@@ -736,7 +736,25 @@ export default function ClientInterfaceIdPage(){
         </div></div>
         <div className="rounded-[1.7rem] border border-white/[.06] bg-white/[.035] p-5"><div className="flex items-center justify-between gap-4"><div><div className="text-xs font-bold text-cyan-300">{t.next}</div><div className="mt-2 text-lg font-black">{next?.name||t.none}</div>{next?.due&&<div className="mt-1 text-xs text-slate-500">{dateText(next.due,lang)}</div>}</div><Countdown days={due} lang={lang} status={next?.status || null}/></div><button onClick={()=>next?.due&&alert(lang==="ar"?"التذكير هيتوصل بنظام الإشعارات في الخطوة التالية.":"Reminder notifications will be connected in the next step.")} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-xs font-black text-slate-950">🔔 {t.reminder}</button></div></div>}
       </div>
-      <div id="pets-section" className={dark?"rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5":"rounded-[2rem] border border-slate-100 bg-white p-5"}><div className="flex items-center justify-between"><div><h2 className="text-lg font-black">{t.pets}</h2><p className="mt-1 text-xs text-slate-500">{pets.length} {t.count}</p></div><button onClick={()=>setAddPet(true)} className="rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2.5 text-xs font-black text-slate-950">+ {t.add}</button></div><div className="mt-4 max-h-[330px] space-y-2 overflow-y-auto pe-1">{pets.map(p=><button key={p.id} onClick={()=>router.push(`/client-interface/${clientId}/pets/${p.id}`)} className={p.id===pet?.id?"flex w-full items-center gap-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/[.08] p-3 text-start":"flex w-full items-center gap-3 rounded-2xl border border-white/[.05] bg-white/[.025] p-3 text-start transition hover:bg-white/[.05]"}><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-3xl">{icon(p.species)}</div><div className="min-w-0 flex-1"><div className="truncate font-black">{p.name}</div><div className="mt-1 text-[11px] text-slate-500">{species(p.species,lang)} • {age(p.birth_date,lang)}</div></div><span className="text-slate-500">‹</span></button>)}<button onClick={()=>setAddPet(true)} className="w-full rounded-2xl border border-dashed border-cyan-400/20 bg-cyan-400/[.03] p-4 text-xs font-black text-cyan-300">+ {t.add}</button></div></div></section>
+      <div id="pets-section" className={dark ? "min-w-0 rounded-[2rem] border border-white/[.07] bg-white/[.035] p-4 sm:p-5" : "min-w-0 rounded-[2rem] border border-slate-100 bg-white p-4 sm:p-5"}>
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0"><h2 className="text-lg font-black">{t.pets}</h2><p className="mt-1 text-xs text-slate-500">{pets.length} {t.count}</p></div>
+          <button onClick={() => setAddPet(true)} className="shrink-0 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2.5 text-xs font-black text-slate-950">+ {t.add}</button>
+        </div>
+        <div className="mt-4 max-h-[330px] min-w-0 space-y-2 overflow-y-auto pe-1">
+          {pets.map((p) => (
+            <div key={p.id} className={p.id === pet?.id ? "flex min-w-0 items-stretch gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/[.08] p-2" : "flex min-w-0 items-stretch gap-2 rounded-2xl border border-white/[.05] bg-white/[.025] p-2 transition hover:bg-white/[.05]"}>
+              <button type="button" onClick={() => setSelected(p.id)} aria-pressed={p.id === pet?.id} className="flex min-w-0 flex-1 items-center gap-3 p-1 text-start">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-2xl sm:h-14 sm:w-14 sm:text-3xl">{icon(p.species)}</div>
+                <div className="min-w-0 flex-1"><div className="truncate font-black">{p.name}</div><div className="mt-1 break-words text-[11px] text-slate-500">{species(p.species,lang)} • {age(p.birth_date,lang)}</div></div>
+                {p.id === pet?.id && <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-1 text-[9px] font-black text-cyan-300">{lang === "ar" ? "المختار" : "Selected"}</span>}
+              </button>
+              <button type="button" onClick={() => router.push(`/client-interface/${clientId}/pets/${p.id}`)} aria-label={`${lang === "ar" ? "فتح ملف" : "Open profile"} ${p.name}`} title={lang === "ar" ? "فتح الملف الكامل" : "Open full profile"} className="flex w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 text-lg text-slate-400 transition hover:bg-white/[.06]">‹</button>
+            </div>
+          ))}
+          <button type="button" onClick={() => setAddPet(true)} className="w-full rounded-2xl border border-dashed border-cyan-400/20 bg-cyan-400/[.03] p-4 text-xs font-black text-cyan-300">+ {t.add}</button>
+        </div>
+      </div></section>
 
       {pet && (
         <ClientCareHub

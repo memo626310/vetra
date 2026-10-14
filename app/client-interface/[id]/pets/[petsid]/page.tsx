@@ -1009,13 +1009,13 @@ export default function ClientPetProfilePage() {
 
       <div className="pointer-events-none fixed inset-0 overflow-hidden"><div className={dark ? "absolute -right-24 -top-24 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl" : "absolute -right-24 -top-24 h-80 w-80 rounded-full bg-cyan-300/25 blur-3xl"}/><div className={dark ? "absolute -left-20 top-1/3 h-96 w-96 rounded-full bg-violet-500/10 blur-3xl" : "absolute -left-20 top-1/3 h-96 w-96 rounded-full bg-violet-300/20 blur-3xl"}/></div>
 
-      <div className="relative z-10 mx-auto max-w-7xl px-4 pb-12 pt-4 sm:px-6 lg:px-8">
+      <div className="relative z-10 mx-auto w-full min-w-0 max-w-7xl px-3 pb-12 pt-4 sm:px-6 lg:px-8">
 
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-2 py-3">
+        <header className="mb-6 flex min-w-0 flex-wrap items-center justify-between gap-2 py-3">
 
-          <Link href={`/client-interface/${clientId}`} className="min-w-0 max-w-full flex-1 rounded-2xl border border-white/10 bg-white/[.04] px-3 py-2 text-center text-xs font-black text-slate-300 sm:flex-none sm:px-4">← {t.back}</Link>
+          <Link href={`/client-interface/${clientId}`} className="min-w-0 flex-1 break-words rounded-2xl border border-white/10 bg-white/[.04] px-2 py-2 text-center text-xs font-black text-slate-300 sm:px-4">← {t.back}</Link>
 
-          <Link href={`/client-interface/${clientId}/vaccinations?pet=${pet.id}`} className="min-w-0 max-w-full flex-1 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-3 py-2.5 text-center text-xs font-black text-slate-950 sm:flex-none sm:px-4">💉 {t.vaccinations}</Link>
+          <Link href={`/client-interface/${clientId}/vaccinations?pet=${pet.id}`} className="min-w-0 flex-1 break-words rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-2 py-2.5 text-center text-xs font-black text-slate-950 sm:px-4">💉 {t.vaccinations}</Link>
 
         </header>
 
@@ -1059,9 +1059,9 @@ export default function ClientPetProfilePage() {
 
 
 
-        <section className="mt-5 grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="mt-5 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
 
-          <div className={dark ? "rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5 sm:p-6" : "rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6"}>
+          <div className={dark ? "min-w-0 w-full rounded-[2rem] border border-white/[.07] bg-white/[.035] p-4 sm:p-6" : "min-w-0 w-full rounded-[2rem] border border-slate-100 bg-white p-4 sm:p-6"}>
 
             <div className="flex items-center gap-4">
 
@@ -1083,7 +1083,7 @@ export default function ClientPetProfilePage() {
 
 
 
-          <div className={dark ? "rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5 sm:p-6" : "rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6"}>
+          <div className={dark ? "min-w-0 w-full rounded-[2rem] border border-white/[.07] bg-white/[.035] p-4 sm:p-6" : "min-w-0 w-full rounded-[2rem] border border-slate-100 bg-white p-4 sm:p-6"}>
 
             <p className="text-xs font-bold text-cyan-300">{t.nextDue}</p>
 
