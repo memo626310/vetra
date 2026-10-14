@@ -40,6 +40,7 @@ export default function ClientPage() {
 
   const [loading, setLoading] = useState(true);
   const [savingPet, setSavingPet] = useState(false);
+  const [generatingClientCode, setGeneratingClientCode] = useState(false);
 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -132,6 +133,69 @@ export default function ClientPage() {
   useEffect(() => {
     void loadClient();
   }, [clientId]);
+
+  async function generateNewClientCode() {
+    if (!client || generatingClientCode) return;
+
+    const confirmed = window.confirm(
+      "سيتم تغيير رقم دخول العميل إلى Client Interface. الرقم القديم لن يصلح لتسجيل دخول جديد. لن يتغير رقم العميل الداخلي أو أي روابط للحيوانات والزيارات والفواتير. هل تريد المتابعة؟"
+    );
+    if (!confirmed) return;
+
+    setGeneratingClientCode(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const db = await getClinicDb();
+      let lastError: Error | null = null;
+
+      for (let attempt = 0; attempt < 25; attempt += 1) {
+        const random = new Uint32Array(1);
+        window.crypto.getRandomValues(random);
+        const candidate = String(100000 + (random[0] % 900000));
+
+        const { data: occupied, error: lookupError } = await db
+          .from("clients")
+          .select("id")
+          .eq("client_code", candidate)
+          .limit(1)
+          .maybeSingle();
+
+        if (lookupError) throw lookupError;
+        if (occupied || candidate === client.client_code) continue;
+
+        const { data: updated, error: updateError } = await db
+          .from("clients")
+          .update({ client_code: candidate })
+          .eq("id", client.id)
+          .select("id, client_code")
+          .single();
+
+        if (updateError) {
+          const detail = (updateError.message || "").toLowerCase();
+          if (detail.includes("duplicate") || detail.includes("unique")) {
+            lastError = updateError;
+            continue;
+          }
+          throw updateError;
+        }
+
+        if (!updated?.client_code) throw new Error("تم تنفيذ الطلب لكن لم يتم تأكيد رقم العميل الجديد.");
+
+        setClient((current) => current ? { ...current, client_code: updated.client_code } : current);
+        setMessage("تم تغيير Client ID بنجاح. رقم الدخول الجديد: " + updated.client_code);
+        return;
+      }
+
+      throw lastError || new Error("لم نتمكن من العثور على رقم متاح بعد عدة محاولات. جرّب مرة أخرى.");
+    } catch (err) {
+      console.error("GENERATE CLIENT CODE ERROR:", err);
+      setError(err instanceof Error ? err.message : "تعذر تغيير Client ID.");
+    } finally {
+      setGeneratingClientCode(false);
+    }
+  }
 
   async function addPet(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -338,6 +402,16 @@ export default function ClientPage() {
               <span aria-hidden="true">✏️</span>
               <span>تعديل بيانات العميل</span>
             </Link>
+            <button
+              type="button"
+              onClick={() => void generateNewClientCode()}
+              disabled={generatingClientCode}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-3 font-bold text-blue-800 transition hover:bg-blue-100 disabled:cursor-wait disabled:opacity-60"
+            >
+              <span aria-hidden="true">🔢</span>
+              <span>{generatingClientCode ? "جاري توليد رقم..." : "توليد Client ID جديد"}</span>
+            </button>
+
           </div>
 
           {client.notes && (

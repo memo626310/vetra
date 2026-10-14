@@ -1011,11 +1011,11 @@ export default function ClientPetProfilePage() {
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 pb-12 pt-4 sm:px-6 lg:px-8">
 
-        <header className="mb-6 flex items-center justify-between py-3">
+        <header className="mb-6 flex flex-wrap items-center justify-between gap-2 py-3">
 
-          <Link href={`/client-interface/${clientId}`} className="rounded-2xl border border-white/10 bg-white/[.04] px-4 py-2 text-xs font-black text-slate-300">← {t.back}</Link>
+          <Link href={`/client-interface/${clientId}`} className="min-w-0 max-w-full flex-1 rounded-2xl border border-white/10 bg-white/[.04] px-3 py-2 text-center text-xs font-black text-slate-300 sm:flex-none sm:px-4">← {t.back}</Link>
 
-          <Link href={`/client-interface/${clientId}/vaccinations?pet=${pet.id}`} className="rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2.5 text-xs font-black text-slate-950">💉 {t.vaccinations}</Link>
+          <Link href={`/client-interface/${clientId}/vaccinations?pet=${pet.id}`} className="min-w-0 max-w-full flex-1 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-3 py-2.5 text-center text-xs font-black text-slate-950 sm:flex-none sm:px-4">💉 {t.vaccinations}</Link>
 
         </header>
 
@@ -1059,7 +1059,7 @@ export default function ClientPetProfilePage() {
 
 
 
-        <section className="mt-5 grid gap-5 lg:grid-cols-[1.05fr\_.95fr]">
+        <section className="mt-5 grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
 
           <div className={dark ? "rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5 sm:p-6" : "rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6"}>
 
