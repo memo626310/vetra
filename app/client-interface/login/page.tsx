@@ -1,8 +1,10 @@
 ﻿"use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { getClientPortalDb } from "@/lib/client-portal-db";
+import { clientPortalPhotos } from "../pet-photos";
 
 export default function ClientLoginPage() {
   const router = useRouter();
@@ -13,6 +15,7 @@ export default function ClientLoginPage() {
   const [keepSignedIn, setKeepSignedIn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [photoIndex, setPhotoIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const savedLanguage =
@@ -28,6 +31,17 @@ export default function ClientLoginPage() {
     if (savedTheme === "dark") {
       setDark(true);
     }
+
+    const previousPhoto = Number.parseInt(
+      window.sessionStorage.getItem("vetra-login-photo") ?? "-1",
+      10,
+    );
+    const photoChoices = clientPortalPhotos
+      .map((_, index) => index)
+      .filter((index) => index !== previousPhoto);
+    const nextPhoto = photoChoices[Math.floor(Math.random() * photoChoices.length)] ?? 0;
+    window.sessionStorage.setItem("vetra-login-photo", String(nextPhoto));
+    setPhotoIndex(nextPhoto);
   }, []);
 
   const ar = language === "ar";
@@ -140,13 +154,6 @@ export default function ClientLoginPage() {
 
         <div className="absolute -right-32 bottom-[-5rem] h-[32rem] w-[32rem] rounded-full bg-blue-300/20 blur-3xl" />
 
-        <div className="absolute left-[5%] top-[40%] rotate-[-18deg] text-8xl opacity-10">
-          🐾
-        </div>
-
-        <div className="absolute right-[7%] top-[20%] rotate-[18deg] text-7xl opacity-10">
-          🐾
-        </div>
       </div>
 
       <header className="relative z-10 flex items-center justify-between px-6 py-5 sm:px-10">
@@ -154,21 +161,17 @@ export default function ClientLoginPage() {
           onClick={() =>
             router.push("/client-interface")
           }
-          className="flex items-center gap-3"
+          aria-label={ar ? "العودة إلى بوابة VETRA" : "Back to VETRA client portal"}
+          className="flex items-center"
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-2xl text-white shadow-xl dark:bg-white dark:text-slate-900">
-            🐾
-          </div>
-
-          <div className="text-left">
-            <div className="font-black tracking-[0.2em]">
-              VETRA
-            </div>
-
-            <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400">
-              Pet Care Portal
-            </div>
-          </div>
+          <Image
+            src={dark ? "/vetra-logo-full.png" : "/vetra-logo-light.png"}
+            alt="VETRA"
+            width={992}
+            height={830}
+            priority
+            className="h-12 w-[58px] object-contain sm:h-14 sm:w-[68px]"
+          />
         </button>
 
         <div className="flex gap-2">
@@ -187,46 +190,54 @@ export default function ClientLoginPage() {
             onClick={() =>
               setDark((v) => !v)
             }
+            aria-label={dark ? (ar ? "الوضع الفاتح" : "Light mode") : (ar ? "الوضع الداكن" : "Dark mode")}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/70 backdrop-blur dark:border-white/10 dark:bg-white/5"
           >
-            {dark ? "☀️" : "🌙"}
+            {dark ? (
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+              </svg>
+            ) : (
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.6 8.6 0 1 0 20.5 14.2Z" />
+              </svg>
+            )}
           </button>
         </div>
       </header>
 
       <section className="relative z-10 flex min-h-[calc(100vh-90px)] items-center justify-center px-5 pb-10">
-        <div className="grid w-full max-w-5xl overflow-hidden rounded-[3rem] border border-white/70 bg-white/70 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-white/5 lg:grid-cols-2">
+        <div className="grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-white/70 bg-white/70 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-white/5 sm:rounded-[2.5rem] lg:grid-cols-2">
 
-          <div className="hidden min-h-[600px] items-center justify-center bg-slate-900 p-12 text-white lg:flex dark:bg-[#0B1825]">
-            <div className="text-center">
-              <div className="mx-auto flex h-56 w-56 items-center justify-center rounded-full bg-white/10 text-[8rem] shadow-2xl">
-                🐕
-              </div>
-
-              <div className="mt-10 text-xs font-bold uppercase tracking-[0.4em] text-cyan-300">
-                VETRA
-              </div>
-
-              <h1 className="mt-4 text-4xl font-black">
-                {ar
-                  ? "أهلاً بيك تاني 🐾"
-                  : "Welcome back 🐾"}
+          <div className="relative order-1 flex min-h-[270px] items-end overflow-hidden bg-[#0B1825] px-7 py-8 text-white sm:min-h-[320px] sm:px-10 sm:py-10 lg:order-none lg:min-h-[600px] lg:items-center lg:px-12 lg:py-12">
+            {photoIndex !== null && (
+              <Image
+                key={clientPortalPhotos[photoIndex].src}
+                src={clientPortalPhotos[photoIndex].src}
+                alt={clientPortalPhotos[photoIndex].alt}
+                fill
+                unoptimized
+                sizes="(max-width: 1023px) 100vw, 40vw"
+                className="object-cover object-center"
+              />
+            )}
+            <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-[#07111c]/95 via-[#07111c]/35 to-[#07111c]/10" />
+            <div className="relative z-10 max-w-md lg:mx-auto lg:text-center">
+              <h1 className="text-3xl font-black sm:text-4xl">
+                {ar ? "أهلاً بيك تاني" : "Welcome back"}
               </h1>
 
-              <p className="mx-auto mt-4 max-w-sm text-sm leading-7 text-slate-300">
+              <p className="mt-3 text-sm leading-7 text-white/85 sm:text-base">
                 {ar
-                  ? "كل ما يخص حيوانك المميز، في مكان واحد."
-                  : "Everything your hero pet needs, in one place."}
+                  ? "كل ما يخص حيوانك الأليف، في مكان واحد."
+                  : "Everything your pet needs, in one place."}
               </p>
             </div>
           </div>
 
-          <div className="p-7 sm:p-12">
+          <div className="order-2 p-7 sm:p-12 lg:order-none">
             <div className="mb-8">
-              <div className="text-sm font-bold uppercase tracking-[0.25em] text-cyan-500">
-                VETRA
-              </div>
-
               <h2 className="mt-3 text-4xl font-black tracking-tight">
                 {ar
                   ? "تسجيل الدخول"
@@ -314,8 +325,8 @@ export default function ClientLoginPage() {
                     ? "جاري الدخول..."
                     : "Signing in..."
                   : ar
-                    ? "دخول 🐾"
-                    : "Sign in 🐾"}
+                    ? "دخول"
+                    : "Sign in"}
               </button>
             </form>
 
@@ -324,6 +335,26 @@ export default function ClientLoginPage() {
                 ? "الـ Client ID موجود في ملفك لدى VETRA."
                 : "Your Client ID is available in your VETRA client profile."}
             </p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm">
+              <span className="text-slate-500 dark:text-slate-400">
+                {ar ? "تمثل عيادة؟" : "Are you a clinic?"}
+              </span>
+              <button
+                type="button"
+                onClick={() => router.push("/register")}
+                className="font-bold text-cyan-700 underline-offset-4 transition hover:underline dark:text-cyan-300"
+              >
+                {ar ? "سجّل عيادة جديدة" : "Register a new clinic"}
+              </button>
+              <span className="text-slate-400">{ar ? "أو" : "or"}</span>
+              <button
+                type="button"
+                onClick={() => router.push("/login")}
+                className="font-bold text-slate-800 underline-offset-4 transition hover:underline dark:text-white"
+              >
+                {ar ? "تسجيل الدخول كعيادة" : "Login as a clinic"}
+              </button>
+            </div>
           </div>
         </div>
       </section>
