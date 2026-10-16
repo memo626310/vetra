@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getClientPortalDb } from "@/lib/client-portal-db";
+import PushNotificationsButton from "@/components/PushNotificationsButton";
 
 type Lang = "ar" | "en";
 type Client = { id: string; name: string };
@@ -74,7 +75,9 @@ const T = {
     restart: "إعادة البروتوكول",
     accordingToProtocol: "طبقًا لبروتوكول VETRA المسجل للحيوان",
     reminder: "فعّل التذكير",
-    reminderLater: "التذكيرات هتتربط بالإشعارات في الخطوة التالية.",
+    reminderLater: "تم حفظ تذكير الجرعة القادمة.",
+    reminderSaving: "جاري حفظ التذكير...",
+    reminderFailed: "تعذر حفظ التذكير. حاول مرة أخرى.",
     loading: "جاري تحميل التطعيمات...",
     error: "تعذر تحميل التطعيمات",
     login: "العودة لتسجيل الدخول",
@@ -114,7 +117,9 @@ const T = {
     restart: "Restart protocol",
     accordingToProtocol: "Based on the VETRA protocol recorded for this pet",
     reminder: "Set reminder",
-    reminderLater: "Reminders will connect to notifications in the next step.",
+    reminderLater: "Your next-dose reminder has been saved.",
+    reminderSaving: "Saving reminder...",
+    reminderFailed: "Couldn't save the reminder. Please try again.",
     loading: "Loading vaccines...",
     error: "We couldn't load vaccines",
     login: "Back to login",
@@ -286,6 +291,8 @@ export default function VaccinationsPage() {
   const [selected, setSelected] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reminderSaving, setReminderSaving] = useState(false);
+  const [reminderNotice, setReminderNotice] = useState("");
 
   useEffect(() => {
     const l = localStorage.getItem("vetra-language");
@@ -359,6 +366,43 @@ export default function VaccinationsPage() {
     localStorage.setItem("vetra-theme", nextTheme ? "dark" : "light");
   }
 
+  async function setVaccineReminder() {
+    if (!next || !pet) return;
+    setReminderSaving(true);
+    setReminderNotice("");
+    try {
+      const clientCode = localStorage.getItem("vetra-client-code") || sessionStorage.getItem("vetra-client-code") || "";
+      const phone = localStorage.getItem("vetra-client-phone") || sessionStorage.getItem("vetra-client-phone") || "";
+      if (!clientCode || !phone) throw new Error("Owner session expired.");
+
+      const due = new Date(next.due as string);
+      const dueDate = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`;
+      const scheduledAt = new Date(due);
+      scheduledAt.setHours(9, 0, 0, 0);
+      if (scheduledAt.getTime() <= Date.now()) scheduledAt.setTime(Date.now() + 60_000);
+
+      const response = await fetch("/api/push/reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientCode,
+          phone,
+          petId: pet.id,
+          protocolKey: next.key,
+          dueDate,
+          scheduledAt: scheduledAt.toISOString(),
+          language: lang,
+        }),
+      });
+      if (!response.ok) throw new Error("Reminder request failed.");
+      setReminderNotice(t.reminderLater);
+    } catch {
+      setReminderNotice(t.reminderFailed);
+    } finally {
+      setReminderSaving(false);
+    }
+  }
+
   if (loading) return <main dir={lang === "ar" ? "rtl" : "ltr"} className="flex min-h-screen items-center justify-center bg-[#06101a] text-white"><div className="text-center"><div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-cyan-400/10 text-3xl">💉</div><p className="text-sm font-bold text-slate-400">{t.loading}</p></div></main>;
   if (error && !client) return <main dir={lang === "ar" ? "rtl" : "ltr"} className="flex min-h-screen items-center justify-center bg-[#06101a] px-6 text-white"><div className="max-w-md rounded-[2rem] border border-white/10 bg-white/[.04] p-8 text-center"><div className="text-5xl">💉</div><h1 className="mt-4 text-2xl font-black">{t.error}</h1><p className="mt-3 text-sm text-slate-400">{error}</p><button onClick={() => router.replace("/client-interface/login")} className="mt-6 rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-black text-slate-950">{t.login}</button></div></main>;
 
@@ -371,7 +415,7 @@ export default function VaccinationsPage() {
             <Link href={`/client-interface/${clientId}`} className={dark ? "flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[.05]" : "flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white"}>←</Link>
             <div><div className="font-black tracking-[.18em]">VETRA</div><div className="text-[10px] font-bold tracking-[.18em] text-slate-500">PET CARE</div></div>
           </div>
-          <div className="flex items-center gap-2"><button onClick={toggleLang} className={dark ? "rounded-full border border-white/10 bg-white/[.05] px-3 py-2 text-xs font-bold" : "rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold"}>{t.language || (lang === "ar" ? "English" : "العربية")}</button><button onClick={toggleTheme} className={dark ? "flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[.05]" : "flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white"}>{dark ? "☀️" : "🌙"}</button></div>
+          <div className="flex items-center gap-2"><PushNotificationsButton audience="owner" language={lang} darkMode={dark}/><button onClick={toggleLang} className={dark ? "rounded-full border border-white/10 bg-white/[.05] px-3 py-2 text-xs font-bold" : "rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold"}>{t.language || (lang === "ar" ? "English" : "العربية")}</button><button onClick={toggleTheme} className={dark ? "flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[.05]" : "flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white"}>{dark ? "☀️" : "🌙"}</button></div>
         </header>
 
         <section className={dark ? "rounded-[2rem] border border-white/[.07] bg-gradient-to-br from-white/[.08] to-white/[.03] p-5 shadow-2xl sm:p-7" : "rounded-[2rem] border border-slate-100 bg-white p-5 shadow-2xl sm:p-7"}>
@@ -386,7 +430,7 @@ export default function VaccinationsPage() {
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-xs font-bold text-cyan-300">{next[lang === "ar" ? "titleAr" : "titleEn"]}</div><div className="mt-2 text-2xl font-black">{statusLabel(next, lang)}</div><p className="mt-2 text-sm leading-7 text-slate-500">{lang === "ar" ? next.subtitleAr : next.subtitleEn}</p>{next.due && <div className="mt-2 text-xs font-bold text-slate-500">{new Date(next.due).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US", { day: "numeric", month: "long", year: "numeric" })}</div>}</div>
               <div className="relative flex h-28 w-28 shrink-0 items-center justify-center rounded-full border-[8px] border-cyan-400/10 bg-white/[.02]"><div className="text-center"><div className="text-2xl font-black">{next.due ? Math.max(daysUntil(next.due), 0) : "—"}</div><div className="text-[10px] font-bold text-slate-500">{next.due && daysUntil(next.due) < 0 ? t.overdue : next.due && daysUntil(next.due) === 0 ? t.dueToday : t.days}</div></div></div>
             </div>
-            {next.due && <button onClick={() => window.alert(t.reminderLater)} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-xs font-black text-slate-950">🔔 {t.reminder}</button>}
+            {next.due && <><button onClick={() => void setVaccineReminder()} disabled={reminderSaving} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-xs font-black text-slate-950 disabled:opacity-60">{reminderSaving ? t.reminderSaving : `🔔 ${t.reminder}`}</button>{reminderNotice && <p className="mt-2 text-xs text-cyan-300" role="status">{reminderNotice}</p>}</>}
           </div> : <div className="mt-6 rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">{t.noUpcoming}</div>}
         </section>
 

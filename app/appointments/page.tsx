@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
+import { vetraCore } from "@/lib/vetra-core";
 
 type Language = "ar" | "en";
 type Status =
@@ -537,11 +538,38 @@ export default function AppointmentsPage() {
 
       if (updateError) throw updateError;
 
+      if (status !== a.status && (status === "confirmed" || status === "cancelled")) {
+        void notifyPetOwner(a.id, status);
+      }
+
       setMessage(t.appointmentSaved);
       await loadData();
     } catch (e) {
       console.error("APPOINTMENT STATUS ERROR:", e);
       setError(e instanceof Error ? e.message : t.error);
+    }
+  }
+
+  async function notifyPetOwner(
+    appointmentId: string,
+    status: "confirmed" | "cancelled" | "pending",
+    eventType: "status" | "rescheduled" = "status"
+  ) {
+    try {
+      const { data } = await vetraCore.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return;
+      await fetch("/api/push/notify-owner", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ appointmentId, status, eventType, language }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      // Appointment status changes remain saved if push delivery is unavailable.
     }
   }
 
@@ -578,6 +606,7 @@ export default function AppointmentsPage() {
         reason: reason.trim() || null,
         notes: notes.trim() || null,
         source: "clinic",
+        updated_at: new Date().toISOString(),
       };
 
       if (selectedAppointment) {
@@ -587,12 +616,20 @@ export default function AppointmentsPage() {
           .eq("id", selectedAppointment.id);
 
         if (updateError) throw updateError;
+        if (selectedAppointment.status === "pending" || selectedAppointment.status === "confirmed") {
+          void notifyPetOwner(selectedAppointment.id, selectedAppointment.status, "rescheduled");
+        }
       } else {
-        const { error: insertError } = await db
+        const { data: insertedAppointment, error: insertError } = await db
           .from("appointments")
-          .insert({ ...payload, status: "confirmed" });
+          .insert({ ...payload, status: "confirmed" })
+          .select("id")
+          .single();
 
         if (insertError) throw insertError;
+        if (insertedAppointment?.id) {
+          void notifyPetOwner(String(insertedAppointment.id), "confirmed");
+        }
       }
 
       setModal(null);
@@ -1022,7 +1059,7 @@ export default function AppointmentsPage() {
                             <button onClick={() => router.push(`/visits/new?appointment=${a.id}&pet=${a.pet_id}`)} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">{t.startVisit}</button>
                           )}
 
-                          {a.status === "confirmed" && (
+                          {a.status === "pending" && (
                             <button onClick={() => void updateStatus(a, "confirmed")} className="rounded-xl bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-400">{t.confirm}</button>
                           )}
 

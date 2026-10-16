@@ -584,11 +584,14 @@ export default function ClientAppointmentsPage() {
             end_time: endTime,
             reason: reason.trim() || null,
             notes: notes.trim() || null,
+            updated_at: new Date().toISOString(),
           })
           .eq("id", editing.id)
           .eq("client_id", clientId);
 
         if (res.error) throw new Error(res.error.message);
+
+        void notifyClinicOfAppointment(session, editing.id, "rescheduled");
 
         setBanner(t.successEdit);
       } else {
@@ -605,9 +608,11 @@ export default function ClientAppointmentsPage() {
           notes: notes.trim() || null,
           status: "pending",
           source: "client_portal",
-        });
+        }).select("id").single();
 
         if (res.error) throw new Error(res.error.message);
+
+        if (res.data?.id) void notifyClinicOfAppointment(session, String(res.data.id), "requested");
 
         setBanner(t.successBook);
       }
@@ -623,6 +628,29 @@ export default function ClientAppointmentsPage() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function notifyClinicOfAppointment(
+    session: ReturnType<typeof getOwnerSession>,
+    appointmentId: string,
+    eventType: "requested" | "rescheduled" | "cancelled"
+  ) {
+    try {
+      await fetch("/api/push/notify-clinic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appointmentId,
+          eventType,
+          language: lang,
+          clientCode: session.code,
+          phone: session.phone,
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      // Booking remains saved even if a push provider is temporarily unavailable.
     }
   }
 
@@ -643,11 +671,13 @@ export default function ClientAppointmentsPage() {
 
       const res = await db
         .from("appointments")
-        .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
+        .update({ status: "cancelled", cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq("id", selectedAppointment.id)
         .eq("client_id", clientId);
 
       if (res.error) throw new Error(res.error.message);
+
+      void notifyClinicOfAppointment(session, selectedAppointment.id, "cancelled");
 
       setBanner(t.successCancel);
       setModal(null);

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
+import PushNotificationsButton from "@/components/PushNotificationsButton";
 // VETRA_DASHBOARD_CURRENT_DESIGN_POLISH_V1
 
 type Language = "ar" | "en";
@@ -663,18 +664,11 @@ export default function Home() {
 
               {/* Notifications */}
 
-              <button
-                className={`hidden h-12 w-12 items-center justify-center rounded-2xl border text-xl transition-all duration-300 hover:-translate-y-0.5 active:scale-90 sm:flex ${
-                  darkMode
-                    ? "border-white/[0.06] bg-[#181B21] hover:bg-[#1D2128]"
-                    : "border-slate-100 bg-white hover:bg-slate-50"
-                }`}
-                aria-label={t.notifications}
-              >
-                <span className="inline-block transition-transform duration-300 hover:rotate-12">
-                  🔔
-                </span>
-              </button>
+              <PushNotificationsButton
+                audience="clinic"
+                language={isArabic ? "ar" : "en"}
+                darkMode={darkMode}
+              />
 
               {/* Profile */}
 

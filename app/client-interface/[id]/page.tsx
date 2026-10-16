@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { getClientPortalDb } from "@/lib/client-portal-db";
 import { vetraCore } from "@/lib/vetra-core";
 import DailyMedicationTodo from "@/components/client-interface/DailyMedicationTodo";
 import ClientCareHub from "@/components/client-interface/ClientCareHub";
+import PushNotificationsButton from "@/components/PushNotificationsButton";
 
 type Lang = "ar" | "en";
 type Client = { id: string; name: string; phone: string | null; email: string | null };
@@ -607,7 +609,7 @@ function Countdown({ days, lang, status, dark }:{days:number|null;lang:Lang;stat
 
 export default function ClientInterfaceIdPage(){
   const params=useParams<{id:string}>(); const router=useRouter(); const clientId=params.id;
-  const [lang,setLang]=useState<Lang>("ar"); const dark=true; const [paletteId,setPaletteId]=useState<PaletteId>("sage"); const [themePicker,setThemePicker]=useState(false); const [client,setClient]=useState<Client|null>(null); const [pets,setPets]=useState<Pet[]>([]); const [visits,setVisits]=useState<Visit[]>([]); const [vaccines,setVaccines]=useState<Vaccine[]>([]); const [selected,setSelected]=useState(""); const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [settings,setSettings]=useState(false); const [addPet,setAddPet]=useState(false); const [petForm,setPetForm]=useState({name:"",species:"cat",gender:"Female",birth_date:"",breed:"",color:""}); const [savingPet,setSavingPet]=useState(false); const [photoBusy,setPhotoBusy]=useState(false); const [photoError,setPhotoError]=useState(""); const [photoMessage,setPhotoMessage]=useState("");
+  const [lang,setLang]=useState<Lang>("ar"); const dark=true; const [paletteId,setPaletteId]=useState<PaletteId>("sage"); const [themePicker,setThemePicker]=useState(false); const [client,setClient]=useState<Client|null>(null); const [pets,setPets]=useState<Pet[]>([]); const [visits,setVisits]=useState<Visit[]>([]); const [vaccines,setVaccines]=useState<Vaccine[]>([]); const [selected,setSelected]=useState(""); const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [settings,setSettings]=useState(false); const [addPet,setAddPet]=useState(false); const [petForm,setPetForm]=useState({name:"",species:"cat",gender:"Female",birth_date:"",breed:"",color:""}); const [savingPet,setSavingPet]=useState(false); const [photoBusy,setPhotoBusy]=useState(false); const [photoError,setPhotoError]=useState(""); const [photoMessage,setPhotoMessage]=useState(""); const [comingSoonFeature,setComingSoonFeature]=useState<"tinder"|"adoption"|null>(null);
 
   useEffect(()=>{const l=localStorage.getItem("vetra-language"); const savedPalette=localStorage.getItem("vetra-client-palette"); if(l==="ar"||l==="en")setLang(l); if(savedPalette&&Object.prototype.hasOwnProperty.call(PAGE_PALETTES,savedPalette))setPaletteId(savedPalette as PaletteId);},[]);
   const loadDashboard = async (showLoader = false) => {
@@ -834,15 +836,12 @@ export default function ClientInterfaceIdPage(){
       if (!data?.publicUrl) throw new Error("Could not create a public photo URL.");
 
       const db = await getClientPortalDb(ownerSession.code, ownerSession.phone);
-      const { data: updatedPet, error: updateError } = await db
-        .from("pets")
-        .update({ photo_url: data.publicUrl })
-        .eq("id", petToUpdate.id)
-        .eq("client_id", clientId)
-        .select("id")
-        .maybeSingle();
+      const { data: updatedPetId, error: updateError } = await db.rpc("vetra_update_pet_photo_for_owner", {
+        p_pet_id: petToUpdate.id,
+        p_photo_url: data.publicUrl,
+      });
       if (updateError) throw updateError;
-      if (!updatedPet) throw new Error("The pet photo could not be saved to this account.");
+      if (updatedPetId !== petToUpdate.id) throw new Error("The pet photo could not be saved to this account.");
 
       setPets(current => current.map(item => item.id === petToUpdate.id ? { ...item, photo_url: data.publicUrl } : item));
       setPhotoMessage(lang === "ar" ? "تم تحديث صورة الحيوان." : "Pet photo updated.");
@@ -855,10 +854,34 @@ export default function ClientInterfaceIdPage(){
       }
     } catch (e) {
       await vetraCore.storage.from("pet-photos").remove([newPhotoPath]);
-      console.error("OWNER PET PHOTO UPLOAD ERROR:", e);
+      const failure = e && typeof e === "object" ? e as {
+        name?: unknown;
+        message?: unknown;
+        code?: unknown;
+        details?: unknown;
+        hint?: unknown;
+        status?: unknown;
+      } : null;
+      const failureMessage = typeof failure?.message === "string"
+        ? failure.message
+        : typeof e === "string" ? e : "Unknown error";
+      console.error("OWNER PET PHOTO UPLOAD ERROR:", {
+        stage: failedAt,
+        name: failure?.name,
+        message: failureMessage,
+        code: failure?.code,
+        details: failure?.details,
+        hint: failure?.hint,
+        status: failure?.status,
+        error: e,
+      });
+      const missingPhotoRpc = failure?.code === "PGRST202"
+        || failureMessage.includes("vetra_update_pet_photo_for_owner");
       setPhotoError(failedAt === "storage"
         ? (lang === "ar" ? "مخزن صور VETRA رفض الرفع بسبب سياسة الأمان (RLS). يلزم تفعيل رفع آمن لصور الحيوانات." : "VETRA photo storage rejected the upload under its RLS policy. Secure pet photo uploads need to be enabled.")
-        : (lang === "ar" ? "تم رفع الملف، لكن قاعدة بيانات العيادة رفضت حفظ رابط الصورة للحيوان." : "The file uploaded, but the clinic database rejected saving the pet photo URL."));
+        : missingPhotoRpc
+          ? (lang === "ar" ? "دالة حفظ الصور غير موجودة في قاعدة بيانات العيادة. شغّل ملف SQL على قاعدة بيانات العيادة ثم أعد تحميل الصفحة." : "The pet photo save function is missing from the clinic database. Run the SQL file on that clinic database, then reload the page.")
+          : (lang === "ar" ? "تم رفع الملف، لكن قاعدة بيانات العيادة رفضت حفظ رابط الصورة للحيوان. راجع تفاصيل الخطأ في Console." : "The file uploaded, but the clinic database rejected saving the pet photo URL. Check the Console for error details."));
     } finally {
       setPhotoBusy(false);
     }
@@ -881,15 +904,12 @@ export default function ClientInterfaceIdPage(){
       }
 
       const db = await getClientPortalDb(ownerSession.code, ownerSession.phone);
-      const { data: updatedPet, error: updateError } = await db
-        .from("pets")
-        .update({ photo_url: null })
-        .eq("id", petToUpdate.id)
-        .eq("client_id", clientId)
-        .select("id")
-        .maybeSingle();
+      const { data: updatedPetId, error: updateError } = await db.rpc("vetra_update_pet_photo_for_owner", {
+        p_pet_id: petToUpdate.id,
+        p_photo_url: null,
+      });
       if (updateError) throw updateError;
-      if (!updatedPet) throw new Error("The pet photo could not be removed from this account.");
+      if (updatedPetId !== petToUpdate.id) throw new Error("The pet photo could not be removed from this account.");
 
       setPets(current => current.map(item => item.id === petToUpdate.id ? { ...item, photo_url: null } : item));
       const oldPhotoPath = petPhotoStoragePath(petToUpdate.photo_url, petToUpdate.id);
@@ -915,7 +935,7 @@ export default function ClientInterfaceIdPage(){
   return <main id="home" data-vetra-page-theme="client" data-vetra-palette={paletteId} data-vetra-mode={dark?"dark":"light"} style={paletteStyle} dir={lang==="ar"?"rtl":"ltr"} className={dark?"min-h-screen overflow-x-hidden bg-[#06101a] text-white":"min-h-screen overflow-x-hidden bg-[#f5f9fc] text-slate-900"}>
     <div className="pointer-events-none fixed inset-0 overflow-hidden"><div className={dark?"absolute -right-24 -top-24 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl":"absolute -right-24 -top-24 h-80 w-80 rounded-full bg-cyan-300/25 blur-3xl"}/><div className={dark?"absolute -left-24 top-1/3 h-96 w-96 rounded-full bg-violet-500/10 blur-3xl":"absolute -left-24 top-1/3 h-96 w-96 rounded-full bg-violet-300/20 blur-3xl"}/></div>
     <div className="relative z-10 mx-auto max-w-7xl px-4 pb-28 pt-4 sm:px-6 lg:px-8">
-      <header className="sticky top-0 z-40 mb-6 flex items-center justify-between py-3 backdrop-blur-xl"><div className={dark?"":"rounded-xl bg-[#10251f] p-1.5 shadow-sm"}><Image src="/vetra-logo-full.png" alt="VETRA" width={992} height={830} priority className="h-14 w-[68px] object-contain sm:h-16 sm:w-[76px]"/></div><div className="flex items-center gap-2"><button onClick={toggleLang} className={dark?"rounded-full border border-white/10 bg-white/[.05] px-3 py-2 text-xs font-bold":"rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold"}>{t.language}</button><div className="relative"><button type="button" onClick={()=>setThemePicker(value=>!value)} aria-expanded={themePicker} aria-label={lang==="ar"?"ألوان الصفحة":"Page themes"} title={lang==="ar"?"ألوان الصفحة":"Page themes"} className={dark?"flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[.05] text-cyan-200":"flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-cyan-800"}><UiIcon name="palette" className="h-[18px] w-[18px]"/></button>{themePicker&&<div dir={lang==="ar"?"rtl":"ltr"} className="absolute end-0 top-12 z-[80] w-64 rounded-2xl border border-white/10 bg-white p-3 shadow-2xl" style={{color:colors.text}}><div className="mb-2 px-1 text-xs font-black text-slate-300">{lang==="ar"?"اختار ألوان الصفحة":"Choose page colors"}</div><div className="space-y-1.5">{(Object.keys(PAGE_PALETTES) as PaletteId[]).map(id=>{const option=PAGE_PALETTES[id];return <button key={id} type="button" onClick={()=>selectPalette(id)} aria-pressed={paletteId===id} className={`flex w-full items-center gap-3 rounded-xl border px-2.5 py-2 text-start transition ${paletteId===id?"border-cyan-300/60 bg-cyan-300/10":"border-slate-200 hover:bg-slate-50"}`}><span aria-hidden="true" className="h-8 w-12 shrink-0 rounded-lg border border-slate-200" style={{background:`linear-gradient(135deg,${option.swatches.join(",")})`}}/><span className="flex-1 text-xs font-bold">{lang==="ar"?option.ar:option.en}</span>{paletteId===id&&<span aria-hidden="true" className="text-cyan-300">✓</span>}</button>})}</div></div>}</div><button onClick={()=>setSettings(true)} aria-label={t.settings} className={dark?"flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[.05]":"flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white"}><UiIcon name="settings"/></button></div></header>
+      <header className="sticky top-0 z-40 mb-6 flex items-center justify-between py-3 backdrop-blur-xl"><div className={dark?"":"rounded-xl bg-[#10251f] p-1.5 shadow-sm"}><Image src="/vetra-logo-full.png" alt="VETRA" width={992} height={830} priority className="h-14 w-[68px] object-contain sm:h-16 sm:w-[76px]"/></div><div className="flex items-center gap-2"><button onClick={toggleLang} className={dark?"rounded-full border border-white/10 bg-white/[.05] px-3 py-2 text-xs font-bold":"rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold"}>{t.language}</button><div className="relative"><button type="button" onClick={()=>setThemePicker(value=>!value)} aria-expanded={themePicker} aria-label={lang==="ar"?"ألوان الصفحة":"Page themes"} title={lang==="ar"?"ألوان الصفحة":"Page themes"} className={dark?"flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[.05] text-cyan-200":"flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-cyan-800"}><UiIcon name="palette" className="h-[18px] w-[18px]"/></button>{themePicker&&<div dir={lang==="ar"?"rtl":"ltr"} className="absolute end-0 top-12 z-[80] w-64 rounded-2xl border border-white/10 bg-white p-3 shadow-2xl" style={{color:colors.text}}><div className="mb-2 px-1 text-xs font-black text-slate-300">{lang==="ar"?"اختار ألوان الصفحة":"Choose page colors"}</div><div className="space-y-1.5">{(Object.keys(PAGE_PALETTES) as PaletteId[]).map(id=>{const option=PAGE_PALETTES[id];return <button key={id} type="button" onClick={()=>selectPalette(id)} aria-pressed={paletteId===id} className={`flex w-full items-center gap-3 rounded-xl border px-2.5 py-2 text-start transition ${paletteId===id?"border-cyan-300/60 bg-cyan-300/10":"border-slate-200 hover:bg-slate-50"}`}><span aria-hidden="true" className="h-8 w-12 shrink-0 rounded-lg border border-slate-200" style={{background:`linear-gradient(135deg,${option.swatches.join(",")})`}}/><span className="flex-1 text-xs font-bold">{lang==="ar"?option.ar:option.en}</span>{paletteId===id&&<span aria-hidden="true" className="text-cyan-300">✓</span>}</button>})}</div></div>}</div><PushNotificationsButton audience="owner" language={lang} darkMode={dark}/><button onClick={()=>setSettings(true)} aria-label={t.settings} className={dark?"flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[.05]":"flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white"}><UiIcon name="settings"/></button></div></header>
 
       <section className="grid gap-5 lg:grid-cols-[1fr_360px]"><div className={dark?"rounded-[2rem] border border-white/[.07] bg-gradient-to-br from-white/[.08] to-white/[.03] p-5 shadow-2xl sm:p-7":"rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl sm:p-7"}><p className={`text-sm font-bold ${dark?"text-cyan-300":"text-cyan-800"}`}>{t.welcome}</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">{client?.name||"VETRA"}</h1><p className={`mt-3 text-sm leading-7 ${dark?"text-slate-300":"text-slate-600"}`}>{t.allCare}</p>
         {pet&&<div className="mt-6 grid gap-4 md:grid-cols-[1.1fr_.9fr]"><div className="rounded-[1.7rem] bg-gradient-to-br from-[#0e2330] to-[#10142a] p-4 text-white sm:p-5"><div className="flex items-center gap-4"><PetAvatar pet={pet} className="h-24 w-24 rounded-[1.5rem]" dark={dark}/><div className="min-w-0"><div className="text-xs font-bold text-cyan-300">{t.selected}</div><div className="mt-1 truncate text-2xl font-black">{pet.name}</div><div className="mt-1 text-xs text-slate-400">{species(pet.species,lang)} • {pet.gender==="Male"?t.male:pet.gender==="Female"?t.female:pet.gender||t.unknown} • {age(pet.birth_date,lang)}</div></div></div>
@@ -926,6 +946,7 @@ export default function ClientInterfaceIdPage(){
               {photoBusy ? (lang === "ar" ? "جاري حفظ الصورة..." : "Saving photo...") : pet.photo_url ? (lang === "ar" ? "استبدال الصورة" : "Change photo") : (lang === "ar" ? "إضافة صورة" : "Add photo")}
             </label>
             {pet.photo_url && <button type="button" disabled={photoBusy} onClick={() => void deletePetPhoto()} className="inline-flex items-center gap-2 rounded-xl border border-rose-300/15 bg-rose-300/[.06] px-3 py-2 text-xs font-bold text-rose-200 transition hover:bg-rose-300/10 disabled:opacity-60"><UiIcon name="trash" className="h-4 w-4"/>{lang === "ar" ? "حذف الصورة" : "Delete photo"}</button>}
+            <Link href={`/client-interface/${clientId}/pets/${pet.id}/gallery`} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[.05] px-3 py-2 text-xs font-bold text-slate-200 transition hover:bg-white/10"><UiIcon name="camera" className="h-4 w-4"/>{lang === "ar" ? "معرض الصور" : "Photo gallery"}</Link>
             <span className="basis-full text-[10px] text-slate-400">{lang === "ar" ? "JPG أو PNG أو WebP — حتى 5 ميجابايت" : "JPG, PNG, or WebP — up to 5 MB"}</span>
           </div>
           {photoError && <p role="alert" className="mt-2 text-xs font-semibold text-rose-300">{photoError}</p>}
@@ -1010,7 +1031,16 @@ export default function ClientInterfaceIdPage(){
       <section className={dark?"mt-5 rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5":"mt-5 rounded-[2rem] border border-slate-100 bg-white p-5"}><div className="flex items-center justify-between"><div><div className={`text-xs font-bold ${dark ? "text-cyan-300" : "text-cyan-800"}`}>{t.settings}</div><div className="mt-1 text-lg font-black">{client?.name}</div></div><span className={`rounded-full px-3 py-1.5 text-[10px] font-black ${dark ? "bg-emerald-400/10 text-emerald-200" : "bg-emerald-100 text-emerald-800"}`}><UiIcon name="lock" className="me-1 inline h-3.5 w-3.5"/>{t.secure}</span></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><div className={dark?"rounded-2xl border border-white/[.05] bg-white/[.025] p-4":"rounded-2xl border border-slate-100 bg-slate-50 p-4"}><div className={`text-[10px] font-bold ${dark ? "text-slate-400" : "text-slate-600"}`}>{t.phone}</div><div dir="ltr" className="mt-1 text-sm font-black">{client?.phone||"—"}</div></div><div className={dark?"rounded-2xl border border-white/[.05] bg-white/[.025] p-4":"rounded-2xl border border-slate-100 bg-slate-50 p-4"}><div className={`text-[10px] font-bold ${dark ? "text-slate-400" : "text-slate-600"}`}>{t.email}</div><div className="mt-1 truncate text-sm font-black">{client?.email||"—"}</div></div></div></section>
     </div>
 
-    <nav className="fixed bottom-0 left-0 right-0 z-50 p-3"><div className={dark?"mx-auto flex max-w-md items-center justify-around rounded-3xl border border-white/10 bg-[#0a1520]/95 px-3 py-2 shadow-2xl backdrop-blur-xl":"mx-auto flex max-w-md items-center justify-around rounded-3xl border border-slate-200 bg-white/95 px-3 py-2 shadow-2xl backdrop-blur-xl"}><button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})} className={`flex min-w-20 flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-black ${dark ? "text-cyan-200" : "text-cyan-900"}`}><span className="text-lg">⌂</span>{t.home}</button><button onClick={()=>document.getElementById("pets-section")?.scrollIntoView({behavior:"smooth"})} className={`flex min-w-20 flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-black ${dark ? "text-slate-300" : "text-slate-700"}`}><span className="text-lg"><UiIcon name="paw" className="h-5 w-5"/></span>{t.pets}</button><button onClick={()=>setSettings(true)} className={`flex min-w-20 flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-black ${dark ? "text-slate-300" : "text-slate-700"}`}><span className="text-lg"><UiIcon name="settings" className="h-5 w-5"/></span>{t.more}</button></div></nav>
+    <nav aria-label={lang==="ar"?"التنقل الرئيسي":"Main navigation"} className="fixed bottom-0 left-0 right-0 z-50 p-2 sm:p-3"><div className={dark?"mx-auto grid max-w-2xl grid-cols-6 items-center gap-1 rounded-3xl border border-white/10 bg-[#0a1520]/95 px-1.5 py-2 shadow-2xl backdrop-blur-xl":"mx-auto grid max-w-2xl grid-cols-6 items-center gap-1 rounded-3xl border border-slate-200 bg-white/95 px-1.5 py-2 shadow-2xl backdrop-blur-xl"}>
+      <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[8px] font-black leading-tight sm:text-[10px] ${dark ? "text-cyan-200" : "text-cyan-900"}`}><span className="text-lg">⌂</span><span className="truncate">{t.home}</span></button>
+      <button onClick={()=>document.getElementById("pets-section")?.scrollIntoView({behavior:"smooth"})} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[8px] font-black leading-tight sm:text-[10px] ${dark ? "text-slate-300" : "text-slate-700"}`}><span className="text-lg"><UiIcon name="paw" className="h-5 w-5"/></span><span className="truncate">{t.pets}</span></button>
+      <button disabled={!pet} onClick={()=>pet&&router.push(`/client-interface/${clientId}/pets/${pet.id}/gallery`)} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[8px] font-black leading-tight disabled:opacity-40 sm:text-[10px] ${dark ? "text-slate-300" : "text-slate-700"}`}><span className="text-lg">▧</span><span className="truncate">{lang==="ar"?"المعرض":"Gallery"}</span></button>
+      <button onClick={()=>setComingSoonFeature("tinder")} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[8px] font-black leading-tight sm:text-[10px] ${dark ? "text-slate-300" : "text-slate-700"}`}><span className="text-lg">❤️</span><span className="truncate">Pet Tinder</span></button>
+      <button onClick={()=>setComingSoonFeature("adoption")} aria-label="Adopt a new pet" className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[8px] font-black leading-tight sm:text-[10px] ${dark ? "text-slate-300" : "text-slate-700"}`}><span className="text-lg">🐶</span><span className="text-center">Adopt a<br/>new pet</span></button>
+      <button onClick={()=>setSettings(true)} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[8px] font-black leading-tight sm:text-[10px] ${dark ? "text-slate-300" : "text-slate-700"}`}><span className="text-lg"><UiIcon name="settings" className="h-5 w-5"/></span><span className="truncate">{t.more}</span></button>
+    </div></nav>
+
+    {comingSoonFeature&&<div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="coming-soon-title" onClick={()=>setComingSoonFeature(null)}><div onClick={event=>event.stopPropagation()} className="relative w-full max-w-sm rounded-[2rem] border border-white/10 bg-[#0b1622] p-7 text-center text-white shadow-2xl"><button type="button" onClick={()=>setComingSoonFeature(null)} aria-label={t.close} className="absolute end-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/[.06] text-slate-300">✕</button><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-cyan-300/10 text-3xl">{comingSoonFeature==="tinder"?"❤️":"🐶"}</div><p className="mt-5 text-xs font-black uppercase tracking-[.24em] text-cyan-300">Coming soon</p><h2 id="coming-soon-title" className="mt-2 text-2xl font-black">{comingSoonFeature==="tinder"?"Pet Tinder":"Adopt a new pet"}</h2><p className="mt-3 text-sm leading-6 text-slate-400">{lang==="ar"?"الميزة دي هتكون متاحة قريبًا.":"This feature will be available soon."}</p><button type="button" onClick={()=>setComingSoonFeature(null)} className="mt-6 w-full rounded-2xl bg-cyan-300 px-4 py-3 text-sm font-black text-slate-950">{t.close}</button></div></div>}
 
     {settings&&<div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center"><div className={dark?"w-full max-w-md rounded-[2rem] border border-white/10 bg-[#0b1622] p-5 text-white shadow-2xl":"w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl"}><div className="flex items-center justify-between"><h2 className="text-xl font-black">{t.settings}</h2><button onClick={()=>setSettings(false)} aria-label={t.close} className={`flex h-9 w-9 items-center justify-center rounded-full ${dark ? "bg-white/5 text-slate-300" : "bg-slate-100 text-slate-700"}`}>✕</button></div><div className="mt-5 space-y-2"><button onClick={toggleLang} className={dark?"flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[.04] p-4":"flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4"}><span className="font-black">Language / اللغة</span><span className={dark?"text-cyan-200":"text-cyan-800"}>{lang==="ar"?"عربي":"English"}</span></button><button onClick={logout} className="flex w-full items-center justify-between rounded-2xl border border-rose-400/10 bg-rose-400/[.05] p-4 text-rose-300"><span className="font-black">{t.logout}</span><span>↪</span></button></div></div></div>}
     {addPet&&<div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center"><div dir={lang==="ar"?"rtl":"ltr"} className={dark?"w-full max-w-md max-h-[92vh] overflow-y-auto rounded-[2rem] border border-white/10 bg-[#0b1622] p-6 text-white shadow-2xl":"w-full max-w-md max-h-[92vh] overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl"}><div className="flex items-center justify-between"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300"><UiIcon name="paw" className="h-6 w-6"/></div><button onClick={()=>setAddPet(false)} aria-label={t.close} className={dark?"flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-slate-300":"flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-700"}>✕</button></div><h2 className="mt-4 text-2xl font-black">{t.addTitle}</h2><p className={`mt-2 text-sm leading-7 ${dark ? "text-slate-300" : "text-slate-600"}`}>{t.addNote}</p><div className="mt-5 space-y-3">

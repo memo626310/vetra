@@ -1015,7 +1015,8 @@ export default function ClientPetProfilePage() {
 
           <Link href={`/client-interface/${clientId}`} className="min-w-0 flex-1 break-words rounded-2xl border border-white/10 bg-white/[.04] px-2 py-2 text-center text-xs font-black text-slate-300 sm:px-4">← {t.back}</Link>
 
-          <Link href={`/client-interface/${clientId}/vaccinations?pet=${pet.id}`} className="min-w-0 flex-1 break-words rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-2 py-2.5 text-center text-xs font-black text-slate-950 sm:px-4">💉 {t.vaccinations}</Link>
+          <Link href={`/client-interface/${clientId}/pets/${pet.id}/gallery`} className="min-w-0 flex-1 break-words rounded-2xl border border-white/10 bg-white/[.04] px-2 py-2.5 text-center text-xs font-black text-slate-200 sm:px-4">▧ {lang === "ar" ? "معرض الصور" : "Photo gallery"}</Link>
+          <Link href={`/client-interface/${clientId}/vaccinations?pet=${pet.id}`} className="min-w-0 flex-1 break-words rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-2 py-2.5 text-center text-xs font-black text-slate-950 sm:px-4">💉 {t.vaccinations}</Link>
 
         </header>
 
