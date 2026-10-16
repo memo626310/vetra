@@ -153,6 +153,9 @@ export default function DailyMedicationTodo({
   const inner = dark
     ? "border border-white/[.06] bg-white/[.025]"
     : "border border-slate-100 bg-slate-50";
+  const mutedText = dark ? "text-slate-400" : "text-slate-600";
+  const accentText = dark ? "text-cyan-300" : "text-cyan-800";
+  const dashedSurface = dark ? "border-white/15" : "border-slate-300";
 
   const loadTasks = useCallback(async () => {
     setLoading(true);
@@ -364,13 +367,13 @@ export default function DailyMedicationTodo({
     <section id="daily-medication-todo" className={`mt-5 scroll-mt-24 rounded-[2rem] p-5 sm:p-6 ${surface}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold text-cyan-400">{text(lang, "متابعة العلاج", "TREATMENT TRACKER")}</p>
+          <p className={`text-xs font-bold ${dark ? "text-cyan-300" : "text-cyan-800"}`}>{text(lang, "متابعة العلاج", "TREATMENT TRACKER")}</p>
           <h2 className="mt-1 text-2xl font-black">💊 {text(lang, "أدوية اليوم", "Today's medications")}</h2>
-          <p className="mt-2 text-sm text-slate-500">
+          <p className={`mt-2 text-sm ${mutedText}`}>
             {text(lang, `متابعة جرعات ${petName} اليومية. العلامات بتتحفظ وبتبدأ قائمة جديدة كل يوم.`, `Daily dose checklist for ${petName}. Check-ins are saved and the list resets each day.`)}
           </p>
         </div>
-        <button type="button" onClick={() => void loadTasks()} disabled={loading} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold disabled:opacity-50">
+        <button type="button" onClick={() => void loadTasks()} disabled={loading} className={`rounded-xl border px-3 py-2 text-xs font-bold disabled:opacity-50 ${dark ? "border-white/15 hover:bg-white/[.06]" : "border-slate-300 bg-white hover:bg-slate-50"}`}>
           {loading ? text(lang, "جاري التحديث…", "Refreshing…") : text(lang, "تحديث", "Refresh")}
         </button>
       </div>
@@ -379,10 +382,10 @@ export default function DailyMedicationTodo({
         <div className={`mt-5 rounded-2xl p-4 ${allDone ? "border border-emerald-400/20 bg-emerald-400/[.07]" : "border border-amber-400/20 bg-amber-400/[.06]"}`}>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className={`text-sm font-black ${allDone ? "text-emerald-400" : "text-amber-300"}`}>
+              <p className={`text-sm font-black ${allDone ? (dark ? "text-emerald-300" : "text-emerald-800") : (dark ? "text-amber-300" : "text-amber-800")}`}>
                 {allDone ? text(lang, "عاش! خلصت جرعات النهارده", "Great! Today's doses are complete") : text(lang, "متنساش تكمل جرعات النهارده", "Remember to complete today's doses")}
               </p>
-              <p className="mt-1 text-xs text-slate-500">{completed} / {total} {text(lang, "جرعات مكتملة", "doses completed")}</p>
+              <p className={`mt-1 text-xs ${mutedText}`}>{completed} / {total} {text(lang, "جرعات مكتملة", "doses completed")}</p>
             </div>
             <div className="text-2xl font-black tabular-nums">{Math.round((completed / total) * 100)}%</div>
           </div>
@@ -392,10 +395,10 @@ export default function DailyMedicationTodo({
         </div>
       )}
 
-      {error && <div className="mt-4 rounded-2xl border border-rose-400/20 bg-rose-400/[.06] p-3 text-sm text-rose-300">{error}</div>}
+      {error && <div className={`mt-4 rounded-2xl border p-3 text-sm ${dark ? "border-rose-400/20 bg-rose-400/[.06] text-rose-300" : "border-rose-200 bg-rose-50 text-rose-800"}`}>{error}</div>}
 
       {loading ? (
-        <div className="mt-5 rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">{text(lang, "جاري تحميل أدوية اليوم…", "Loading today's medication tasks…")}</div>
+        <div className={`mt-5 rounded-2xl border border-dashed p-6 text-center text-sm ${dashedSurface} ${mutedText}`}>{text(lang, "جاري تحميل أدوية اليوم…", "Loading today's medication tasks…")}</div>
       ) : grouped.length ? (
         <div className="mt-4 space-y-3">
           {grouped.map((doseTasks) => {
@@ -404,24 +407,24 @@ export default function DailyMedicationTodo({
             return (
               <article key={first.visitMedicationId} className={`rounded-2xl p-4 ${inner}`}>
                 <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-xl">💊</div>
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl ${dark ? "bg-cyan-400/10" : "bg-cyan-100"}`}>💊</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className={`font-black ${medicationDone ? "text-emerald-400" : ""}`}>{first.medicationName}</h3>
-                      {medicationDone && <span className="rounded-full bg-emerald-400/10 px-2 py-1 text-[10px] font-bold text-emerald-400">{text(lang, "مكتمل", "Complete")}</span>}
+                      <h3 className={`font-black ${medicationDone ? (dark ? "text-emerald-300" : "text-emerald-800") : ""}`}>{first.medicationName}</h3>
+                      {medicationDone && <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${dark ? "bg-emerald-400/10 text-emerald-300" : "bg-emerald-100 text-emerald-800"}`}>{text(lang, "مكتمل", "Complete")}</span>}
                     </div>
-                    <p className="mt-1 text-sm font-bold text-cyan-300">{first.doseText}</p>
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                    <p className={`mt-1 text-sm font-bold ${accentText}`}>{first.doseText}</p>
+                    <div className={`mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs ${mutedText}`}>
                       {first.route && <span>{text(lang, "الطريقة", "Route")}: {first.route}</span>}
                       {first.frequency && <span>{text(lang, "التكرار", "Frequency")}: {first.frequency}</span>}
                       {first.durationDays != null && <span>{text(lang, "اليوم", "Day")} {first.elapsedDays + 1} / {first.durationDays}</span>}
                     </div>
-                    {first.instructions && <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-500">{first.instructions}</p>}
+                    {first.instructions && <p className={`mt-2 whitespace-pre-wrap text-sm leading-6 ${mutedText}`}>{first.instructions}</p>}
                   </div>
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   {doseTasks.map((task) => (
-                    <label key={task.key} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${task.completed ? "border-emerald-400/20 bg-emerald-400/[.06]" : "border-white/[.07] bg-white/[.02] hover:border-cyan-400/30"} ${pendingKeys.includes(task.key) ? "opacity-60" : ""}`}>
+                    <label key={task.key} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${task.completed ? (dark ? "border-emerald-400/20 bg-emerald-400/[.06]" : "border-emerald-300 bg-emerald-50") : (dark ? "border-white/[.1] bg-white/[.035] hover:border-cyan-400/30" : "border-slate-200 bg-white hover:border-cyan-500/50")} ${pendingKeys.includes(task.key) ? "opacity-60" : ""}`}>
                       <input
                         type="checkbox"
                         checked={task.completed}
@@ -429,39 +432,39 @@ export default function DailyMedicationTodo({
                         onChange={(event) => void toggleTask(task, event.target.checked)}
                         className="h-5 w-5 shrink-0 accent-emerald-400"
                       />
-                      <span className={`text-sm font-bold ${task.completed ? "text-emerald-400 line-through" : ""}`}>
+                      <span className={`text-sm font-bold ${task.completed ? (dark ? "text-emerald-300 line-through" : "text-emerald-800 line-through") : ""}`}>
                         {task.doseCount > 1
                           ? text(lang, `الجرعة ${task.doseSlot}`, `Dose ${task.doseSlot}`)
                           : text(lang, "جرعة اليوم", "Today's dose")}
                       </span>
-                      {pendingKeys.includes(task.key) && <span className="ms-auto text-xs text-slate-500">…</span>}
+                      {pendingKeys.includes(task.key) && <span className={`ms-auto text-xs ${mutedText}`}>…</span>}
                     </label>
                   ))}
                 </div>
-                {!first.frequencyKnown && <p className="mt-2 text-xs text-amber-300">{text(lang, "صيغة تكرار الجرعات غير معروفة للنظام؛ اتبع الوصفة، وتم إظهار خانة متابعة واحدة فقط لهذا الدواء اليوم.", "This frequency format is not recognized by the tracker. Follow the prescription; only one daily acknowledgement is shown for this medicine.")}</p>}
+                {!first.frequencyKnown && <p className={`mt-2 text-xs ${dark ? "text-amber-300" : "text-amber-800"}`}>{text(lang, "صيغة تكرار الجرعات غير معروفة للنظام؛ اتبع الوصفة، وتم إظهار خانة متابعة واحدة فقط لهذا الدواء اليوم.", "This frequency format is not recognized by the tracker. Follow the prescription; only one daily acknowledgement is shown for this medicine.")}</p>}
               </article>
             );
           })}
         </div>
       ) : (
-        <div className="mt-5 rounded-2xl border border-dashed border-white/10 p-6 text-center">
+        <div className={`mt-5 rounded-2xl border border-dashed p-6 text-center ${dashedSurface}`}>
           <div className="text-3xl">✅</div>
           <p className="mt-2 font-black">{text(lang, "مفيش جرعات مستحقة مسجلة لليوم", "No active medication doses are scheduled today")}</p>
-          <p className="mt-1 text-sm text-slate-500">{text(lang, "الأدوية لازم يكون لها مدة علاج محددة من العيادة عشان تظهر في المتابعة اليومية.", "Medication prescriptions need a defined duration to appear in the daily checklist.")}</p>
+          <p className={`mt-1 text-sm ${mutedText}`}>{text(lang, "الأدوية لازم يكون لها مدة علاج محددة من العيادة عشان تظهر في المتابعة اليومية.", "Medication prescriptions need a defined duration to appear in the daily checklist.")}</p>
         </div>
       )}
 
       {missingDuration.length > 0 && (
         <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/[.05] p-4">
-          <p className="text-sm font-black text-amber-300">{text(lang, "في أدوية مدة علاجها مش محددة", "Some medications have no defined duration")}</p>
-          <p className="mt-1 text-xs leading-5 text-slate-500">{text(lang, "الأدوية دي مش هتتحول لمهام يومية عشان ما نفضلش نفكّر العميل بدواء بعد انتهاء العلاج. راجع مدة العلاج في وصفة العيادة.", "These medicines are excluded from daily reminders so the checklist does not keep prompting after treatment should have ended. Confirm the duration in the clinic prescription.")}</p>
+          <p className={`text-sm font-black ${dark ? "text-amber-300" : "text-amber-800"}`}>{text(lang, "في أدوية مدة علاجها مش محددة", "Some medications have no defined duration")}</p>
+          <p className={`mt-1 text-xs leading-5 ${mutedText}`}>{text(lang, "الأدوية دي مش هتتحول لمهام يومية عشان ما نفضلش نفكّر العميل بدواء بعد انتهاء العلاج. راجع مدة العلاج في وصفة العيادة.", "These medicines are excluded from daily reminders so the checklist does not keep prompting after treatment should have ended. Confirm the duration in the clinic prescription.")}</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            {missingDuration.map((item) => <span key={item.id} className="rounded-full bg-amber-400/10 px-3 py-1 text-xs text-amber-200">{item.name}</span>)}
+            {missingDuration.map((item) => <span key={item.id} className={`rounded-full px-3 py-1 text-xs ${dark ? "bg-amber-400/10 text-amber-200" : "bg-amber-100 text-amber-900"}`}>{item.name}</span>)}
           </div>
         </div>
       )}
 
-      <p className="mt-4 text-[11px] leading-5 text-slate-500">{text(lang, "التذكير ظاهر داخل صفحة VETRA. الإشعارات حتى لو الموقع مقفول تحتاج إعداد Push Notifications منفصل.", "Reminders appear inside VETRA. Notifications while the site is closed require a separate push-notification setup.")}</p>
+      <p className={`mt-4 text-[11px] leading-5 ${mutedText}`}>{text(lang, "التذكير ظاهر داخل صفحة VETRA. الإشعارات حتى لو الموقع مقفول تحتاج إعداد Push Notifications منفصل.", "Reminders appear inside VETRA. Notifications while the site is closed require a separate push-notification setup.")}</p>
     </section>
   );
 }

@@ -162,10 +162,10 @@ export default function ClientLoginPage() {
             router.push("/client-interface")
           }
           aria-label={ar ? "العودة إلى بوابة VETRA" : "Back to VETRA client portal"}
-          className="flex items-center"
+          className={`flex items-center ${dark ? "" : "rounded-xl bg-[#10251f] p-1.5 shadow-sm"}`}
         >
           <Image
-            src={dark ? "/vetra-logo-full.png" : "/vetra-logo-light.png"}
+            src="/vetra-logo-full.png"
             alt="VETRA"
             width={992}
             height={830}
@@ -244,7 +244,7 @@ export default function ClientLoginPage() {
                   : "Sign in"}
               </h2>
 
-              <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-300">
+              <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
                 {ar
                   ? "استخدم رقم التليفون و Client ID للدخول لملفك."
                   : "Use your phone number and Client ID to access your pet care."}
@@ -330,7 +330,7 @@ export default function ClientLoginPage() {
               </button>
             </form>
 
-            <p className="mt-6 text-center text-xs text-slate-400">
+            <p className="mt-6 text-center text-xs text-slate-600 dark:text-slate-300">
               {ar
                 ? "الـ Client ID موجود في ملفك لدى VETRA."
                 : "Your Client ID is available in your VETRA client profile."}
