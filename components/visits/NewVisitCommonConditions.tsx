@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getClinicDb } from "@/lib/clinic-db";
 import type { Language, Medication, MedicationDraft } from "./new-visit-types";
+import type { FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
 
 type ConditionProtocol = {
   id: string;
@@ -19,14 +20,27 @@ type Props = {
   darkMode: boolean;
   medications: Medication[];
   medicationDrafts: MedicationDraft[];
-  onApply: (medicationIds: string[]) => void;
+  formularyDrafts: FormularyVisitDraft[];
+  onApply: (medicationIds: string[]) => void | Promise<void>;
 };
 
 function normalizeSpecies(value: string): string {
   const species = value.trim().toLowerCase();
-  if (species.includes("cat") || species.includes("feline")) return "cat";
-  if (species.includes("dog") || species.includes("canine")) return "dog";
+  if (["cat", "feline", "قط", "قطة"].some((part) => species.includes(part))) return "cat";
+  if (["dog", "canine", "كلب", "كلاب"].some((part) => species.includes(part))) return "dog";
+  if (["all", "any", "كل الأنواع", "جميع الأنواع"].some((part) => species === part)) return "all";
   return species;
+}
+
+function databaseErrorDetails(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object") {
+    const value = error as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown };
+    return [value.message, value.code ? `code: ${String(value.code)}` : null, value.details, value.hint ? `hint: ${String(value.hint)}` : null]
+      .filter((part) => typeof part === "string" && part.trim())
+      .join(" — ");
+  }
+  return String(error || "Unknown database error");
 }
 
 function medicationSupportsSpecies(medication: Medication, species: string): boolean {
@@ -45,6 +59,7 @@ export default function NewVisitCommonConditions({
   darkMode,
   medications,
   medicationDrafts,
+  formularyDrafts,
   onApply,
 }: Props) {
   const [protocols, setProtocols] = useState<ConditionProtocol[]>([]);
@@ -160,7 +175,7 @@ export default function NewVisitCommonConditions({
       return;
     }
     if (selectedMedicationIds.length === 0) {
-      setError(language === "ar" ? "اختار دواء واحد على الأقل للبروتوكول." : "Select at least one medication for this protocol.");
+      setError(language === "ar" ? "اختاري دواءً من مكتبة العيادة أو BSAVA أولًا." : "Select a clinic medication or a BSAVA drug first.");
       return;
     }
 
@@ -176,25 +191,22 @@ export default function NewVisitCommonConditions({
     setSavingProtocol(true);
     try {
       const db = await getClinicDb();
-      const response = editingId
+      const protocolId = editingId || globalThis.crypto.randomUUID();
+      const saveResult = editingId
         ? await db.from("clinic_condition_protocols")
             .update(values)
             .eq("id", editingId)
             .eq("clinic_id", clinicId)
-            .select("id, clinic_id, species, name_ar, name_en, medication_ids")
-            .single()
         : await db.from("clinic_condition_protocols")
-            .insert({ ...values, created_at: new Date().toISOString() })
-            .select("id, clinic_id, species, name_ar, name_en, medication_ids")
-            .single();
-      const { data, error: saveError } = response;
+            .insert({ id: protocolId, ...values, created_at: new Date().toISOString() });
+      const { error: saveError } = saveResult;
       if (saveError) throw saveError;
       const protocol: ConditionProtocol = {
-        id: String(data.id),
-        species: String(data.species || speciesKey),
-        name_ar: String(data.name_ar || ""),
-        name_en: String(data.name_en || ""),
-        medication_ids: Array.isArray(data.medication_ids) ? data.medication_ids.map(String) : [],
+        id: protocolId,
+        species: values.species,
+        name_ar: values.name_ar,
+        name_en: values.name_en,
+        medication_ids: values.medication_ids,
       };
       setProtocols((current) => editingId
         ? current.map((item) => item.id === editingId ? protocol : item)
@@ -204,10 +216,10 @@ export default function NewVisitCommonConditions({
       setError("");
     } catch (saveError) {
       console.error("SAVE CONDITION PROTOCOL ERROR:", saveError);
-      const detail = saveError instanceof Error ? saveError.message : "";
+      const detail = databaseErrorDetails(saveError);
       setError(language === "ar"
-        ? `تعذر حفظ البروتوكول. تأكد من تشغيل ملف SQL وصلاحيات العيادة. ${detail}`
-        : `Could not save the protocol. Confirm the SQL migration and clinic permissions. ${detail}`);
+        ? `تعذر حفظ البروتوكول. شغّلي ملف supabase/tenant-sql/vetra_clinic_condition_protocols.sql على قاعدة بيانات العيادة، وليس VETRA CORE. ${detail}`
+        : `Could not save the protocol. Run supabase/tenant-sql/vetra_clinic_condition_protocols.sql on the clinic database, not VETRA CORE. ${detail}`);
     } finally {
       setSavingProtocol(false);
     }
@@ -238,14 +250,15 @@ export default function NewVisitCommonConditions({
     const validIds = protocol.medication_ids.filter((id) => medications.some(
       (item) => item.id === id && medicationSupportsSpecies(item, petSpecies),
     ));
-    if (validIds.length === 0) {
+    const bsavaIds = protocol.medication_ids.filter((id) => id.startsWith("bsava:"));
+    if (validIds.length === 0 && bsavaIds.length === 0) {
       setError(language === "ar"
         ? "الأدوية المرتبطة بالبروتوكول غير موجودة في مكتبة الأدوية الحالية. عدّل البروتوكول أولًا."
         : "The linked medications are not in the current medication library. Edit this protocol first.");
       return;
     }
     setError("");
-    onApply(validIds);
+    onApply([...validIds, ...bsavaIds]);
   }
 
   function toggleMedication(id: string) {
@@ -256,7 +269,6 @@ export default function NewVisitCommonConditions({
 
   const panel = darkMode ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white";
   const field = `w-full rounded-lg border px-2.5 py-2 text-sm outline-none ${darkMode ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-900"}`;
-
   return (
     <div className={`mb-3 rounded-xl border px-3 py-2.5 ${darkMode ? "border-slate-700 bg-slate-900/70" : "border-slate-200 bg-white"}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -298,7 +310,7 @@ export default function NewVisitCommonConditions({
         )}
       </div>
 
-      {error && <p className="mt-2 text-xs font-medium text-rose-500">{error}</p>}
+      {error && !managerOpen && <p className="mt-2 text-xs font-medium text-rose-500">{error}</p>}
 
       {confirmDeleteId && (
         <div className={`mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2 ${panel}`}>
@@ -328,9 +340,7 @@ export default function NewVisitCommonConditions({
               <span className="text-xs font-semibold">{language === "ar" ? "أدوية البروتوكول" : "Protocol medications"}</span>
               <span className="text-[10px] text-slate-500">{selectedMedicationIds.length} {language === "ar" ? "مختار" : "selected"}</span>
             </div>
-            {availableMedications.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-500">{language === "ar" ? "مفيش أدوية مسجلة ومتاحة لنوع الحيوان ده في المكتبة." : "No medications in the library are available for this species."}</p>
-            ) : (
+            {availableMedications.length > 0 && (
               <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-slate-200/60 p-2">
                 {availableMedications.map((medication) => (
                   <label key={medication.id} className={`flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-xs ${darkMode ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}>
@@ -343,6 +353,20 @@ export default function NewVisitCommonConditions({
                   </label>
                 ))}
               </div>
+            )}
+            {formularyDrafts.length > 0 ? (
+              <div className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-lg border border-emerald-500/20 p-2">
+                <p className="px-2 py-1 text-[10px] font-bold text-emerald-600">{language === "ar" ? "اختاري من أدوية BSAVA المضافة في البحث أعلاه" : "Select from BSAVA drugs added in the search above"}</p>
+                {formularyDrafts.map((draft) => {
+                  const reference = `bsava:${draft.drugId}:${draft.route}`;
+                  return <label key={draft.id} className={`flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-xs ${darkMode ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}>
+                    <input type="checkbox" className="mt-0.5" checked={selectedMedicationIds.includes(reference)} onChange={() => toggleMedication(reference)} />
+                    <span className="min-w-0 flex-1"><span className="block font-semibold">{draft.drugName} · {draft.route}</span><span className="text-[10px] text-slate-500">{draft.appliedDose} {draft.adminDoseUnit}{draft.frequency ? ` · ${draft.frequency}` : ""}</span></span>
+                  </label>;
+                })}
+              </div>
+            ) : (
+              <p className="mt-2 rounded-lg border border-dashed border-emerald-500/30 p-3 text-xs text-slate-500">{language === "ar" ? "ابحثي عن الدواء في BSAVA أو DrugEye من خانة البحث أعلى الصفحة، ثم أضيفيه للكشف ليظهر هنا للاختيار." : "Search BSAVA or DrugEye above and add a matched veterinary drug to the visit; it will appear here."}</p>
             )}
           </div>
           {error && <p className="mt-2 text-xs text-rose-500">{error}</p>}

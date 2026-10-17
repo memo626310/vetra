@@ -129,15 +129,15 @@ export default function NewVisitPatientOverview({
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4">
                 <div
-                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  className={`min-w-[148px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                     darkMode
                       ? "border-slate-800 bg-slate-900"
                       : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="mb-3 text-xl">👤</div>
+                  <div className="mb-1 text-base sm:mb-3 sm:text-xl">👤</div>
 
                   <div
                     className={`text-xs ${
@@ -171,13 +171,13 @@ export default function NewVisitPatientOverview({
                 </div>
 
                 <div
-                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  className={`min-w-[148px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                     darkMode
                       ? "border-slate-800 bg-slate-900"
                       : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="mb-3 text-xl">🐾</div>
+                  <div className="mb-1 text-base sm:mb-3 sm:text-xl">🐾</div>
 
                   <div
                     className={`text-xs ${
@@ -199,13 +199,13 @@ export default function NewVisitPatientOverview({
                 </div>
 
                 <div
-                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  className={`min-w-[148px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                     darkMode
                       ? "border-slate-800 bg-slate-900"
                       : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="mb-3 text-xl">🎂</div>
+                  <div className="mb-1 text-base sm:mb-3 sm:text-xl">🎂</div>
 
                   <div
                     className={`text-xs ${
@@ -247,13 +247,13 @@ export default function NewVisitPatientOverview({
                 </div>
 
                 <div
-                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  className={`min-w-[148px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                     darkMode
                       ? "border-slate-800 bg-slate-900"
                       : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="mb-3 text-xl">🆔</div>
+                  <div className="mb-1 text-base sm:mb-3 sm:text-xl">🆔</div>
 
                   <div
                     className={`text-xs ${
@@ -312,15 +312,15 @@ export default function NewVisitPatientOverview({
             </section>
 
             {/* LAST VISIT SUMMARY */}
-            <section className="grid gap-4 lg:grid-cols-3">
+            <section className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3">
               <div
-                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                className={`min-w-[210px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                   darkMode
                     ? "border-slate-800 bg-slate-900"
                     : "border-slate-200 bg-white"
                 }`}
               >
-                <div className="mb-3 flex items-center gap-2">
+                <div className="mb-1 flex items-center gap-2 sm:mb-3">
                   <span>📅</span>
 
                   <h3
@@ -349,13 +349,13 @@ export default function NewVisitPatientOverview({
               </div>
 
               <div
-                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                className={`min-w-[210px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                   darkMode
                     ? "border-slate-800 bg-slate-900"
                     : "border-slate-200 bg-white"
                 }`}
               >
-                <div className="mb-3 flex items-center gap-2">
+                <div className="mb-1 flex items-center gap-2 sm:mb-3">
                   <span>🩺</span>
 
                   <h3
@@ -380,13 +380,13 @@ export default function NewVisitPatientOverview({
               </div>
 
               <div
-                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                className={`min-w-[210px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                   darkMode
                     ? "border-slate-800 bg-slate-900"
                     : "border-slate-200 bg-white"
                 }`}
               >
-                <div className="mb-3 flex items-center gap-2">
+                <div className="mb-1 flex items-center gap-2 sm:mb-3">
                   <span>💊</span>
 
                   <h3
@@ -433,7 +433,7 @@ export default function NewVisitPatientOverview({
                 </p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-4">
                 <VitalCard
                   title={t.weight}
                   icon="⚖️"
@@ -444,6 +444,7 @@ export default function NewVisitPatientOverview({
                   values={vitalData.weight}
                   onPointClick={setSelectedOldVisit}
                   darkMode={darkMode}
+                  compact
                 />
 
                 <VitalCard
@@ -456,6 +457,7 @@ export default function NewVisitPatientOverview({
                   values={vitalData.temperature}
                   onPointClick={setSelectedOldVisit}
                   darkMode={darkMode}
+                  compact
                 />
 
                 <VitalCard
@@ -468,6 +470,7 @@ export default function NewVisitPatientOverview({
                   values={vitalData.heartRate}
                   onPointClick={setSelectedOldVisit}
                   darkMode={darkMode}
+                  compact
                 />
 
                 <VitalCard
@@ -480,6 +483,7 @@ export default function NewVisitPatientOverview({
                   values={vitalData.respiratoryRate}
                   onPointClick={setSelectedOldVisit}
                   darkMode={darkMode}
+                  compact
                 />
               </div>
             </section>

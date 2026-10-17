@@ -23,6 +23,7 @@ import NewVisitTreatmentFields from "@/components/visits/NewVisitTreatmentFields
 import NewVisitEditorSection from "@/components/visits/NewVisitEditorSection";
 import NewVisitHistory from "@/components/visits/NewVisitHistory";
 import NewVisitDetailsModal from "@/components/visits/NewVisitDetailsModal";
+import NewVisitMedicalRecordsFields, { emptyMedicalRecordDraft, type MedicalRecordDraft } from "@/components/visits/NewVisitMedicalRecordsFields";
 
 export default function NewVisitPage() {
   const router = useRouter();
@@ -34,6 +35,7 @@ export default function NewVisitPage() {
 
   const [clients, setClients] = useState<Client[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
+  const [clinicId, setClinicId] = useState("");
 
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedPetId, setSelectedPetId] = useState("");
@@ -77,6 +79,7 @@ export default function NewVisitPage() {
   const [formularyDrafts, setFormularyDrafts] = useState<FormularyVisitDraft[]>([]);
   const [externalMedicationDrafts, setExternalMedicationDrafts] = useState<ExternalMedicationDraft[]>([]);
   const [vaccinations, setVaccinations] = useState<VaccinationDraft[]>([]);
+  const [medicalRecordDraft, setMedicalRecordDraft] = useState<MedicalRecordDraft>(emptyMedicalRecordDraft);
 
   const t = translations[language];
 
@@ -140,6 +143,8 @@ export default function NewVisitPage() {
     setLoadingClients(true);
 
     try {
+      const context = await getClinicContext();
+      setClinicId(context.clinic_id || "");
       const db = await getClinicDb();
 
       const { data, error } = await db
@@ -601,6 +606,23 @@ export default function NewVisitPage() {
       if (visitError || !visit) throw visitError || new Error(t.saveError);
       try {
 
+        const medicalRows = [
+          ...medicalRecordDraft.labTests.split(/\r?\n/).map((name) => name.trim()).filter(Boolean).map((title) => ({
+            clinic_id: clinicContext.clinic_id, pet_id: selectedPetId, client_id: selectedClientId,
+            visit_id: visit.id, record_type: "lab", title, status: "ordered", notes: medicalRecordDraft.labNotes.trim() || null,
+          })),
+          ...(medicalRecordDraft.surgeryTitle.trim() ? [{
+            clinic_id: clinicContext.clinic_id, pet_id: selectedPetId, client_id: selectedClientId,
+            visit_id: visit.id, record_type: "surgery", title: medicalRecordDraft.surgeryTitle.trim(),
+            status: medicalRecordDraft.surgeryStatus, notes: medicalRecordDraft.surgeryNotes.trim() || null,
+            performed_at: medicalRecordDraft.surgeryDate ? new Date(`${medicalRecordDraft.surgeryDate}T12:00:00`).toISOString() : null,
+          }] : []),
+        ];
+        if (medicalRows.length) {
+          const { error: recordsError } = await db.from("pet_medical_records").insert(medicalRows);
+          if (recordsError) throw recordsError;
+        }
+
         if (medicationDrafts.length) {
           const medicationRows = medicationDrafts.map((draft) => ({
             clinic_id: clinicContext.clinic_id,
@@ -652,6 +674,7 @@ export default function NewVisitPage() {
       } catch (relatedSaveError) {
         await db.from("visit_medications").delete().eq("visit_id", visit.id);
         await db.from("vaccinations").delete().eq("visit_id", visit.id);
+        await db.from("pet_medical_records").delete().eq("visit_id", visit.id);
         await db.from("visits").delete().eq("id", visit.id);
         throw relatedSaveError;
       }
@@ -677,6 +700,7 @@ export default function NewVisitPage() {
       setMedicationDrafts([]);
       setFormularyDrafts([]);
       setVaccinations([]);
+      setMedicalRecordDraft(emptyMedicalRecordDraft);
 
       await loadVisits(selectedPetId);
 
@@ -883,6 +907,7 @@ export default function NewVisitPage() {
                 setDiagnosis={setDiagnosis}
               />
               <NewVisitTreatmentFields
+                clinicId={clinicId}
                 language={language}
                 darkMode={darkMode}
                 t={t}
@@ -898,6 +923,7 @@ export default function NewVisitPage() {
                 filteredMedications={filteredMedications}
                 addMedication={addMedication}
                 medications={medications}
+                setMessage={setMessage}
                 medicationDrafts={medicationDrafts}
                 removeMedication={removeMedication}
                 treatment={treatment}
@@ -913,6 +939,12 @@ export default function NewVisitPage() {
                 setFollowUp={setFollowUp}
                 followUpDetails={followUpDetails}
                 setFollowUpDetails={setFollowUpDetails}
+              />
+              <NewVisitMedicalRecordsFields
+                value={medicalRecordDraft}
+                onChange={setMedicalRecordDraft}
+                language={language}
+                darkMode={darkMode}
               />
             </NewVisitEditorSection>
 

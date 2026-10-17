@@ -840,7 +840,17 @@ export default function InvoiceDetailsPage() {
           </div>
 
           <div className="p-6 md:p-8">
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="space-y-3 sm:hidden print:hidden">
+              {items.map((item, index) => {
+                const itemName = item.item_type === "product" ? item.product?.name || item.description || "Product" : item.service_name || item.description || "Service";
+                return <article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/50">
+                  <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-bold text-slate-400">#{index + 1} · {item.item_type === "product" ? (isAr ? "منتج" : "Product") : (isAr ? "خدمة" : "Service")}</p><p className="mt-1 break-words font-bold">{itemName}</p></div><strong className="shrink-0">{money(item.total)}</strong></div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-200 pt-2 text-[10px] dark:border-slate-800"><div><span className="block text-slate-500">{isAr ? "الكمية" : "Qty"}</span><b>{Number(item.quantity).toFixed(3).replace(/\.?0+$/, "")}</b></div><div><span className="block text-slate-500">{isAr ? "سعر الوحدة" : "Unit"}</span><b>{money(item.unit_price)}</b></div><div><span className="block text-slate-500">{isAr ? "الخصم" : "Discount"}</span><b>{money(item.discount)}</b></div></div>
+                </article>;
+              })}
+              {!items.length && <div className="py-8 text-center text-sm text-slate-400">{isAr ? "لا توجد بنود." : "No invoice items."}</div>}
+            </div>
+            <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 sm:block print:block">
               <table className="w-full min-w-[760px] text-sm">
                 <thead className="bg-slate-50 text-slate-500 dark:bg-slate-950/60 dark:text-slate-400">
                   <tr>

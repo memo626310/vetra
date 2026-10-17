@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getClinicDb } from "@/lib/clinic-db";
+import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 
 type Pet = {
   id: string;
@@ -53,6 +53,8 @@ type Vaccination = {
   notes: string | null;
 };
 
+type PetMedicalRecord = { id: string; pet_id: string; client_id: string; visit_id: string | null; record_type: "lab" | "surgery"; title: string; status: string; result: string | null; notes: string | null; performed_at: string | null; created_at: string };
+
 type VaccineCircle = {
   id: string;
   name: string;
@@ -67,6 +69,11 @@ export default function PetPage() {
   const [client, setClient] = useState<Client | null>(null);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
+  const [medicalRecords, setMedicalRecords] = useState<PetMedicalRecord[]>([]);
+  const [newLabTest, setNewLabTest] = useState("");
+  const [newLabNotes, setNewLabNotes] = useState("");
+  const [savingLab, setSavingLab] = useState(false);
+  const [labError, setLabError] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -154,6 +161,20 @@ export default function PetPage() {
         }
 
         setPet(petData as Pet);
+
+        const { data: medicalRecordsData, error: medicalRecordsError } = await db
+          .from("pet_medical_records")
+          .select("id,pet_id,client_id,visit_id,record_type,title,status,result,notes,performed_at,created_at")
+          .eq("pet_id", petId)
+          .order("created_at", { ascending: false });
+        if (medicalRecordsError) {
+          console.warn("PET MEDICAL RECORDS LOAD ERROR:", medicalRecordsError);
+          setLabError("شغّل ملف supabase/tenant-sql/vetra_pet_medical_records.sql على قاعدة العيادة لتفعيل سجل التحاليل والجراحات.");
+          setMedicalRecords([]);
+        } else {
+          setLabError("");
+          setMedicalRecords((medicalRecordsData || []) as PetMedicalRecord[]);
+        }
 
         // =========================
         // GET OWNER
@@ -250,6 +271,24 @@ export default function PetPage() {
 
     void loadPet();
   }, []);
+
+  async function addLabTest() {
+    if (!newLabTest.trim() || !pet) return;
+    setSavingLab(true);
+    setLabError("");
+    try {
+      const [db, clinic] = await Promise.all([getClinicDb(), getClinicContext()]);
+      const { data, error: insertError } = await db.from("pet_medical_records").insert({
+        clinic_id: clinic.clinic_id, pet_id: pet.id, client_id: pet.client_id,
+        record_type: "lab", title: newLabTest.trim(), status: "ordered", notes: newLabNotes.trim() || null,
+      }).select("id,pet_id,client_id,visit_id,record_type,title,status,result,notes,performed_at,created_at").single();
+      if (insertError) throw insertError;
+      setMedicalRecords((current) => [data as PetMedicalRecord, ...current]);
+      setNewLabTest(""); setNewLabNotes("");
+    } catch (saveError) {
+      setLabError(saveError instanceof Error ? saveError.message : "تعذر حفظ التحليل. شغّل ملف SQL الخاص بالسجلات الطبية على قاعدة العيادة.");
+    } finally { setSavingLab(false); }
+  }
 
   // =========================
   // HELPERS
@@ -1590,6 +1629,27 @@ export default function PetPage() {
         {/* =========================
             MEDICAL HISTORY
         ========================= */}
+
+        <section className={`mb-6 rounded-3xl p-5 shadow-sm sm:p-6 ${cardClass}`}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-xl font-bold">التحاليل والجراحات</h2><p className={`mt-1 text-sm ${mutedText}`}>سجل محفوظ ويظهر لصاحب الحيوان في ملفه.</p></div>
+            <span className={`rounded-full px-3 py-1 text-xs font-bold ${softCard}`}>{medicalRecords.length} سجل</span>
+          </div>
+          <div className="mb-5 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+            <input value={newLabTest} onChange={(event) => setNewLabTest(event.target.value)} placeholder="اسم التحليل المطلوب" className={`rounded-xl border px-3 py-2.5 text-sm ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"}`} />
+            <input value={newLabNotes} onChange={(event) => setNewLabNotes(event.target.value)} placeholder="ملاحظات للمعمل (اختياري)" className={`rounded-xl border px-3 py-2.5 text-sm ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"}`} />
+            <button type="button" onClick={addLabTest} disabled={savingLab || !newLabTest.trim()} className="rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingLab ? "جارٍ الحفظ..." : "إضافة تحليل"}</button>
+          </div>
+          {labError && <p className="mb-3 text-sm text-rose-500">{labError}</p>}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {medicalRecords.map((record) => <article key={record.id} className={`rounded-2xl border p-3 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-100 bg-slate-50"}`}>
+              <div className="flex items-center justify-between gap-2"><h3 className="font-bold">{record.title}</h3><span className="rounded-full bg-cyan-500/10 px-2 py-1 text-[10px] font-bold text-cyan-600">{record.record_type === "lab" ? "تحليل" : "جراحة"} · {record.status === "completed" ? "أُجري" : "مطلوب/مخطط"}</span></div>
+              <p className={`mt-1 text-xs ${mutedText}`}>{formatDate(record.performed_at || record.created_at)}</p>
+              {record.result && <p className="mt-2 text-sm">النتيجة: {record.result}</p>}{record.notes && <p className={`mt-2 text-sm ${mutedText}`}>{record.notes}</p>}
+            </article>)}
+            {!medicalRecords.length && <p className={`text-sm ${mutedText}`}>لا توجد تحاليل أو جراحات مسجلة حتى الآن.</p>}
+          </div>
+        </section>
 
         <section
           className={`rounded-3xl p-5 shadow-sm sm:p-6 ${cardClass}`}

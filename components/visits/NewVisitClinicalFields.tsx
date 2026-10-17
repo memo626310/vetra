@@ -152,7 +152,8 @@ export default function NewVisitClinicalFields(props: Props) {
                   )}
                 </div>
 
-                <div>
+                <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-4">
+                <div className="min-w-0">
                   <label
                     className={`mb-2 block text-sm font-semibold ${
                       darkMode ? "text-slate-300" : "text-slate-700"
@@ -173,7 +174,7 @@ export default function NewVisitClinicalFields(props: Props) {
                   />
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <label
                     className={`mb-2 block text-sm font-semibold ${
                       darkMode ? "text-slate-300" : "text-slate-700"
@@ -192,6 +193,7 @@ export default function NewVisitClinicalFields(props: Props) {
                     hint={t.wheelSwipeHint}
                     darkMode={darkMode}
                   />
+                </div>
                 </div>
 
                 <div>

@@ -76,6 +76,10 @@ type Props = {
   weightKg: number | null;
   drafts: FormularyVisitDraft[];
   onChange: (drafts: FormularyVisitDraft[]) => void;
+  searchQuery?: string;
+  onSearchQueryChange?: (query: string) => void;
+  hideSearchInput?: boolean;
+  hideDrafts?: boolean;
 };
 
 const speciesAliases: Record<string, string> = {
@@ -270,9 +274,48 @@ function calculateForMeasurement(m: DoseMeasurement, weight: number | null) {
   return null;
 }
 
-export function BSAVAFormularyPicker({ language, darkMode, petSpecies, weightKg, drafts, onChange }: Props) {
+export async function createBsavaVisitDraft(drugId: number, petSpecies: string, route: string, weightKg: number | null): Promise<FormularyVisitDraft | null> {
+  const response = await fetch("/data/vetra-bsava-formulary-10e-a-enhanced.json");
+  if (!response.ok) throw new Error("Could not load the BSAVA formulary.");
+  const data = await response.json() as Formulary;
+  const drug = data.drugs.find((item) => item.id === drugId);
+  if (!drug) return null;
+  const species = speciesAliases[petSpecies.toLowerCase()] || null;
+  const protocol = drug.protocols.find((item) => (!species || item.species.includes(species)) && item.routes.includes(route))
+    || drug.protocols.find((item) => !species || item.species.includes(species));
+  if (!protocol) return null;
+  const selectedRoute = protocol.routes.includes(route) ? route : protocol.routes[0] || route;
+  const measurement = protocol.dose_measurements.find((item) => !item.routes?.length || item.routes.includes(selectedRoute))
+    || protocol.dose_measurements[0];
+  if (!measurement || (measurement.basis === "kg" && (!weightKg || weightKg <= 0))) return null;
+  const calculated = calculateForMeasurement(measurement, weightKg);
+  if (!calculated) return null;
+  const concentration = extractLiquidConcentrationMgPerMl(drug.formulations, selectedRoute);
+  const minMg = unitToMg(calculated.min, calculated.unit);
+  const maxMg = unitToMg(calculated.max, calculated.unit);
+  const volumeMin = concentration ? Number((minMg / concentration).toFixed(4)) : null;
+  const volumeMax = concentration ? Number((maxMg / concentration).toFixed(4)) : null;
+  const doseUnit = volumeMin == null ? calculated.unit : "mL";
+  const displayMin = volumeMin ?? calculated.min;
+  const displayMax = volumeMax ?? calculated.max;
+  return {
+    id: crypto.randomUUID(), drugId: drug.id, drugName: drug.name,
+    activeIngredient: drug.active_ingredient, species: species || drug.species[0] || "",
+    route: selectedRoute, doseUnit: measurement.unit, doseBasis: measurement.basis,
+    doseExpression: measurement.expression, doseText: protocol.dose_text,
+    sourcePage: drug.source_page, sourceMin: measurement.value_min, sourceMax: measurement.value_max,
+    calculatedMin: calculated.min, calculatedMax: calculated.max,
+    appliedDose: `${formatDose(displayMin)}${displayMax !== displayMin ? `–${formatDose(displayMax)}` : ""}`,
+    adminDoseUnit: doseUnit, calculatedVolumeMin: volumeMin, calculatedVolumeMax: volumeMax,
+    concentrationMgPerMl: concentration, clinicConcentrationMgPerMl: null,
+    frequency: extractFrequency(protocol.dose_text, measurement.expression, selectedRoute), autoCalculated: true,
+  };
+}
+
+export function BSAVAFormularyPicker({ language, darkMode, petSpecies, weightKg, drafts, onChange, searchQuery, onSearchQueryChange, hideSearchInput = false, hideDrafts = false }: Props) {
   const [data, setData] = useState<Formulary | null>(null);
-  const [query, setQuery] = useState("");
+  const [localQuery, setLocalQuery] = useState("");
+  const query = searchQuery ?? localQuery;
   const [selectedDrug, setSelectedDrug] = useState<Drug | null>(null);
   const [selectedRoute, setSelectedRoute] = useState("");
   const [selectedMeasurementIndex, setSelectedMeasurementIndex] = useState(0);
@@ -479,7 +522,8 @@ export function BSAVAFormularyPicker({ language, darkMode, petSpecies, weightKg,
     };
     onChange([...drafts, draft]);
     setSelectedDrug(null);
-    setQuery("");
+    setLocalQuery("");
+    onSearchQueryChange?.("");
     setAppliedDose("");
     setIsManualDose(false);
   }
@@ -540,8 +584,8 @@ export function BSAVAFormularyPicker({ language, darkMode, petSpecies, weightKg,
   }, [weightKg]);
 
   return (
-    <div className={`rounded-2xl border p-4 ${darkMode ? "border-blue-900/60 bg-slate-950/60" : "border-blue-200 bg-blue-50/40"}`}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <div className={hideSearchInput ? "space-y-2" : `rounded-2xl border p-4 ${darkMode ? "border-blue-900/60 bg-slate-950/60" : "border-blue-200 bg-blue-50/40"}`}>
+      {!hideSearchInput && <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-sm font-black">📚 BSAVA Formulary</div>
           <div className="text-[11px] text-slate-500">
@@ -551,16 +595,16 @@ export function BSAVAFormularyPicker({ language, darkMode, petSpecies, weightKg,
         <span className="rounded-full bg-blue-500/10 px-3 py-1 text-[10px] font-bold text-blue-400">
           {species ? (species === "cat" ? (ar ? "قطط" : "CAT") : (ar ? "كلاب" : "DOG")) : "CAT / DOG"}
         </span>
-      </div>
+      </div>}
 
-      <input
+      {!hideSearchInput && <input
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => { setLocalQuery(e.target.value); onSearchQueryChange?.(e.target.value); }}
         placeholder={ar ? "مثال: amoxcillin iv أو marbofloxacin قِطط" : "Try: amoxcillin iv cat or marbofloxacin"}
         className={`mb-3 w-full rounded-xl border px-3 py-3 text-sm outline-none focus:border-blue-500 ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`}
-      />
+      />}
 
-      {!selectedDrug && (
+      {!selectedDrug && (!hideSearchInput || query.trim()) && (
         <div className="space-y-2">
           {filtered.length === 0 ? (
             <div className="rounded-xl border border-dashed p-4 text-center text-xs text-slate-500">
@@ -738,7 +782,7 @@ export function BSAVAFormularyPicker({ language, darkMode, petSpecies, weightKg,
         </div>
       )}
 
-      {drafts.length > 0 && (
+      {!hideDrafts && drafts.length > 0 && (
         <div className="mt-4 space-y-2">
           {drafts.map((draft) => (
             <div key={draft.id} className={`rounded-xl border p-3 ${darkMode ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"}`}>

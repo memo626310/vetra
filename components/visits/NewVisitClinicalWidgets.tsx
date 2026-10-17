@@ -204,6 +204,7 @@ function MiniGraph({
   onPointClick,
   unit,
   darkMode,
+  compact,
 }: {
   values: {
     value: number;
@@ -213,11 +214,12 @@ function MiniGraph({
   onPointClick: (visit: Visit) => void;
   unit: string;
   darkMode: boolean;
+  compact?: boolean;
 }) {
   if (values.length === 0) {
     return (
       <div
-        className={`flex h-28 items-center justify-center rounded-xl ${
+        className={`flex ${compact ? "h-10 sm:h-28" : "h-28"} items-center justify-center rounded-xl ${
           darkMode ? "bg-slate-800/60" : "bg-slate-50"
         }`}
       >
@@ -276,7 +278,7 @@ function MiniGraph({
     .join(" ");
 
   return (
-    <div className="relative h-28 w-full overflow-hidden rounded-xl">
+    <div className={`relative ${compact ? "h-10 sm:h-28" : "h-28"} w-full overflow-hidden rounded-xl`}>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="h-full w-full"
@@ -352,6 +354,7 @@ export function VitalCard({
   values,
   onPointClick,
   darkMode,
+  compact = false,
 }: {
   title: string;
   icon: string;
@@ -365,24 +368,25 @@ export function VitalCard({
   }[];
   onPointClick: (visit: Visit) => void;
   darkMode: boolean;
+  compact?: boolean;
 }) {
   const delta = getDelta(latest, previous);
 
   return (
     <div
-      className={`group rounded-2xl border p-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
+      className={`group rounded-2xl border ${compact ? "p-2 sm:p-4" : "p-4"} transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
         darkMode
           ? "border-slate-800 bg-slate-900 hover:border-slate-700"
           : "border-slate-200 bg-white hover:border-slate-300"
       }`}
     >
-      <div className="mb-3 flex items-start justify-between">
+      <div className={`${compact ? "mb-1 sm:mb-3" : "mb-3"} flex items-start justify-between`}>
         <div>
-          <div className="mb-1 flex items-center gap-2">
-            <span className="text-lg">{icon}</span>
+          <div className="mb-0.5 flex items-center gap-1 sm:mb-1 sm:gap-2">
+            <span className={`text-sm sm:text-lg ${compact ? "hidden sm:inline" : ""}`}>{icon}</span>
 
             <h3
-              className={`text-sm font-semibold ${
+              className={`${compact ? "text-[11px] sm:text-sm" : "text-sm"} font-semibold ${
                 darkMode ? "text-slate-200" : "text-slate-700"
               }`}
             >
@@ -392,7 +396,7 @@ export function VitalCard({
 
           <div className="flex items-baseline gap-1">
             <span
-              className={`text-xl font-bold ${
+              className={`${compact ? "text-lg sm:text-xl" : "text-xl"} font-bold ${
                 darkMode ? "text-white" : "text-slate-900"
               }`}
             >
@@ -438,10 +442,11 @@ export function VitalCard({
         onPointClick={onPointClick}
         unit={unit}
         darkMode={darkMode}
+        compact={compact}
       />
 
       <div
-        className={`mt-2 flex justify-between text-[10px] ${
+        className={`${compact ? "hidden sm:flex" : "mt-2 flex"} mt-2 justify-between text-[10px] ${
           darkMode ? "text-slate-500" : "text-slate-400"
         }`}
       >
