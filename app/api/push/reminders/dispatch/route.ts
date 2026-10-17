@@ -17,8 +17,11 @@ function protocolName(key: string, language: string) {
 }
 
 async function dispatch(request: Request) {
-  const secret = process.env.VETRA_PUSH_CRON_SECRET?.trim();
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  const authorization = request.headers.get("authorization");
+  const allowedSecrets = [process.env.CRON_SECRET, process.env.VETRA_PUSH_CRON_SECRET]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+  if (!allowedSecrets.some((secret) => authorization === `Bearer ${secret}`)) {
     return Response.json({ error: "Unauthorized." }, { status: 401 });
   }
 
