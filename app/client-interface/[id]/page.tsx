@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -610,6 +610,7 @@ function Countdown({ days, lang, status, dark }:{days:number|null;lang:Lang;stat
 export default function ClientInterfaceIdPage(){
   const params=useParams<{id:string}>(); const router=useRouter(); const clientId=params.id;
   const [lang,setLang]=useState<Lang>("ar"); const dark=true; const [paletteId,setPaletteId]=useState<PaletteId>("sage"); const [themePicker,setThemePicker]=useState(false); const [client,setClient]=useState<Client|null>(null); const [pets,setPets]=useState<Pet[]>([]); const [visits,setVisits]=useState<Visit[]>([]); const [vaccines,setVaccines]=useState<Vaccine[]>([]); const [selected,setSelected]=useState(""); const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [settings,setSettings]=useState(false); const [addPet,setAddPet]=useState(false); const [petForm,setPetForm]=useState({name:"",species:"cat",gender:"Female",birth_date:"",breed:"",color:""}); const [savingPet,setSavingPet]=useState(false); const [photoBusy,setPhotoBusy]=useState(false); const [photoError,setPhotoError]=useState(""); const [photoMessage,setPhotoMessage]=useState(""); const [comingSoonFeature,setComingSoonFeature]=useState<"tinder"|"adoption"|null>(null);
+  const lastActivityPingAt=useRef(0);
 
   useEffect(()=>{const l=localStorage.getItem("vetra-language"); const savedPalette=localStorage.getItem("vetra-client-palette"); if(l==="ar"||l==="en")setLang(l); if(savedPalette&&Object.prototype.hasOwnProperty.call(PAGE_PALETTES,savedPalette))setPaletteId(savedPalette as PaletteId);},[]);
   const loadDashboard = async (showLoader = false) => {
@@ -625,6 +626,21 @@ export default function ClientInterfaceIdPage(){
       const db=await getClientPortalDb(code,phone);
       const c=await db.from("clients").select("id,name,phone,email").eq("id",clientId).maybeSingle();
       if(c.error||!c.data)throw new Error(c.error?.message||"Client not found");
+
+      if (Date.now() - lastActivityPingAt.current >= 45_000) {
+        lastActivityPingAt.current = Date.now();
+        void fetch("/api/client-activity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientCode: code, phone }),
+          keepalive: true,
+        }).then(async (response) => {
+          if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            console.error("CLIENT ACTIVITY HEARTBEAT FAILED:", result);
+          }
+        }).catch((heartbeatError) => console.error("CLIENT ACTIVITY HEARTBEAT FAILED:", heartbeatError));
+      }
 
       const p=await db.from("pets").select("id,name,species,breed,gender,birth_date,color,photo_url,is_deceased,created_at").eq("client_id",clientId).order("created_at",{ascending:false});
       if(p.error)throw new Error(p.error.message);

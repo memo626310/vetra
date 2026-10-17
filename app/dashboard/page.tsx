@@ -364,6 +364,7 @@ export default function Home() {
   ["📦", t.nav.inventory, "/inventory/products"],
   ["💰", t.nav.finance, "/finance"],
   ["📊", t.nav.reports, "/reports"],
+  ["🟢", isArabic ? "نشاط العملاء" : "Client activity", "/dashboard/clients-activity"],
 ];
   return (
     <main
