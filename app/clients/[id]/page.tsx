@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { getClinicDb } from "@/lib/clinic-db";
+import { vetraCore } from "@/lib/vetra-core";
 
 type Client = {
   id: string;
@@ -42,6 +43,7 @@ export default function ClientPage() {
   const [loading, setLoading] = useState(true);
   const [savingPet, setSavingPet] = useState(false);
   const [generatingClientCode, setGeneratingClientCode] = useState(false);
+  const [deletingClient, setDeletingClient] = useState(false);
 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -235,6 +237,44 @@ export default function ClientPage() {
       setError(err instanceof Error ? err.message : "تعذر تغيير Client ID.");
     } finally {
       setGeneratingClientCode(false);
+    }
+  }
+
+  async function deleteClientPermanently() {
+    if (!client || deletingClient) return;
+    const typedName = window.prompt(
+      `حذف نهائي لا يمكن التراجع عنه. سيتم حذف العميل "${client.name}" وكل حيواناته وسجلاته الطبية ومواعيده وفواتيره ومدفوعاتها. اكتب اسم العميل كما هو للتأكيد:`
+    );
+    if (typedName === null) return;
+    if (typedName.trim() !== client.name.trim()) {
+      setError("لم يتم الحذف: الاسم المكتوب لا يطابق اسم العميل.");
+      return;
+    }
+    if (!window.confirm(`تأكيد أخير: حذف "${client.name}" وجميع بياناته نهائيًا؟`)) return;
+
+    setDeletingClient(true);
+    setError("");
+    try {
+      const { data: { session }, error: sessionError } = await vetraCore.auth.getSession();
+      if (sessionError || !session?.access_token) throw new Error("انتهت جلسة الدخول. سجّل الدخول ثم أعد المحاولة.");
+
+      const response = await fetch(`/api/clients/${encodeURIComponent(client.id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const result = await response.json() as { error?: string; cleanupPending?: boolean };
+      if (!response.ok) throw new Error(result.error || "تعذر حذف العميل.");
+
+      if (result.cleanupPending) {
+        window.alert("تم حذف ملف العميل وبيانات العيادة. تعذر تنظيف بعض بيانات الإشعارات أو الصور؛ تواصل مع مسؤول النظام لإتمام التنظيف.");
+      }
+      router.replace("/clients");
+      router.refresh();
+    } catch (err) {
+      console.error("CLIENT DELETE ERROR:", err);
+      setError(err instanceof Error ? err.message : "تعذر حذف العميل وبياناته المرتبطة.");
+    } finally {
+      setDeletingClient(false);
     }
   }
 
@@ -451,6 +491,15 @@ export default function ClientPage() {
             >
               <span aria-hidden="true">🔢</span>
               <span>{generatingClientCode ? "جاري توليد رقم..." : "توليد Client ID جديد"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void deleteClientPermanently()}
+              disabled={deletingClient}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-5 py-3 font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-wait disabled:opacity-60"
+            >
+              <span aria-hidden="true">🗑️</span>
+              <span>{deletingClient ? "جاري حذف العميل..." : "حذف العميل وكل بياناته نهائيًا"}</span>
             </button>
 
           </div>

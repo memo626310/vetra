@@ -123,7 +123,9 @@ export default function ClientLoginPage() {
       ownerSessionStorage.setItem("vetra-client-code", client.client_code);
       ownerSessionStorage.setItem("vetra-client-phone", normalizedPhone);
 
-      router.replace(`/client-interface/${client.id}`);
+      const requestedNext = new URLSearchParams(window.location.search).get("next");
+      const matchPath = `/client-interface/${client.id}/match`;
+      router.replace(requestedNext === matchPath ? matchPath : `/client-interface/${client.id}`);
     } catch (error) {
       console.error(
         "PET OWNER LOGIN ERROR:",
