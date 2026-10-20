@@ -32,6 +32,7 @@ type BillingSettings = {
   id: string;
   clinic_id: string;
   consultation_fee: number | null;
+  injection_fee: number | null;
   auto_add_consultation_fee: boolean;
 };
 
@@ -98,6 +99,8 @@ const text = {
     billingHint: "الإعدادات التي تؤثر على إنشاء الفواتير والزيارات.",
     consultationFee: "سعر الكشف",
     consultationFeeHint: "يُستخدم عند تفعيل إضافة سعر الكشف تلقائيًا.",
+    injectionFee: "سعر الحقنة الموحد",
+    injectionFeeHint: "يُضاف تلقائيًا لكل دواء في الزيارة، ويمكن تعديل سعر كل بند قبل إصدار الفاتورة.",
     autoConsultation: "إضافة سعر الكشف تلقائيًا",
     autoConsultationHint: "عند إنهاء زيارة، يتم تجهيز بند الكشف في الفاتورة تلقائيًا.",
     appearance: "المظهر واللغة",
@@ -192,6 +195,8 @@ const text = {
     billingHint: "Settings that affect visits and invoice creation.",
     consultationFee: "Consultation fee",
     consultationFeeHint: "Used when automatic consultation fee is enabled.",
+    injectionFee: "Default injection fee",
+    injectionFeeHint: "Added automatically for each medication in a visit. Each line can be adjusted before billing.",
     autoConsultation: "Automatically add consultation fee",
     autoConsultationHint: "When a visit is completed, the consultation item is prepared automatically in the invoice.",
     appearance: "Appearance & language",
@@ -289,6 +294,7 @@ export default function SettingsPage() {
   const [billing, setBilling] = useState<BillingSettings | null>(null);
 
   const [consultationFee, setConsultationFee] = useState("");
+  const [injectionFee, setInjectionFee] = useState("");
   const [autoAddConsultationFee, setAutoAddConsultationFee] = useState(false);
 
   const [newPassword, setNewPassword] = useState("");
@@ -359,7 +365,7 @@ export default function SettingsPage() {
 
         const { data, error: billingError } = await db
           .from("billing_settings")
-          .select("id, clinic_id, consultation_fee, auto_add_consultation_fee")
+          .select("id, clinic_id, consultation_fee, injection_fee, auto_add_consultation_fee")
           .eq("clinic_id", clinicContext.clinic_id)
           .maybeSingle();
 
@@ -378,6 +384,7 @@ export default function SettingsPage() {
               : String(settings.consultation_fee)
           );
           setAutoAddConsultationFee(Boolean(settings.auto_add_consultation_fee));
+          setInjectionFee(settings.injection_fee == null ? "" : String(settings.injection_fee));
         }
       } catch (loadErr) {
         console.error("SETTINGS LOAD ERROR:", loadErr);
@@ -540,8 +547,14 @@ export default function SettingsPage() {
     }
 
     const feeValue = consultationFee.trim() === "" ? null : Number(consultationFee);
+    const injectionFeeValue = injectionFee.trim() === "" ? 0 : Number(injectionFee);
 
     if (feeValue !== null && (!Number.isFinite(feeValue) || feeValue < 0)) {
+      setError(t.saveError);
+      setMessage("");
+      return;
+    }
+    if (!Number.isFinite(injectionFeeValue) || injectionFeeValue < 0) {
       setError(t.saveError);
       setMessage("");
       return;
@@ -559,12 +572,13 @@ export default function SettingsPage() {
           .from("billing_settings")
           .update({
             consultation_fee: feeValue,
+            injection_fee: injectionFeeValue,
             auto_add_consultation_fee: autoAddConsultationFee,
             updated_at: new Date().toISOString(),
           })
           .eq("id", billing.id)
           .eq("clinic_id", context.clinic_id)
-          .select("id, clinic_id, consultation_fee, auto_add_consultation_fee")
+          .select("id, clinic_id, consultation_fee, injection_fee, auto_add_consultation_fee")
           .single();
 
         if (updateError) throw updateError;
@@ -575,9 +589,10 @@ export default function SettingsPage() {
           .insert({
             clinic_id: context.clinic_id,
             consultation_fee: feeValue,
+            injection_fee: injectionFeeValue,
             auto_add_consultation_fee: autoAddConsultationFee,
           })
-          .select("id, clinic_id, consultation_fee, auto_add_consultation_fee")
+          .select("id, clinic_id, consultation_fee, injection_fee, auto_add_consultation_fee")
           .single();
 
         if (insertError) throw insertError;
@@ -962,6 +977,23 @@ export default function SettingsPage() {
                   <span className="shrink-0 text-sm font-bold text-slate-500">{t.egp}</span>
                 </div>
                 <p className="mt-2 text-xs text-slate-500">{t.consultationFeeHint}</p>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-bold">{t.injectionFee}</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={injectionFee}
+                    onChange={(e) => setInjectionFee(e.target.value)}
+                    disabled={!isAdmin || savingBilling}
+                    className={`w-full rounded-2xl border px-4 py-3.5 outline-none transition focus:border-blue-500 ${darkMode ? "border-white/[0.07] bg-[#0F1115] text-white disabled:opacity-50" : "border-slate-200 bg-slate-50 text-slate-900 disabled:opacity-50"}`}
+                  />
+                  <span className="shrink-0 text-sm font-bold text-slate-500">{t.egp}</span>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">{t.injectionFeeHint}</p>
               </div>
 
               <div

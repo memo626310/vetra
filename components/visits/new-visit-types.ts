@@ -85,7 +85,7 @@ export type ExternalMedicationDraft = {
   duration: string;
   instructions: string;
   weightKg: number | null;
-  source: "DrugEye";
+  source: "DrugEye" | "manual";
   bsavaDrugName: string | null;
 };
 

@@ -29,7 +29,7 @@ type Props = {
   medicationSearch: string;
   setMedicationSearch: (value: string) => void;
   filteredMedications: Medication[];
-  addMedication: (medicationId?: string) => void;
+  addMedication: (medicationId?: string) => boolean;
   medications: Medication[];
   setMessage: (value: string) => void;
   medicationDrafts: MedicationDraft[];
@@ -63,12 +63,48 @@ export default function NewVisitTreatmentFields({
   const [drugEyeLoading, setDrugEyeLoading] = useState(false);
   const [drugEyeError, setDrugEyeError] = useState("");
   const [drugEyeResultQuery, setDrugEyeResultQuery] = useState("");
+  const [manualEntryOpen, setManualEntryOpen] = useState(false);
+  const [manualDrugName, setManualDrugName] = useState("");
+  const [manualDose, setManualDose] = useState("");
+  const [manualRoute, setManualRoute] = useState("");
   const query = medicationSearch.trim().replace(/\s+/g, " ");
   const matchingMedications = query ? filteredMedications.slice(0, 8) : [];
 
+  function addManualMedication() {
+    if (!manualDrugName.trim() || !manualDose.trim()) {
+      setMessage(language === "ar" ? "اكتب اسم الدواء والجرعة." : "Enter the medication name and dose.");
+      return;
+    }
+    onAddManualExternalMedication({
+      id: crypto.randomUUID(),
+      productName: manualDrugName.trim(),
+      activeIngredient: null,
+      manufacturer: null,
+      price: null,
+      doseText: manualDose.trim(),
+      route: manualRoute.trim(),
+      frequency: "",
+      duration: "",
+      instructions: "",
+      weightKg: weight.trim() && Number.isFinite(Number(weight)) ? Number(weight) : null,
+      source: "manual",
+      bsavaDrugName: null,
+    });
+    setManualDrugName("");
+    setManualDose("");
+    setManualRoute("");
+    setManualEntryOpen(false);
+    setMessage("");
+  }
+
   async function applyCommonProtocol(ids: string[]) {
     const clinicMedicationIds = ids.filter((id) => !id.startsWith("bsava:"));
-    clinicMedicationIds.forEach((id) => addMedication(id));
+    const failedClinicMeds = clinicMedicationIds.filter((id) => !addMedication(id));
+    if (failedClinicMeds.length) {
+      setMessage(language === "ar"
+        ? "بعض أدوية البروتوكول لم تُضف: تحقق من الوزن والجرعة المسجلة في مكتبة الأدوية."
+        : "Some protocol medications could not be added. Check the pet weight and each library dose.");
+    }
     const formularyReferences = ids.filter((id) => id.startsWith("bsava:"));
     if (!formularyReferences.length) return;
     try {
@@ -294,10 +330,32 @@ export default function NewVisitTreatmentFields({
                       </div>
                     )}
 
+                    {formularyDrafts.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <div className={`text-[11px] font-bold uppercase tracking-wide ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
+                          {language === "ar" ? "أدوية البروتوكول البيطري (BSAVA)" : "Veterinary protocol medications (BSAVA)"}
+                        </div>
+                        {formularyDrafts.map((draft) => (
+                          <div key={draft.id} className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-2.5 ${darkMode ? "border-emerald-900/60 bg-slate-900" : "border-emerald-200 bg-white"}`}>
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold">{draft.drugName}</div>
+                              {draft.activeIngredient && <div className="mt-0.5 text-xs text-slate-500">{draft.activeIngredient}</div>}
+                              <div className="mt-1 text-xs leading-5 text-slate-500">
+                                {language === "ar" ? "الجرعة:" : "Dose:"} {draft.appliedDose || "—"} {draft.adminDoseUnit || draft.doseUnit}
+                                {draft.route ? ` · ${draft.route}` : ""}
+                                {draft.frequency ? ` · ${draft.frequency}` : ""}
+                              </div>
+                            </div>
+                            <button type="button" aria-label={language === "ar" ? "حذف دواء BSAVA" : "Remove BSAVA medication"} onClick={() => setFormularyDrafts((current) => current.filter((item) => item.id !== draft.id))} className="rounded-lg px-2 py-1 text-rose-500 hover:bg-rose-50">×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {externalMedicationDrafts.length > 0 && (
                       <div className="mt-3 space-y-2">
                         <div className={`text-[11px] font-bold uppercase tracking-wide ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
-                          {language === "ar" ? "أدوية خارجية بجرعة يدوية" : "External medications with manual dose"}
+                          {language === "ar" ? "أدوية DrugEye وأدوية العيادة اليدوية" : "DrugEye and manually entered clinic medications"}
                         </div>
                         {externalMedicationDrafts.map((draft) => (
                           <div key={draft.id} className={`rounded-xl border px-3 py-2.5 ${darkMode ? "border-amber-900/70 bg-slate-900" : "border-amber-200 bg-amber-50/50"}`}>
@@ -341,6 +399,21 @@ export default function NewVisitTreatmentFields({
                         </div>
                       )}
                     </div>
+                  </div>
+
+                  <div className="mt-3">
+                    <button type="button" onClick={() => { setManualEntryOpen((open) => !open); setManualDrugName(medicationSearch.trim()); }} className={`text-xs font-semibold ${darkMode ? "text-cyan-300" : "text-cyan-700"}`}>
+                      {manualEntryOpen ? (language === "ar" ? "− إغلاق إدخال دواء يدوي" : "− Close manual medication") : (language === "ar" ? "+ إضافة دواء غير موجود في المكتبات" : "+ Add a medication not found in the libraries")}
+                    </button>
+                    {manualEntryOpen && (
+                      <div className={`mt-2 grid gap-2 rounded-xl border p-3 sm:grid-cols-2 ${darkMode ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-white"}`}>
+                        <input value={manualDrugName} onChange={(event) => setManualDrugName(event.target.value)} placeholder={language === "ar" ? "اسم الدواء" : "Medication name"} className={`w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`} />
+                        <input value={manualDose} onChange={(event) => setManualDose(event.target.value)} placeholder={language === "ar" ? "الجرعة والوحدة" : "Dose and unit"} className={`w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`} />
+                        <input value={manualRoute} onChange={(event) => setManualRoute(event.target.value)} placeholder={language === "ar" ? "طريقة الإعطاء (اختياري)" : "Route (optional)"} className={`w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`} />
+                        <button type="button" onClick={addManualMedication} className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-bold text-white hover:bg-cyan-700">{language === "ar" ? "إضافة للكشف" : "Add to visit"}</button>
+                        <p className="sm:col-span-2 text-[11px] text-slate-500">{language === "ar" ? "سيُضاف كدواء من العيادة ويُسعّر بسعر الحقنة الافتراضي، ويمكن تعديل سعره في بنود الفاتورة." : "Added as a clinic medication at the default injection fee; adjust its price in the bill items."}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 

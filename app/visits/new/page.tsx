@@ -30,6 +30,7 @@ import NewVisitMedicalRecordsFields, { emptyMedicalRecordDraft, type MedicalReco
 type SymptomDraft = { id: string; name: string; days: string };
 type AvailableDoctor = { id: string; full_name: string; specialty: string | null };
 type VisitServiceDraft = { id: string; name: string; quantity: number; price: number };
+type MedicationBillLine = { id: string; name: string };
 type VisitAttachmentDraft = { id: string; file: File; category: "analysis" | "xray" };
 
 export default function NewVisitPage() {
@@ -66,6 +67,9 @@ export default function NewVisitPage() {
   const [availableDoctors, setAvailableDoctors] = useState<AvailableDoctor[]>([]);
   const [groomingType, setGroomingType] = useState("");
   const [consultationFee, setConsultationFee] = useState(0);
+  const [injectionFee, setInjectionFee] = useState(0);
+  const [medicationChargePrices, setMedicationChargePrices] = useState<Record<string, number>>({});
+  const [medicationChargeQuantities, setMedicationChargeQuantities] = useState<Record<string, number>>({});
   const [symptoms, setSymptoms] = useState<SymptomDraft[]>([]);
   const [visitServices, setVisitServices] = useState<VisitServiceDraft[]>([]);
   const [attachments, setAttachments] = useState<VisitAttachmentDraft[]>([]);
@@ -170,9 +174,19 @@ export default function NewVisitPage() {
         doctors.unshift({ id: "current-user", full_name: context.doctor_name, specialty: null });
       }
       setAvailableDoctors(doctors);
-      const { data: billingSettings } = await db.from("billing_settings")
-        .select("consultation_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
-      setConsultationFee(Number(billingSettings?.consultation_fee || 0));
+      const { data: billingSettings, error: billingSettingsError } = await db.from("billing_settings")
+        .select("consultation_fee, injection_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
+      if (billingSettingsError) {
+        console.warn("LOAD INJECTION FEE SETTING ERROR; retrying legacy billing settings:", billingSettingsError);
+        const { data: legacyBillingSettings, error: legacyBillingSettingsError } = await db.from("billing_settings")
+          .select("consultation_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
+        if (legacyBillingSettingsError) throw legacyBillingSettingsError;
+        setConsultationFee(Number(legacyBillingSettings?.consultation_fee || 0));
+        setInjectionFee(0);
+      } else {
+        setConsultationFee(Number(billingSettings?.consultation_fee || 0));
+        setInjectionFee(Number(billingSettings?.injection_fee || 0));
+      }
 
       const { data, error } = await db
         .from("clients")
@@ -487,18 +501,20 @@ export default function NewVisitPage() {
     );
   }
 
-  function addMedication(medicationId?: string) {
+  function addMedication(medicationId?: string): boolean {
     const targetMedicationId = medicationId || selectedMedicationId;
     const med = medications.find((item) => item.id === targetMedicationId);
-    if (!med) return;
+    if (!med) return false;
+    if (medicationDrafts.some((draft) => draft.medication_id === med.id)) return true;
     const draft = calculateMedicationDraft(med);
     if (!draft) {
       setMessage(language === "ar" ? "أدخل وزن الحيوان أولًا وتأكد أن الدواء له جرعة مسجلة." : "Enter the pet weight and make sure the medication has a configured dose.");
-      return;
+      return false;
     }
     setMedicationDrafts((current) => [...current, draft]);
     setSelectedMedicationId("");
     setMedicationSearch("");
+    return true;
   }
 
   function removeMedication(id: string) {
@@ -601,7 +617,7 @@ export default function NewVisitPage() {
       setMessage(language === "ar" ? "حدد نوع التجميل" : "Enter a grooming type");
       return;
     }
-    if (createBill && consultationFee <= 0 && !visitServices.some((line) => line.name.trim() && line.price >= 0 && line.quantity > 0)) {
+    if (createBill && consultationFee <= 0 && medicationBillLines.length === 0 && !visitServices.some((line) => line.name.trim() && line.price >= 0 && line.quantity > 0)) {
       setMessage(language === "ar" ? "أضف خدمة واحدة على الأقل للفاتورة" : "Add at least one service to the bill");
       return;
     }
@@ -645,7 +661,8 @@ export default function NewVisitPage() {
         const metadata = [draft.activeIngredient, draft.manufacturer, draft.bsavaDrugName ? `BSAVA reference: ${draft.bsavaDrugName}` : null, draft.weightKg != null ? `weight snapshot ${draft.weightKg} kg` : null]
           .filter(Boolean)
           .join("; ");
-        return `[DrugEye / manual dose — clinician entered] ${draft.productName}${metadata ? ` (${metadata})` : ""}: ${details.join(" - ")}`;
+        const source = draft.source === "manual" ? "Clinic medication / clinician entered" : "DrugEye / clinician-entered dose";
+        return `[${source}] ${draft.productName}${metadata ? ` (${metadata})` : ""}: ${details.join(" - ")}`;
       }).join("\n");
       const serviceText = visitServices.filter((service) => service.name.trim()).map((service) => `${service.name.trim()} × ${service.quantity} (${(service.quantity * service.price).toFixed(2)} EGP)`).join("\n");
       const finalTreatment = [treatment.trim(), serviceText, medicationText, formularyText, externalMedicationText].filter(Boolean).join("\n\n");
@@ -781,6 +798,11 @@ export default function NewVisitPage() {
           const invoiceLines = [
             ...(consultationFee > 0 ? [{ name: "Consultation", quantity: 1, unit_price: consultationFee }] : []),
             ...visitServices.filter((line) => line.name.trim()).map((line) => ({ name: line.name.trim(), quantity: line.quantity, unit_price: line.price })),
+            ...medicationBillLines.map((line) => ({
+              name: `${language === "ar" ? "حقنة دواء" : "Medication injection"}: ${line.name}`,
+              quantity: medicationChargeQuantities[line.id] ?? 1,
+              unit_price: medicationChargePrices[line.id] ?? injectionFee,
+            })),
           ];
           if (!invoiceLines.length) throw new Error(language === "ar" ? "أضف خدمة واحدة على الأقل للفاتورة" : "Add at least one service to the bill");
           const subtotal = invoiceLines.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
@@ -888,8 +910,14 @@ export default function NewVisitPage() {
     );
   }, [pets, petSearch]);
 
+  const medicationBillLines: MedicationBillLine[] = [
+    ...medicationDrafts.map((draft) => ({ id: `clinic:${draft.id}`, name: medications.find((medication) => medication.id === draft.medication_id)?.name || "Medication" })),
+    ...formularyDrafts.map((draft) => ({ id: `bsava:${draft.id}`, name: draft.drugName })),
+    ...externalMedicationDrafts.map((draft) => ({ id: `external:${draft.id}`, name: draft.productName })),
+  ];
   const visitServiceTotal = visitServices.reduce((sum, service) => sum + Math.max(0, service.quantity) * Math.max(0, service.price), 0);
-  const visitBillTotal = consultationFee + visitServiceTotal;
+  const medicationChargeTotal = medicationBillLines.reduce((sum, line) => sum + Math.max(1, medicationChargeQuantities[line.id] ?? 1) * Math.max(0, medicationChargePrices[line.id] ?? injectionFee), 0);
+  const visitBillTotal = consultationFee + visitServiceTotal + medicationChargeTotal;
 
   const pageClasses = darkMode
     ? "min-h-screen bg-[#0F1115] text-slate-100"
@@ -1143,6 +1171,49 @@ export default function NewVisitPage() {
                 followUpDetails={followUpDetails}
                 setFollowUpDetails={setFollowUpDetails}
               />
+              {medicationBillLines.length > 0 && (
+                <section className={`space-y-3 rounded-2xl border p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
+                  <div>
+                    <h3 className="font-bold">{language === "ar" ? "بنود الأدوية في الفاتورة" : "Medication bill items"}</h3>
+                    <p className="mt-1 text-xs text-slate-500">{language === "ar" ? `السعر الافتراضي ${injectionFee.toFixed(2)} جنيه للحقنة. يمكنك تعديل سعر كل دواء هنا.` : `Default ${injectionFee.toFixed(2)} EGP per injection. Adjust each medication price here.`}</p>
+                  </div>
+                  <div className="space-y-2">
+                    {medicationBillLines.map((line) => (
+                      <div key={line.id} className={`grid items-center gap-2 rounded-xl border p-3 sm:grid-cols-[minmax(0,1fr)_90px_150px] ${darkMode ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold">{line.name}</div>
+                          <div className="mt-0.5 text-[11px] text-slate-500">{language === "ar" ? "حقنة / بند دواء" : "Injection / medication charge"}</div>
+                        </div>
+                        <label className="flex items-center gap-2">
+                          <span className="shrink-0 text-xs text-slate-500">{language === "ar" ? "العدد" : "Qty"}</span>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={medicationChargeQuantities[line.id] ?? 1}
+                            onChange={(event) => setMedicationChargeQuantities((current) => ({ ...current, [line.id]: Math.max(1, Number(event.target.value) || 1) }))}
+                            className={`w-full rounded-lg border px-2 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-300 bg-white"}`}
+                            aria-label={language === "ar" ? `عدد حقن ${line.name}` : `${line.name} injection quantity`}
+                          />
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <span className="shrink-0 text-xs text-slate-500">{language === "ar" ? "السعر" : "Price"}</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={medicationChargePrices[line.id] ?? injectionFee}
+                            onChange={(event) => setMedicationChargePrices((current) => ({ ...current, [line.id]: Math.max(0, Number(event.target.value) || 0) }))}
+                            className={`w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-300 bg-white"}`}
+                            aria-label={language === "ar" ? `سعر ${line.name}` : `${line.name} price`}
+                          />
+                          <span className="text-xs text-slate-500">EGP</span>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
               <section className={`space-y-4 rounded-2xl border p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
                 <div>
                   <h3 className="font-bold">{language === "ar" ? "خدمات الزيارة" : "Visit services"}</h3>
@@ -1160,6 +1231,7 @@ export default function NewVisitPage() {
                 <div className={`ml-auto max-w-sm space-y-2 border-t pt-3 text-sm ${darkMode ? "border-slate-700" : "border-slate-200"}`}>
                   {consultationFee > 0 && <div className="flex justify-between"><span>{language === "ar" ? "الكشف" : "Consultation"}</span><span>{consultationFee.toFixed(2)} EGP</span></div>}
                   <div className="flex justify-between"><span>{language === "ar" ? "الخدمات" : "Services"}</span><span>{visitServiceTotal.toFixed(2)} EGP</span></div>
+                  {medicationChargeTotal > 0 && <div className="flex justify-between"><span>{language === "ar" ? "الأدوية والحقن" : "Medications and injections"}</span><span>{medicationChargeTotal.toFixed(2)} EGP</span></div>}
                   <div className="flex justify-between border-t pt-2 text-base font-bold text-cyan-700 dark:border-slate-700 dark:text-cyan-300"><span>{language === "ar" ? "الإجمالي" : "Total"}</span><span>{visitBillTotal.toFixed(2)} EGP</span></div>
                 </div>
               </section>
