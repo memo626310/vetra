@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { getClinicDb } from "@/lib/clinic-db";
+import { vetraCore } from "@/lib/vetra-core";
 
 type Client = {
   id: string;
@@ -42,6 +43,7 @@ export default function ClientPage() {
   const [loading, setLoading] = useState(true);
   const [savingPet, setSavingPet] = useState(false);
   const [generatingClientCode, setGeneratingClientCode] = useState(false);
+  const [deletingClient, setDeletingClient] = useState(false);
 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -139,7 +141,7 @@ export default function ClientPage() {
     if (!client || generatingClientCode) return;
 
     const confirmed = window.confirm(
-      "Ø³ÙŠØªÙ… ØªÙˆÙ„ÙŠØ¯ Client ID Ø¬Ø¯ÙŠØ¯ Ø¨ØµÙŠØºØ© 01XXXX (ÙƒÙˆØ¯ Ø§Ù„Ø¹ÙŠØ§Ø¯Ø© 01 + Ø£Ø±Ø¨Ø¹Ø© Ø£Ø±Ù‚Ø§Ù…)ØŒ Ù…Ø¹ ØªØºÙŠÙŠØ± client_code ÙÙ‚Ø·. Ù„Ù† ØªØªØºÙŠØ± Ø±ÙˆØ§Ø¨Ø· Ø§Ù„Ø­ÙŠÙˆØ§Ù†Ø§Øª Ø£Ùˆ Ø§Ù„Ø²ÙŠØ§Ø±Ø§Øª Ø£Ùˆ Ø§Ù„ÙÙˆØ§ØªÙŠØ±. Ø§Ù„Ø±Ù‚Ù… Ø§Ù„Ù‚Ø¯ÙŠÙ… Ù„Ù† ÙŠØµÙ„Ø­ Ù„ØªØ³Ø¬ÙŠÙ„ Ø¯Ø®ÙˆÙ„ Ø¬Ø¯ÙŠØ¯. Ù‡Ù„ ØªØ±ÙŠØ¯ Ø§Ù„Ù…ØªØ§Ø¨Ø¹Ø©ØŸ"
+      "سيتم توليد Client ID جديد بنفس كود بداية العيادة، مع تغيير رقم العميل فقط. الرقم القديم لن يصلح لتسجيل دخول جديد، ولن تتغير روابط الحيوانات أو الزيارات أو الفواتير. هل تريد المتابعة؟"
     );
     if (!confirmed) return;
 
@@ -149,20 +151,50 @@ export default function ClientPage() {
 
     try {
       const db = await getClinicDb();
-      if (!client.clinic_id) {
-        throw new Error("Ù„Ù… ÙŠØªÙ… ØªØ­Ø¯ÙŠØ¯ Ø§Ù„Ø¹ÙŠØ§Ø¯Ø© Ù„Ù‡Ø°Ø§ Ø§Ù„Ø¹Ù…ÙŠÙ„Ø› Ù„Ù… ÙŠØªÙ… ØªØ¹Ø¯ÙŠÙ„ Ø£ÙŠ Ø¨ÙŠØ§Ù†Ø§Øª.");
+      const currentCode = String(client.client_code || "").trim();
+
+      // VETRA Client ID format: 2-digit clinic prefix + 4-digit client suffix.
+      // Refuse to guess if this clinic's current records do not confirm that format.
+      if (!client.clinic_id || !/^\d{6}$/.test(currentCode)) {
+        throw new Error(
+          "لم يتم تغيير الرقم: Client ID الحالي لا يطابق صيغة العيادة (كود العيادة + 4 أرقام). راجع إعدادات الكود أولًا."
+        );
       }
 
-      // Legacy client_code values are allowed; new codes must use 01 + four digits.
-      const clinicPrefix = "01";
-      let lastError: Error | null = null;
+      const { data: clinicClients, error: clinicClientsError } = await db
+        .from("clients")
+        .select("client_code")
+        .eq("clinic_id", client.clinic_id);
 
-      for (let attempt = 0; attempt < 60; attempt += 1) {
+      if (clinicClientsError) throw clinicClientsError;
+
+      const numericCodes = (clinicClients || [])
+        .map((row) => String(row.client_code || "").trim())
+        .filter((code) => /^\d{6}$/.test(code));
+      const clinicPrefixes = new Set(numericCodes.map((code) => code.slice(0, 2)));
+      const clinicPrefix = currentCode.slice(0, 2);
+
+      if (
+        numericCodes.length !== (clinicClients || []).length ||
+        !numericCodes.includes(currentCode) ||
+        clinicPrefixes.size !== 1 ||
+        !clinicPrefixes.has(clinicPrefix)
+      ) {
+        throw new Error(
+          "لم يتم تغيير الرقم: أكواد العملاء المسجلة لا تؤكد كود بداية موحدًا لهذه العيادة. لم يتم تعديل أي بيانات."
+        );
+      }
+
+      let lastError: Error | null = null;
+      for (let attempt = 0; attempt < 40; attempt += 1) {
         const random = new Uint32Array(1);
         window.crypto.getRandomValues(random);
-        const candidate = clinicPrefix + String(random[0] % 10000).padStart(4, "0");
-        if (candidate === String(client.client_code || "").trim()) continue;
+        const suffix = String(random[0] % 10000).padStart(4, "0");
+        const candidate = clinicPrefix + suffix;
 
+        if (candidate === currentCode) continue;
+
+        // Check globally too, in case the database has a global unique index.
         const { data: occupied, error: lookupError } = await db
           .from("clients")
           .select("id")
@@ -190,24 +222,62 @@ export default function ClientPage() {
           throw updateError;
         }
 
-        const savedCode = String(updated?.client_code || "").trim();
-        if (!/^01\d{4}$/.test(savedCode)) {
-          throw new Error("Ù„Ù… ÙŠØªÙ… ØªØ£ÙƒÙŠØ¯ Client ID Ø§Ù„Ø¬Ø¯ÙŠØ¯ Ø¨ØµÙŠØºØ© 01XXXX.");
+        if (!updated?.client_code || !updated.client_code.startsWith(clinicPrefix) || !/^\d{6}$/.test(updated.client_code)) {
+          throw new Error("لم يتم تأكيد Client ID الجديد بالصيغة الصحيحة.");
         }
 
-        setClient((current) => current ? { ...current, client_code: savedCode } : current);
-        setMessage("ØªÙ… ØªØºÙŠÙŠØ± Client ID Ø¨Ù†Ø¬Ø§Ø­: " + savedCode);
+        setClient((current) => current ? { ...current, client_code: updated.client_code } : current);
+        setMessage("تم تغيير Client ID بنجاح مع الحفاظ على كود العيادة: " + updated.client_code);
         return;
       }
 
-      throw lastError || new Error("Ù„Ù… ÙŠØªÙ… Ø§Ù„Ø¹Ø«ÙˆØ± Ø¹Ù„Ù‰ Client ID Ù…ØªØ§Ø­ ÙŠØ¨Ø¯Ø£ Ø¨Ù€ 01. Ù„Ù… ÙŠØªÙ… ØªØºÙŠÙŠØ± Ø§Ù„Ø±Ù‚Ù….");
+      throw lastError || new Error("لم يتم العثور على رقم متاح بنفس كود بداية العيادة. لم يتم تغيير الرقم.");
     } catch (err) {
       console.error("GENERATE CLIENT CODE ERROR:", err);
-      setError(err instanceof Error ? err.message : "ØªØ¹Ø°Ø± ØªØºÙŠÙŠØ± Client ID.");
+      setError(err instanceof Error ? err.message : "تعذر تغيير Client ID.");
     } finally {
       setGeneratingClientCode(false);
     }
   }
+
+  async function deleteClientPermanently() {
+    if (!client || deletingClient) return;
+    const typedName = window.prompt(
+      `حذف نهائي لا يمكن التراجع عنه. سيتم حذف العميل "${client.name}" وكل حيواناته وسجلاته الطبية ومواعيده وفواتيره ومدفوعاتها. اكتب اسم العميل كما هو للتأكيد:`
+    );
+    if (typedName === null) return;
+    if (typedName.trim() !== client.name.trim()) {
+      setError("لم يتم الحذف: الاسم المكتوب لا يطابق اسم العميل.");
+      return;
+    }
+    if (!window.confirm(`تأكيد أخير: حذف "${client.name}" وجميع بياناته نهائيًا؟`)) return;
+
+    setDeletingClient(true);
+    setError("");
+    try {
+      const { data: { session }, error: sessionError } = await vetraCore.auth.getSession();
+      if (sessionError || !session?.access_token) throw new Error("انتهت جلسة الدخول. سجّل الدخول ثم أعد المحاولة.");
+
+      const response = await fetch(`/api/clients/${encodeURIComponent(client.id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const result = await response.json() as { error?: string; cleanupPending?: boolean };
+      if (!response.ok) throw new Error(result.error || "تعذر حذف العميل.");
+
+      if (result.cleanupPending) {
+        window.alert("تم حذف ملف العميل وبيانات العيادة. تعذر تنظيف بعض بيانات الإشعارات أو الصور؛ تواصل مع مسؤول النظام لإتمام التنظيف.");
+      }
+      router.replace("/clients");
+      router.refresh();
+    } catch (err) {
+      console.error("CLIENT DELETE ERROR:", err);
+      setError(err instanceof Error ? err.message : "تعذر حذف العميل وبياناته المرتبطة.");
+    } finally {
+      setDeletingClient(false);
+    }
+  }
+
   async function addPet(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
@@ -421,6 +491,15 @@ export default function ClientPage() {
             >
               <span aria-hidden="true">🔢</span>
               <span>{generatingClientCode ? "جاري توليد رقم..." : "توليد Client ID جديد"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void deleteClientPermanently()}
+              disabled={deletingClient}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-5 py-3 font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-wait disabled:opacity-60"
+            >
+              <span aria-hidden="true">🗑️</span>
+              <span>{deletingClient ? "جاري حذف العميل..." : "حذف العميل وكل بياناته نهائيًا"}</span>
             </button>
 
           </div>

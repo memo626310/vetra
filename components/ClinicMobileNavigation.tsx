@@ -9,6 +9,7 @@ import { vetraCore } from "@/lib/vetra-core";
 // VETRA_CLINIC_NAV_TEAL_POLISH_V1
 const PUBLIC_ROUTES = ["/", "/login", "/register", "/clinic-setup"];
 const MORE_ITEMS = [
+  { icon: "🟢", ar: "نشاط العملاء", en: "Client activity", href: "/dashboard/clients-activity" },
   { icon: "📅", ar: "المواعيد", en: "Appointments", href: "/appointments" },
   { icon: "💉", ar: "التطعيمات", en: "Vaccinations", href: "/vaccinations" },
   { icon: "📦", ar: "المخزون", en: "Inventory", href: "/inventory/products" },

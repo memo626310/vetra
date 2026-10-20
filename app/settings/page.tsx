@@ -1,10 +1,11 @@
 ﻿ "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePwaInstall } from "@/components/PwaInstallProvider";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
+import { loadClinicProfile, type ClinicProfile } from "@/lib/clinic-profile";
 
 type Language = "ar" | "en";
 
@@ -67,6 +68,20 @@ const text = {
     back: "العودة للرئيسية",
     clinic: "العيادة",
     clinicName: "اسم العيادة",
+    clinicProfile: "ملف العيادة",
+    clinicProfileHint: "الهوية التي تظهر للعملاء وعلى الروشتات المطبوعة.",
+    displayName: "اسم العرض",
+    website: "الموقع الإلكتروني",
+    logo: "شعار العيادة",
+    uploadLogo: "تغيير الشعار",
+    removeLogo: "إزالة الشعار",
+    logoHint: "PNG أو JPG أو WebP، بحد أقصى 5 ميجابايت.",
+    saveProfile: "حفظ ملف العيادة",
+    profileSaved: "تم حفظ ملف العيادة.",
+    profileSaveError: "تعذر حفظ ملف العيادة. تحقق من إعداد قاعدة بيانات العيادة.",
+    profileNameRequired: "أدخل اسم العيادة.",
+    websiteInvalid: "أدخل رابط موقع صحيحًا يبدأ بـ https:// أو http://.",
+    logoInvalid: "اختر صورة PNG أو JPG أو WebP لا يتجاوز حجمها 5 ميجابايت.",
     doctor: "الطبيب",
     role: "الصلاحية",
     database: "قاعدة البيانات",
@@ -143,6 +158,20 @@ const text = {
     back: "Back to dashboard",
     clinic: "Clinic",
     clinicName: "Clinic name",
+    clinicProfile: "Clinic profile",
+    clinicProfileHint: "The identity shown to clients and on printed prescriptions.",
+    displayName: "Display name",
+    website: "Website",
+    logo: "Clinic logo",
+    uploadLogo: "Replace logo",
+    removeLogo: "Remove logo",
+    logoHint: "PNG, JPG or WebP, up to 5 MB.",
+    saveProfile: "Save clinic profile",
+    profileSaved: "Clinic profile saved.",
+    profileSaveError: "Could not save the clinic profile. Check the clinic database setup.",
+    profileNameRequired: "Enter the clinic name.",
+    websiteInvalid: "Enter a valid website URL beginning with https:// or http://.",
+    logoInvalid: "Choose a PNG, JPG or WebP image no larger than 5 MB.",
     doctor: "Doctor",
     role: "Role",
     database: "Database",
@@ -230,6 +259,14 @@ export default function SettingsPage() {
   const [ready, setReady] = useState(false);
 
   const [context, setContext] = useState<ClinicContext | null>(null);
+  const [clinicProfile, setClinicProfile] = useState<ClinicProfile | null>(null);
+  const [displayName, setDisplayName] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [logoPath, setLogoPath] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [billing, setBilling] = useState<BillingSettings | null>(null);
 
   const [consultationFee, setConsultationFee] = useState("");
@@ -284,6 +321,15 @@ export default function SettingsPage() {
 
         const db = await getClinicDb();
 
+        const profile = await loadClinicProfile(db, clinicContext.clinic_id);
+        if (!cancelled) {
+          setClinicProfile(profile);
+          setDisplayName(profile?.display_name || clinicContext.clinic_name || "");
+          setWebsiteUrl(profile?.website_url || "");
+          setLogoUrl(profile?.logo_url || "");
+          setLogoPath(profile?.logo_path || "");
+        }
+
         const { data, error: billingError } = await db
           .from("billing_settings")
           .select("id, clinic_id, consultation_fee, auto_add_consultation_fee")
@@ -326,6 +372,118 @@ export default function SettingsPage() {
   const t = text[language];
   const { canInstall, isInstalled, isIOS, installApp } = usePwaInstall();
   const isAdmin = context ? ["owner", "admin"].includes(context.role) : false;
+
+  function selectClinicLogo(file: File | undefined) {
+    if (!file) return;
+    if (!(["image/png", "image/jpeg", "image/webp"].includes(file.type)) || file.size > 5 * 1024 * 1024) {
+      setError(t.logoInvalid);
+      return;
+    }
+    setError("");
+    setLogoFile(file);
+    setLogoUrl(URL.createObjectURL(file));
+  }
+
+  async function saveClinicProfile() {
+    if (!context || savingProfile) return;
+    const cleanName = displayName.trim();
+    if (!cleanName) {
+      setError(t.profileNameRequired);
+      setMessage("");
+      return;
+    }
+    const cleanWebsite = websiteUrl.trim();
+    if (cleanWebsite) {
+      try {
+        const parsed = new URL(cleanWebsite);
+        if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Invalid protocol");
+      } catch {
+        setError(t.websiteInvalid);
+        setMessage("");
+        return;
+      }
+    }
+    if (!isAdmin) {
+      setError(t.accessDenied);
+      setMessage("");
+      return;
+    }
+
+    setSavingProfile(true);
+    setError("");
+    setMessage("");
+    let uploadedPath = "";
+    try {
+      const db = await getClinicDb();
+      let nextLogoUrl = logoUrl || null;
+      let nextLogoPath = logoUrl || logoFile ? (logoPath || null) : null;
+      if (logoFile) {
+        const { data: sessionData, error: sessionError } = await vetraCore.auth.getSession();
+        if (sessionError || !sessionData.session?.access_token) throw new Error(t.profileSaveError);
+        const form = new FormData();
+        form.set("file", logoFile);
+        const uploadResponse = await fetch("/api/clinic/logo", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+          body: form,
+        });
+        const uploaded = await uploadResponse.json().catch(() => null) as { path?: string; url?: string; error?: string } | null;
+        if (!uploadResponse.ok || !uploaded?.path || !uploaded.url) throw new Error(uploaded?.error || t.profileSaveError);
+        uploadedPath = uploaded.path;
+        nextLogoUrl = uploaded.url;
+        nextLogoPath = uploaded.path;
+      }
+
+      const { error: saveError } = await db.from("clinic_profile_settings").upsert({
+        clinic_id: context.clinic_id,
+        display_name: cleanName,
+        website_url: cleanWebsite || null,
+        logo_url: nextLogoUrl,
+        logo_path: nextLogoPath,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "clinic_id" });
+      if (saveError) throw saveError;
+
+      if (clinicProfile?.logo_path && clinicProfile.logo_path !== nextLogoPath) {
+        const { data: sessionData } = await vetraCore.auth.getSession();
+        if (sessionData.session?.access_token) {
+          await fetch("/api/clinic/logo", {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${sessionData.session.access_token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ path: clinicProfile.logo_path }),
+          });
+        }
+      }
+      const updated: ClinicProfile = {
+        clinic_id: context.clinic_id,
+        display_name: cleanName,
+        website_url: cleanWebsite || null,
+        logo_url: nextLogoUrl,
+        logo_path: nextLogoPath,
+        updated_at: new Date().toISOString(),
+      };
+      setClinicProfile(updated);
+      setLogoUrl(nextLogoUrl || "");
+      setLogoPath(nextLogoPath || "");
+      setLogoFile(null);
+      setMessage(t.profileSaved);
+    } catch (saveErr) {
+      if (uploadedPath) {
+        const { data: sessionData } = await vetraCore.auth.getSession();
+        if (sessionData.session?.access_token) {
+          await fetch("/api/clinic/logo", {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${sessionData.session.access_token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ path: uploadedPath }),
+          });
+        }
+      }
+      console.error("CLINIC PROFILE SAVE ERROR:", saveErr);
+      setError(saveErr instanceof Error ? saveErr.message : t.profileSaveError);
+    } finally {
+      setSavingProfile(false);
+    }
+  }
 
   async function saveBilling() {
     if (!context) return;
@@ -650,7 +808,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <InfoCard label={t.clinicName} value={context?.clinic_name || "—"} darkMode={darkMode} />
+              <InfoCard label={t.clinicName} value={clinicProfile?.display_name || context?.clinic_name || "—"} darkMode={darkMode} />
               <InfoCard label={t.doctor} value={context?.doctor_name || "—"} darkMode={darkMode} />
               <InfoCard label={t.role} value={context?.role || "—"} darkMode={darkMode} />
               <InfoCard
@@ -671,6 +829,46 @@ export default function SettingsPage() {
                 darkMode={darkMode}
               />
             </div>
+          </section>
+
+          <section className={`rounded-3xl border p-6 ${darkMode ? "border-white/[0.06] bg-[#13161B]" : "border-slate-200 bg-white"}`}>
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black">{t.clinicProfile}</h2>
+                <p className="mt-1 text-sm text-slate-500">{t.clinicProfileHint}</p>
+              </div>
+              <span className="rounded-full bg-blue-500/10 px-3 py-1.5 text-xs font-bold text-blue-500">{t.ownerAdminOnly}</span>
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-2">
+              <label className="block text-sm font-bold">
+                {t.displayName}
+                <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={120} disabled={!isAdmin || savingProfile} className={`mt-2 w-full rounded-xl border px-4 py-3 outline-none focus:border-cyan-500 disabled:opacity-60 ${darkMode ? "border-white/10 bg-[#0F1115] text-white" : "border-slate-200 bg-slate-50 text-slate-900"}`} />
+              </label>
+              <label className="block text-sm font-bold">
+                {t.website}
+                <input type="url" value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} placeholder="https://example.com" disabled={!isAdmin || savingProfile} className={`mt-2 w-full rounded-xl border px-4 py-3 outline-none focus:border-cyan-500 disabled:opacity-60 ${darkMode ? "border-white/10 bg-[#0F1115] text-white placeholder:text-slate-500" : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"}`} />
+              </label>
+              <div className="md:col-span-2">
+                <div className="mb-2 text-sm font-bold">{t.logo}</div>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className={`flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border ${darkMode ? "border-white/10 bg-white" : "border-slate-200 bg-slate-50"}`}>
+                    {logoUrl ? <img src={logoUrl} alt={t.logo} className="h-full w-full object-contain" /> : <span className="text-xs text-slate-400">VETRA</span>}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={!isAdmin || savingProfile} onChange={(event) => { selectClinicLogo(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+                    <button type="button" onClick={() => logoInputRef.current?.click()} disabled={!isAdmin || savingProfile} className={`rounded-xl border px-4 py-2.5 text-sm font-bold disabled:opacity-50 ${darkMode ? "border-white/10 bg-white/5 hover:bg-white/10" : "border-slate-200 bg-white hover:bg-slate-50"}`}>{t.uploadLogo}</button>
+                    {logoUrl && <button type="button" onClick={() => { setLogoUrl(""); setLogoFile(null); }} disabled={!isAdmin || savingProfile} className="rounded-xl px-3 py-2.5 text-sm font-bold text-rose-500 hover:bg-rose-500/10 disabled:opacity-50">{t.removeLogo}</button>}
+                    <p className="w-full text-xs text-slate-500">{t.logoHint}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button type="button" onClick={() => void saveClinicProfile()} disabled={!isAdmin || savingProfile} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50">{savingProfile ? t.saving : t.saveProfile}</button>
+            </div>
+            {clinicProfile?.updated_at && <p className="mt-3 text-end text-xs text-slate-500">{new Intl.DateTimeFormat(language === "ar" ? "ar-EG" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(clinicProfile.updated_at))}</p>}
           </section>
 
           <section

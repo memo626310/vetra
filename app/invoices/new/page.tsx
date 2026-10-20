@@ -46,6 +46,7 @@ type InvoiceLine = {
   unit_price: number;
   discount: number;
   available_quantity: number | null;
+  autoMedication?: boolean;
 };
 
 const emptyLine = (): InvoiceLine => ({
@@ -65,6 +66,8 @@ const money = (value: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+
+const normalizeProductName = (value: string) => value.toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, "").trim();
 
 export default function NewInvoicePage() {
   const router = useRouter();
@@ -102,7 +105,9 @@ export default function NewInvoicePage() {
   const [servicePrice, setServicePrice] = useState("");
   const [consultationFee, setConsultationFee] = useState(100);
   const [visitId, setVisitId] = useState("");
+  const [invoiceMedicationNotice, setInvoiceMedicationNotice] = useState("");
   const [requestedPetId, setRequestedPetId] = useState("");
+  const visitPrefilledRef = useRef(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
@@ -203,6 +208,81 @@ export default function NewInvoicePage() {
 
     if (settingsResult.data?.consultation_fee != null) {
       setConsultationFee(Number(settingsResult.data.consultation_fee));
+    }
+    const visitFromUrl = new URLSearchParams(window.location.search).get("visit");
+    if (visitFromUrl && !visitPrefilledRef.current) {
+      visitPrefilledRef.current = true;
+      const consultationLine: InvoiceLine = {
+        key: crypto.randomUUID(),
+        item_type: "service",
+        product_id: null,
+        service_name: "Consultation",
+        description: language === "ar" ? "كشف / استشارة بيطرية" : "Veterinary consultation",
+        quantity: 1,
+        unit_price: Number(settingsResult.data?.consultation_fee ?? consultationFee),
+        discount: 0,
+        available_quantity: null,
+      };
+      void (async () => {
+        const db = await getClinicDb();
+        const { data: visitMedicationRows, error: visitMedicationError } = await db
+          .from("visit_medications")
+          .select("medication_id, calculated_dose, calculated_dose_unit, calculated_volume, volume_unit, route, frequency, duration_days")
+          .eq("visit_id", visitFromUrl);
+        if (visitMedicationError) {
+          setInvoiceMedicationNotice(language === "ar" ? `تعذر تحميل أدوية الزيارة: ${visitMedicationError.message}` : `Could not load visit medications: ${visitMedicationError.message}`);
+          setLines([consultationLine]);
+          return;
+        }
+        const { data: visitBillingData, error: visitBillingError } = await db.from("visits").select("treatment").eq("id", visitFromUrl).maybeSingle();
+        if (visitBillingError) setInvoiceMedicationNotice(language === "ar" ? `تعذر قراءة علاج الزيارة: ${visitBillingError.message}` : `Could not read visit treatment: ${visitBillingError.message}`);
+        const medicationIds = [...new Set((visitMedicationRows || []).map((row) => row.medication_id).filter(Boolean))];
+        const { data: medicationData, error: medicationsError } = medicationIds.length
+          ? await db.from("medications").select("id,name,active_ingredient").in("id", medicationIds)
+          : { data: [], error: null };
+        if (medicationsError) {
+          setInvoiceMedicationNotice(language === "ar" ? `تعذر قراءة أسماء الأدوية: ${medicationsError.message}` : `Could not read medication names: ${medicationsError.message}`);
+          setLines([consultationLine]);
+          return;
+        }
+        const medNames = new Map((medicationData || []).map((row) => [String(row.id), { name: String(row.name || "Medication"), activeIngredient: String(row.active_ingredient || "") }]));
+        const products = (productsResult.data || []) as unknown as Product[];
+        const missing: string[] = [];
+        const visitMedicationDrafts = (visitMedicationRows || []).map((row) => ({
+          name: medNames.get(String(row.medication_id))?.name || "Medication",
+          activeIngredient: medNames.get(String(row.medication_id))?.activeIngredient || "",
+          details: [row.calculated_dose != null ? `${row.calculated_dose} ${row.calculated_dose_unit || ""}` : "", row.calculated_volume != null ? `${row.calculated_volume} ${row.volume_unit || "mL"}` : "", row.route, row.frequency, row.duration_days ? `${row.duration_days} days` : ""].filter(Boolean).join(" · "),
+        }));
+        const selectedNames = new Set(visitMedicationDrafts.map((draft) => normalizeProductName(draft.name)));
+        const structuredTreatmentDrafts = String(visitBillingData?.treatment || "").split(/\r?\n/).map((rawLine) => {
+          const line = rawLine.trim();
+          const externalMatch = line.match(/^\[DrugEye\s*\/[^\]]*\]\s*(.+?)(?:\s+\([^)]*\))?:\s*(.*)$/i);
+          if (externalMatch) return { name: externalMatch[1].trim(), details: externalMatch[2].trim() };
+          if (line.includes(" - ") && /\b(?:IV|IM|SC|PO|oral|intravenous|intramuscular|subcutaneous)\b/i.test(line)) {
+            const [name, ...details] = line.split(" - ");
+            return { name: name.trim(), details: details.join(" · ").trim() };
+          }
+          return null;
+        }).filter((draft): draft is { name: string; details: string } => draft !== null && Boolean(draft.name) && !selectedNames.has(normalizeProductName(draft.name)));
+        const allMedicationDrafts = [...visitMedicationDrafts, ...structuredTreatmentDrafts.map((draft) => ({ ...draft, activeIngredient: "" }))];
+        const medicationLines: InvoiceLine[] = allMedicationDrafts.map((draft) => {
+          const medName = draft.name;
+          const exactMatch = products.find((product) => normalizeProductName(product.name) === normalizeProductName(medName));
+          const ingredient = "activeIngredient" in draft ? normalizeProductName(draft.activeIngredient) : "";
+          const ingredientMatches = ingredient ? products.filter((product) => normalizeProductName(product.name) === ingredient) : [];
+          const matchedProduct = exactMatch || (ingredientMatches.length === 1 ? ingredientMatches[0] : null);
+          const doseLabel = draft.details;
+          if (matchedProduct && Number(matchedProduct.quantity) > 0) {
+            return { key: crypto.randomUUID(), item_type: "product", product_id: matchedProduct.id, service_name: "", description: `${matchedProduct.name}${doseLabel ? ` — ${doseLabel}` : ""}`, quantity: 1, unit_price: Number(matchedProduct.retail_price) || 0, discount: 0, available_quantity: Number(matchedProduct.quantity), autoMedication: true };
+          }
+          missing.push(medName);
+          return { key: crypto.randomUUID(), item_type: "service", product_id: null, service_name: medName, description: `${medName}${doseLabel ? ` — ${doseLabel}` : ""}`, quantity: 1, unit_price: 0, discount: 0, available_quantity: null, autoMedication: true };
+        });
+        setLines([consultationLine, ...medicationLines]);
+        if (missing.length) setInvoiceMedicationNotice(language === "ar"
+          ? `أُضيفت الأدوية غير المطابقة كبنود بدون سعر/مخزون: ${[...new Set(missing)].join("، ")}. اربط اسم الدواء بمنتج مخزون مطابق أو حدّد سعره قبل الإصدار.`
+          : `Medications without a matching inventory product were added without price/stock: ${[...new Set(missing)].join(", ")}. Match them to an inventory product or enter their price before issuing.`);
+      })();
     }
     if (!accountsResult.error) {
       setFinancialAccounts((accountsResult.data || []) as FinancialAccount[]);
@@ -511,6 +591,13 @@ export default function NewInvoicePage() {
           ? "أضف منتج أو خدمة واحدة على الأقل."
           : "Add at least one product or service."
       );
+      return;
+    }
+
+    if (lines.some((line) => line.autoMedication && line.item_type === "service" && line.unit_price <= 0)) {
+      setMessage(language === "ar"
+        ? "يوجد دواء من الزيارة بلا منتج مخزون مطابق أو سعر. أضف منتج المخزون المطابق واحذف بند الخدمة غير المسعّر قبل إصدار الفاتورة."
+        : "A visit medication has no matching inventory product or price. Add the matching inventory product and remove the unpriced service line before issuing the invoice.");
       return;
     }
 
@@ -1060,7 +1147,22 @@ setSuccess(
                 {language === "ar" ? "بنود الفاتورة" : "Invoice items"}
               </div>
 
-              <div className="max-w-full overflow-x-auto overscroll-x-contain">
+              {invoiceMedicationNotice && <p className="mx-3 mt-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-200 sm:mx-5">{invoiceMedicationNotice}</p>}
+
+              <div className="space-y-3 p-3 sm:hidden">
+                {lines.map((line) => {
+                  const lineTotal = Math.max(0, line.quantity * line.unit_price - line.discount);
+                  const field = `w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm ${darkMode ? "border-white/[0.07] bg-[#0F1115]" : "border-slate-200 bg-slate-50"}`;
+                  return <article key={line.key} className={`rounded-2xl border p-3 ${darkMode ? "border-white/[0.07] bg-[#0F1115]" : "border-slate-200 bg-slate-50"}`}>
+                    <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="break-words text-sm font-bold">{line.description || line.service_name}</p><p className="mt-1 text-[10px] text-slate-500">{line.item_type === "product" ? (language === "ar" ? "دواء من المخزون" : "Inventory product") : (language === "ar" ? "خدمة / دواء يحتاج تسعير" : "Service / medication needs pricing")}{line.available_quantity != null ? ` · ${language === "ar" ? "المتاح" : "Stock"}: ${line.available_quantity}` : ""}</p></div><button type="button" onClick={() => removeLine(line.key)} className="shrink-0 rounded-lg px-2 py-1 text-rose-500" aria-label={language === "ar" ? "حذف البند" : "Remove item"}>×</button></div>
+                    <div className="mt-3 grid grid-cols-3 gap-2"><label className="text-[10px] text-slate-500">{language === "ar" ? "الكمية" : "Qty"}<input type="number" min="0.001" max={line.item_type === "product" ? line.available_quantity ?? undefined : undefined} step="1" value={line.quantity} onChange={(event) => updateLine(line.key, { quantity: Number(event.target.value) || 0 })} className={field} /></label><label className="text-[10px] text-slate-500">{language === "ar" ? "سعر الوحدة" : "Price"}<input type="number" min="0" step="0.01" value={line.unit_price} onChange={(event) => updateLine(line.key, { unit_price: Number(event.target.value) || 0 })} className={field} /></label><label className="text-[10px] text-slate-500">{language === "ar" ? "الخصم" : "Discount"}<input type="number" min="0" step="0.01" value={line.discount} onChange={(event) => updateLine(line.key, { discount: Number(event.target.value) || 0 })} className={field} /></label></div>
+                    <div className="mt-2 flex justify-between border-t border-slate-200/50 pt-2 text-sm"><span className="text-slate-500">{language === "ar" ? "الإجمالي" : "Total"}</span><strong>{money(lineTotal)} EGP</strong></div>
+                  </article>;
+                })}
+                {!lines.length && <p className="py-8 text-center text-sm text-slate-500">{language === "ar" ? "لسه مفيش بنود في الفاتورة" : "No invoice items yet"}</p>}
+              </div>
+
+              <div className="hidden max-w-full overflow-x-auto overscroll-x-contain sm:block">
                 <table className="w-full min-w-[850px] text-sm">
                   <thead>
                     <tr className="border-b text-right text-xs text-slate-500">

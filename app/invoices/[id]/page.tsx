@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
+import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
 
 type Client = {
   id: string;
@@ -638,17 +639,15 @@ export default function InvoiceDetailsPage() {
       return;
     }
 
-    const phone = invoice.client.phone.replace(/\D/g, "");
-
-    const message = isAr
-      ? `مرحبًا ${invoice.client.name}،\nفاتورة VETRA رقم #${invoice.invoice_number}\nالإجمالي: ${money(invoice.total)}\nالمدفوع: ${money(invoice.paid_amount)}\nالمتبقي: ${money(remaining)}`
-      : `Hello ${invoice.client.name},\nVETRA invoice #${invoice.invoice_number}\nTotal: ${money(invoice.total)}\nPaid: ${money(invoice.paid_amount)}\nRemaining: ${money(remaining)}`;
-
-    window.open(
-      `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
-      "_blank",
-      "noopener,noreferrer"
-    );
+    void openWhatsAppTemplate(invoice.client.phone, "invoice_sharing", isAr ? "ar" : "en", {
+      customer_name: invoice.client.name,
+      pet_name: invoice.pet?.name || (isAr ? "الحيوان الأليف" : "your pet"),
+      invoice_number: invoice.invoice_number,
+      total: money(invoice.total),
+      paid: money(invoice.paid_amount),
+      balance: money(remaining),
+      brand_name: "VETRA",
+    });
   }
 
   if (loading) {
@@ -713,6 +712,13 @@ export default function InvoiceDetailsPage() {
           </button>
 
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="rounded-2xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm hover:bg-cyan-400"
+            >
+              {isAr ? "الداشبورد" : "Dashboard"}
+            </button>
+
             <button
               onClick={() => setLanguage(language === "en" ? "ar" : "en")}
               className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900"
@@ -840,7 +846,17 @@ export default function InvoiceDetailsPage() {
           </div>
 
           <div className="p-6 md:p-8">
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="space-y-3 sm:hidden print:hidden">
+              {items.map((item, index) => {
+                const itemName = item.item_type === "product" ? item.product?.name || item.description || "Product" : item.service_name || item.description || "Service";
+                return <article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/50">
+                  <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-bold text-slate-400">#{index + 1} · {item.item_type === "product" ? (isAr ? "منتج" : "Product") : (isAr ? "خدمة" : "Service")}</p><p className="mt-1 break-words font-bold">{itemName}</p></div><strong className="shrink-0">{money(item.total)}</strong></div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-200 pt-2 text-[10px] dark:border-slate-800"><div><span className="block text-slate-500">{isAr ? "الكمية" : "Qty"}</span><b>{Number(item.quantity).toFixed(3).replace(/\.?0+$/, "")}</b></div><div><span className="block text-slate-500">{isAr ? "سعر الوحدة" : "Unit"}</span><b>{money(item.unit_price)}</b></div><div><span className="block text-slate-500">{isAr ? "الخصم" : "Discount"}</span><b>{money(item.discount)}</b></div></div>
+                </article>;
+              })}
+              {!items.length && <div className="py-8 text-center text-sm text-slate-400">{isAr ? "لا توجد بنود." : "No invoice items."}</div>}
+            </div>
+            <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 sm:block print:block">
               <table className="w-full min-w-[760px] text-sm">
                 <thead className="bg-slate-50 text-slate-500 dark:bg-slate-950/60 dark:text-slate-400">
                   <tr>

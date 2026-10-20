@@ -497,7 +497,10 @@ export default function LegacyImportReviewPage() {
     };
 
     try {
-      const client = await getClinicDb();
+      const [client, clinicContext] = await Promise.all([
+        getClinicDb(),
+        getClinicContext(),
+      ]);
       const { data: currentBatch, error: progressReadError } = await client
         .from("legacy_import_batches")
         .select("summary")
@@ -561,10 +564,23 @@ export default function LegacyImportReviewPage() {
           p_limit: limit,
         });
         if (stepError) {
+          console.error("VETRA LEGACY IMPORT RPC ERROR", {
+            phase,
+            afterRow,
+            limit,
+            clinicId: clinicContext.clinic_id,
+            projectRef: clinicContext.project_ref,
+            code: stepError.code,
+            details: stepError.details,
+            hint: stepError.hint,
+            message: stepError.message,
+          });
           if (/vetra_import_legacy_batch_progress|function.*does not exist|Could not find the function/i.test(stepError.message)) {
             throw new Error("محرك الاستيراد المرحلي غير مثبت. شغّل ملف VETRA_IMPORT_PROGRESS_ENGINE.sql مرة واحدة في Shared Clinic Database، ثم أعد المحاولة.");
           }
-          throw new Error(stepError.message);
+          throw new Error(
+            `فشلت خطوة ${phase} في مشروع العيادة ${clinicContext.project_ref || "غير معروف"} [${stepError.code || "بدون رمز"}]: ${stepError.message}${stepError.details ? ` — ${stepError.details}` : ""}${stepError.hint ? ` — ${stepError.hint}` : ""}`
+          );
         }
         const value = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
         if (!value) throw new Error(`لم تُرجع خطوة ${phase} تأكيدًا للحفظ.`);

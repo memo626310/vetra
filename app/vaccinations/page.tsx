@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
+import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
+import { loadClinicProfile } from "@/lib/clinic-profile";
 
 type Lang = "ar" | "en";
 type Status = "not_due" | "current" | "grace" | "overdue" | "due" | "no_repeat";
@@ -118,6 +120,19 @@ const T = {
     ready: "جاهزة",
     language: "English",
     theme: "الوضع",
+    notifyOwner: "إشعار المالك",
+    whatsapp: "واتساب",
+    notificationNotes: "ملاحظات اختيارية تظهر للمالك",
+    sendReminder: "إرسال التذكير",
+    cancel: "إلغاء",
+    sending: "جارٍ الإرسال...",
+    sent: "تم إرسال الإشعار للمالك",
+    noSubscription: "المالك غير مفعّل للإشعارات على أي جهاز",
+    notifyFailed: "تعذر إرسال الإشعار",
+    missingTitle: "التطعيمات غير المسجلة",
+    missingHint: "تطعيمات لم تُسجل للحيوانات بعد، ويمكن تذكير المالك بها مباشرة.",
+    noMissing: "لا توجد تطعيمات ناقصة حسب البروتوكول المسجل.",
+    noFilteredResults: "لا توجد نتائج تطابق البحث أو الفلتر المحدد.",
   },
   en: {
     title: "Vaccinations & Preventive Care",
@@ -172,6 +187,19 @@ const T = {
     ready: "Ready",
     language: "العربية",
     theme: "Theme",
+    notifyOwner: "Notify owner",
+    whatsapp: "WhatsApp",
+    notificationNotes: "Optional notes visible to the owner",
+    sendReminder: "Send reminder",
+    cancel: "Cancel",
+    sending: "Sending...",
+    sent: "Notification sent to the owner",
+    noSubscription: "The owner has no active notification device",
+    notifyFailed: "Could not send the notification",
+    missingTitle: "Unrecorded vaccinations",
+    missingHint: "Vaccinations not yet recorded for pets. You can remind each owner directly.",
+    noMissing: "No missing vaccinations based on the available protocol.",
+    noFilteredResults: "No results match the current search or filter.",
   },
 } as const;
 
@@ -716,6 +744,60 @@ export default function ClinicVaccinationsPage() {
   const [filter, setFilter] = useState<
     "all" | "overdue" | "today" | "soon" | "current"
   >("all");
+  const [notifyKey, setNotifyKey] = useState("");
+  const [notifyNotes, setNotifyNotes] = useState("");
+  const [notifyBusy, setNotifyBusy] = useState(false);
+  const [notifyMessage, setNotifyMessage] = useState("");
+
+  async function sendVaccineReminder(item: DueItem) {
+    setNotifyBusy(true);
+    setNotifyMessage("");
+    try {
+      const { data } = await vetraCore.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("AUTH");
+      const response = await fetch("/api/push/notify-vaccine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          petId: item.pet.id,
+          vaccine: item.vaccine,
+          dueDate: item.due ? new Date(item.due).toISOString().slice(0, 10) : "",
+          missingDose: !item.due,
+          notes: notifyNotes,
+          language: lang,
+        }),
+      });
+      const result = await response.json() as { success?: boolean; error?: string };
+      if (!response.ok || !result.success) {
+        setNotifyMessage(result.error === "NO_ACTIVE_SUBSCRIPTION" ? T[lang].noSubscription : T[lang].notifyFailed);
+        return;
+      }
+      setNotifyMessage(T[lang].sent);
+      setNotifyNotes("");
+    } catch {
+      setNotifyMessage(T[lang].notifyFailed);
+    } finally {
+      setNotifyBusy(false);
+    }
+  }
+
+  async function shareVaccineWhatsApp(item: DueItem) {
+    const overdue = item.status === "overdue" || (item.days !== null && item.days < 0);
+    const opened = await openWhatsAppTemplate(
+      item.pet.client?.phone,
+      overdue ? "vaccination_overdue" : "vaccination_due",
+      lang,
+      {
+        customer_name: item.pet.client?.name || "",
+        pet_name: item.pet.name,
+        vaccine_name: item.vaccine,
+        due_date: item.due ? dateText(item.due, lang) : (lang === "ar" ? "مستحق الآن" : "Due now"),
+        brand_name: clinicName,
+      },
+    );
+    if (!opened) setNotifyMessage(item.pet.client?.phone ? (lang === "ar" ? "اسمح بفتح واتساب للمتابعة." : "Allow WhatsApp to open to continue.") : (lang === "ar" ? "لا يوجد رقم هاتف محفوظ للعميل." : "No customer phone number is saved."));
+  }
 
   useEffect(() => {
     const savedLang =
@@ -771,6 +853,7 @@ export default function ClinicVaccinationsPage() {
       );
 
       const db = await getClinicDb();
+      const clinicProfile = await loadClinicProfile(db, context.clinic_id);
 
       const [petsResult, vaccinesResult] = await Promise.all([
         db
@@ -811,6 +894,7 @@ export default function ClinicVaccinationsPage() {
 
       if (petsResult.error) throw petsResult.error;
       if (vaccinesResult.error) throw vaccinesResult.error;
+      setClinicName(clinicProfile?.display_name || context.clinic_name || "VETRA");
 
       const rawPets = (petsResult.data || []) as Array<Omit<Pet, "client">>;
       const clientIds = Array.from(
@@ -974,7 +1058,29 @@ export default function ClinicVaccinationsPage() {
     });
   }, [pets, vaccinesByPet, lang]);
 
-  const filteredPets = useMemo(() => {
+  const missingVaccines = useMemo<DueItem[]>(() => {
+    const items: DueItem[] = [];
+    for (const pet of pets) {
+      const species = normalize(pet.species);
+      if (!species.includes("cat") && !species.includes("قط")) continue;
+      const protocol = protocolStatus(vaccinesByPet.get(pet.id) || [], pet);
+      for (const vaccine of protocol) {
+        if (vaccine.record || (vaccine.status !== "due" && vaccine.status !== "no_repeat")) continue;
+        items.push({
+          pet,
+          vaccine: lang === "ar" ? vaccine.titleAr : vaccine.titleEn,
+          vaccineType: vaccine.key,
+          due: null,
+          status: "due",
+          days: null,
+          source: "protocol",
+        });
+      }
+    }
+    return items;
+  }, [pets, vaccinesByPet, lang]);
+
+  const searchedPets = useMemo(() => {
     const query =
       search.trim().toLowerCase();
 
@@ -982,7 +1088,7 @@ export default function ClinicVaccinationsPage() {
       const client =
         pet.client;
 
-      const matchesSearch =
+      return (
         !query ||
         pet.name
           .toLowerCase()
@@ -1001,42 +1107,29 @@ export default function ClinicVaccinationsPage() {
           .includes(query) ||
         (client?.phone || "")
           .toLowerCase()
-          .includes(query);
+          .includes(query)
+      );
+    });
+  }, [pets, search]);
 
-      if (!matchesSearch) return false;
-
-      const item =
-        dueItems.find(
-          (x) => x.pet.id === pet.id
-        );
-
+  const filteredDueItems = useMemo(() => {
+    const petIds = new Set(searchedPets.map((pet) => pet.id));
+    return dueItems.filter((item) => {
+      if (!petIds.has(item.pet.id)) return false;
       if (filter === "all") return true;
-      if (!item) return false;
-
-      if (filter === "overdue") {
-        return item.status === "overdue";
-      }
-
+      if (filter === "overdue") return item.status === "overdue";
       if (filter === "today") {
-        return (
-          item.status === "due" ||
-          (item.days !== null &&
-            item.days <= 0 &&
-            item.days >= -GRACE_DAYS)
-        );
+        return item.status === "due" || (item.days !== null && item.days <= 0 && item.days >= -GRACE_DAYS);
       }
-
-      if (filter === "soon") {
-        return (
-          item.days !== null &&
-          item.days > 0 &&
-          item.days <= 30
-        );
-      }
-
+      if (filter === "soon") return item.days !== null && item.days > 0 && item.days <= 30;
       return item.status === "current";
     });
-  }, [pets, dueItems, search, filter]);
+  }, [dueItems, searchedPets, filter]);
+
+  const visibleMissingVaccines = useMemo(() => {
+    const petIds = new Set(searchedPets.map((pet) => pet.id));
+    return missingVaccines.filter((item) => petIds.has(item.pet.id));
+  }, [missingVaccines, searchedPets]);
 
   const overdueCount = useMemo(
     () =>
@@ -1317,7 +1410,7 @@ export default function ClinicVaccinationsPage() {
                   {card.value}
                 </span>
               </div>
-              <div className="mt-4 text-sm font-bold text-slate-500">
+              <div className={`mt-4 text-sm font-bold ${dark ? "text-slate-300" : "text-slate-600"}`}>
                 {card.title}
               </div>
             </button>
@@ -1381,6 +1474,51 @@ export default function ClinicVaccinationsPage() {
           </div>
         </section>
 
+        <section className={dark ? "mt-5 rounded-[2rem] border border-amber-400/15 bg-[#13161B] p-5" : "mt-5 rounded-[2rem] border border-amber-100 bg-white p-5"}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-black sm:text-2xl">{T[lang].missingTitle}</h2>
+              <p className="mt-1 text-sm text-slate-400">{T[lang].missingHint}</p>
+            </div>
+            <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-sm font-black text-amber-200">{visibleMissingVaccines.length}</span>
+          </div>
+          {visibleMissingVaccines.length === 0 ? (
+            <div className="rounded-2xl border border-white/[0.06] p-5 text-center text-sm text-slate-500">{missingVaccines.length === 0 ? T[lang].noMissing : T[lang].noFilteredResults}</div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {visibleMissingVaccines.map((item) => {
+                const key = `${item.pet.id}-${item.vaccineType}`;
+                return (
+                  <article key={key} className={dark ? "rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4" : "rounded-2xl border border-slate-100 bg-slate-50 p-4"}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-black">{item.pet.name} · {item.vaccine}</div>
+                        <div className="mt-1 text-sm text-slate-400">{item.pet.client?.name || "—"}</div>
+                      </div>
+                      <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-bold ${statusClasses("due")}`}>{lang === "ar" ? "غير مسجل" : "Not recorded"}</span>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Link href={`/pets/${item.pet.id}`} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold">{T[lang].openPet}</Link>
+                      {item.pet.client_id && <button type="button" onClick={() => { setNotifyMessage(""); setNotifyNotes(""); setNotifyKey(notifyKey === key ? "" : key); }} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950">{T[lang].notifyOwner}</button>}
+                      {item.pet.client_id && <button type="button" onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-300">{T[lang].whatsapp}</button>}
+                    </div>
+                    {notifyKey === key && (
+                      <div className="mt-3 space-y-2">
+                        <textarea value={notifyNotes} onChange={(event) => setNotifyNotes(event.target.value)} maxLength={300} rows={2} placeholder={T[lang].notificationNotes} className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs outline-none focus:border-cyan-400/50" />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button type="button" disabled={notifyBusy} onClick={() => void sendVaccineReminder(item)} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-60">{notifyBusy ? T[lang].sending : T[lang].sendReminder}</button>
+                          <button type="button" onClick={() => setNotifyKey("")} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold">{T[lang].cancel}</button>
+                          {notifyMessage && <span role="status" className="text-xs text-slate-300">{notifyMessage}</span>}
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
         <section
           className={
             dark
@@ -1390,28 +1528,65 @@ export default function ClinicVaccinationsPage() {
         >
           <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] p-5">
             <div>
-              <div className="text-xs font-bold text-cyan-300">
+              <h2 className="text-xl font-black sm:text-2xl">
                 {T[lang].upcoming}
-              </div>
-              <h2 className="mt-1 text-2xl font-black">
-                {dueItems.length}
               </h2>
             </div>
 
-            <Link
-              href="/pets"
-              className="rounded-2xl border border-white/[0.06] px-4 py-2.5 text-xs font-black text-slate-400 hover:text-white"
-            >
-              {T[lang].pets} →
-            </Link>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-sm font-black text-cyan-200">{filteredDueItems.length}</span>
+              <Link
+                href="/pets"
+                className="rounded-xl border border-white/[0.06] px-3 py-2 text-xs font-black text-slate-400 hover:text-white"
+              >
+                {T[lang].pets} →
+              </Link>
+            </div>
           </div>
 
-          {dueItems.length === 0 ? (
+          {filteredDueItems.length === 0 ? (
             <div className="p-10 text-center text-sm text-slate-500">
-              {T[lang].noDue}
+              {dueItems.length === 0 ? T[lang].noDue : T[lang].noFilteredResults}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:hidden">
+              {filteredDueItems.slice(0, 100).map((item) => {
+                const key = `${item.pet.id}-${item.vaccineType}`;
+                return (
+                  <article key={key} className={dark ? "rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4" : "rounded-2xl border border-slate-200 bg-slate-50 p-4"}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-black">{item.pet.name}</div>
+                        <div className="mt-1 text-xs text-slate-400">{item.pet.client?.name || "—"}</div>
+                      </div>
+                      <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${statusClasses(item.status)}`}>{statusLabel(item.status, lang)}</span>
+                    </div>
+                    <div className="mt-4 rounded-xl bg-black/[0.08] p-3">
+                      <div className="text-sm font-bold">{item.vaccine}</div>
+                      <div className="mt-1 text-xs text-slate-400">{T[lang].dueDate}: {dateText(item.due, lang)}</div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Link href={`/pets/${item.pet.id}`} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold">{T[lang].openPet}</Link>
+                      <Link href={`/visits/new?pet=${encodeURIComponent(item.pet.id)}`} className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300">{T[lang].newVisit}</Link>
+                      {(item.due || item.status === "due") && item.pet.client_id && <button type="button" onClick={() => { setNotifyMessage(""); setNotifyNotes(""); setNotifyKey(notifyKey === key ? "" : key); }} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950">{T[lang].notifyOwner}</button>}
+                      {(item.due || item.status === "due") && item.pet.client_id && <button type="button" onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-300">{T[lang].whatsapp}</button>}
+                    </div>
+                    {notifyKey === key && (
+                      <div className="mt-3 space-y-2">
+                        <textarea value={notifyNotes} onChange={(event) => setNotifyNotes(event.target.value)} maxLength={300} rows={2} placeholder={T[lang].notificationNotes} className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs outline-none focus:border-cyan-400/50" />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button type="button" disabled={notifyBusy} onClick={() => void sendVaccineReminder(item)} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-60">{notifyBusy ? T[lang].sending : T[lang].sendReminder}</button>
+                          <button type="button" onClick={() => setNotifyKey("")} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold">{T[lang].cancel}</button>
+                          {notifyMessage && <span role="status" className="text-xs text-slate-300">{notifyMessage}</span>}
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+            <div className="hidden overflow-x-auto lg:block">
               <table className="w-full min-w-[900px] text-sm">
                 <thead
                   className={
@@ -1443,14 +1618,7 @@ export default function ClinicVaccinationsPage() {
                 </thead>
 
                 <tbody>
-                  {dueItems
-                    .filter((item) =>
-                      filteredPets.some(
-                        (pet) =>
-                          pet.id ===
-                          item.pet.id
-                      )
-                    )
+                  {filteredDueItems
                     .slice(0, 100)
                     .map((item) => (
                       <tr
@@ -1571,13 +1739,55 @@ export default function ClinicVaccinationsPage() {
                             >
                               +
                             </Link>
+                            {(item.due || item.status === "due") && item.pet.client_id && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const key = `${item.pet.id}-${item.vaccineType}`;
+                                  setNotifyMessage("");
+                                  setNotifyNotes("");
+                                  setNotifyKey(notifyKey === key ? "" : key);
+                                }}
+                                className="rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 text-xs font-black text-cyan-200"
+                              >
+                                {T[lang].notifyOwner}
+                              </button>
+                            )}
+                            {(item.due || item.status === "due") && item.pet.client_id && <button type="button" onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300">{T[lang].whatsapp}</button>}
                           </div>
+                          {notifyKey === `${item.pet.id}-${item.vaccineType}` && (
+                            <div className="mt-3 min-w-64 space-y-2">
+                              <textarea
+                                value={notifyNotes}
+                                onChange={(event) => setNotifyNotes(event.target.value)}
+                                maxLength={300}
+                                rows={2}
+                                placeholder={T[lang].notificationNotes}
+                                className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs outline-none focus:border-cyan-400/50"
+                              />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={notifyBusy}
+                                  onClick={() => void sendVaccineReminder(item)}
+                                  className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-60"
+                                >
+                                  {notifyBusy ? T[lang].sending : T[lang].sendReminder}
+                                </button>
+                                <button type="button" onClick={() => setNotifyKey("")} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold">
+                                  {T[lang].cancel}
+                                </button>
+                                {notifyMessage && <span role="status" className="text-xs text-slate-300">{notifyMessage}</span>}
+                              </div>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </section>
 

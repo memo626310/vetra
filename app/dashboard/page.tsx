@@ -1,11 +1,58 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
+import { getClinicDb } from "@/lib/clinic-db";
+import PushNotificationsButton from "@/components/PushNotificationsButton";
 // VETRA_DASHBOARD_CURRENT_DESIGN_POLISH_V1
 
 type Language = "ar" | "en";
+type DashboardTheme = "midnight" | "ocean" | "violet" | "light";
+
+const dashboardThemes: Record<DashboardTheme, {
+  labelAr: string; labelEn: string; page: string; sidebar: string; header: string;
+  card: string; cardHover: string; activeNav: string; accentText: string;
+  focus: string; quickSale: string; quickSaleIcon: string; quickSaleText: string;
+}> = {
+  midnight: {
+    labelAr: "ليلي تركوازي", labelEn: "Midnight teal",
+    page: "bg-[#0F1115] text-white", sidebar: "border-white/[0.06] bg-[#13161B]",
+    header: "border-white/[0.07] bg-[radial-gradient(ellipse_at_top_right,_rgba(20,184,166,0.13),_transparent_48%),linear-gradient(135deg,#171b22,#12151a)]",
+    card: "border-white/[0.06] bg-[#181B21] text-white shadow-sm", cardHover: "hover:border-white/[0.10] hover:bg-[#1C2026] hover:shadow-xl",
+    activeNav: "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15", accentText: "text-teal-400",
+    focus: "focus-visible:ring-teal-400", quickSale: "border-teal-400/20 bg-teal-500/10 hover:border-teal-300/30 hover:bg-teal-500/[0.14]",
+    quickSaleIcon: "bg-teal-500/15 text-teal-300", quickSaleText: "text-teal-300",
+  },
+  ocean: {
+    labelAr: "أزرق محيطي", labelEn: "Ocean blue",
+    page: "bg-[#081521] text-slate-50", sidebar: "border-sky-200/[0.08] bg-[#0b1d2b]",
+    header: "border-sky-300/10 bg-[radial-gradient(ellipse_at_top_right,_rgba(56,189,248,0.16),_transparent_48%),linear-gradient(135deg,#102638,#0b1d2b)]",
+    card: "border-sky-200/[0.08] bg-[#102333] text-slate-50 shadow-sm", cardHover: "hover:border-sky-300/20 hover:bg-[#142b3d] hover:shadow-xl",
+    activeNav: "bg-sky-400/10 text-sky-300 hover:bg-sky-400/15", accentText: "text-sky-300",
+    focus: "focus-visible:ring-sky-400", quickSale: "border-cyan-300/20 bg-cyan-400/10 hover:border-cyan-200/30 hover:bg-cyan-400/[0.16]",
+    quickSaleIcon: "bg-cyan-400/15 text-cyan-200", quickSaleText: "text-cyan-200",
+  },
+  violet: {
+    labelAr: "بنفسجي هادئ", labelEn: "Soft violet",
+    page: "bg-[#15111b] text-white", sidebar: "border-violet-200/[0.08] bg-[#1b1524]",
+    header: "border-violet-300/10 bg-[radial-gradient(ellipse_at_top_right,_rgba(167,139,250,0.17),_transparent_48%),linear-gradient(135deg,#241b30,#191421)]",
+    card: "border-violet-200/[0.08] bg-[#211a2b] text-white shadow-sm", cardHover: "hover:border-violet-300/20 hover:bg-[#281f34] hover:shadow-xl",
+    activeNav: "bg-violet-400/10 text-violet-300 hover:bg-violet-400/15", accentText: "text-violet-300",
+    focus: "focus-visible:ring-violet-400", quickSale: "border-fuchsia-300/20 bg-fuchsia-400/10 hover:border-fuchsia-200/30 hover:bg-fuchsia-400/[0.16]",
+    quickSaleIcon: "bg-fuchsia-400/15 text-fuchsia-200", quickSaleText: "text-fuchsia-200",
+  },
+  light: {
+    labelAr: "فاتح", labelEn: "Light",
+    page: "bg-[#F7F8FA] text-slate-800", sidebar: "border-slate-100 bg-white",
+    header: "border-slate-200 bg-[radial-gradient(ellipse_at_top_right,_rgba(20,184,166,0.12),_transparent_48%),linear-gradient(135deg,#ffffff,#f6faf9)]",
+    card: "border-slate-100 bg-white text-slate-800 shadow-sm", cardHover: "hover:border-slate-200 hover:shadow-xl",
+    activeNav: "bg-blue-50 text-blue-800 hover:bg-blue-100", accentText: "text-teal-700",
+    focus: "focus-visible:ring-teal-500", quickSale: "border-teal-100 bg-teal-50 hover:border-teal-300 hover:shadow-md",
+    quickSaleIcon: "bg-teal-100 text-teal-700", quickSaleText: "text-teal-700",
+  },
+};
 
 type ClinicContext = {
   clinic_id: string;
@@ -42,6 +89,8 @@ const translations = {
       finance: "المالية",
       reports: "التقارير",
       settings: "الإعدادات",
+      messages: "رسائل واتساب",
+      staff: "فريق العيادة",
     },
 
     cards: [
@@ -56,6 +105,8 @@ const translations = {
       ["المالية", "الدخل والمصروفات", "💰"],
       ["التقارير", "ملخص العيادة", "📊"],
       ["سجل الزيارات", "عرض وتعديل الكشوفات السابقة", "📋"],
+      ["رسائل واتساب", "قوالب الرسائل ومشاركتها", "💬"],
+      ["فريق العيادة", "الأطباء والمساعدون والاستقبال", "👩‍⚕️"],
     ],
 
     open: "فتح",
@@ -68,6 +119,12 @@ const translations = {
     database: "قاعدة البيانات",
     ready: "جاهزة",
     loading: "جاري التحميل...",
+    workspace: "مساحة عملك",
+    shortcutsTitle: "اختصارات العيادة",
+    shortcutsSubtitle: "كل أدواتك اليومية في مكان واحد",
+    todayStatsTitle: "إحصائيات اليوم",
+    todayStats: ["مواعيد اليوم", "تطعيمات اليوم", "كمية قليلة", "نفد من الكمية"],
+    theme: "المظهر",
 
     encouragement: [
       "صباح جديد، وحالات جديدة تقدر تساعدها. 🐾",
@@ -95,6 +152,8 @@ const translations = {
       finance: "Finance",
       reports: "Reports",
       settings: "Settings",
+      messages: "WhatsApp messages",
+      staff: "Clinic staff",
     },
 
     cards: [
@@ -109,6 +168,8 @@ const translations = {
       ["Finance", "Income and expenses", "💰"],
       ["Reports", "Clinic summary", "📊"],
       ["Visit History", "Review and edit previous visits", "📋"],
+      ["WhatsApp Messages", "Templates and customer sharing", "💬"],
+      ["Clinic Staff", "Doctors, assistants, and front desk", "👩‍⚕️"],
     ],
 
     open: "Open",
@@ -121,6 +182,12 @@ const translations = {
     database: "Database",
     ready: "Ready",
     loading: "Loading...",
+    workspace: "Your workspace",
+    shortcutsTitle: "Clinic shortcuts",
+    shortcutsSubtitle: "Your daily tools, all in one place",
+    todayStatsTitle: "Today's statistics",
+    todayStats: ["Today's appointments", "Today's vaccinations", "Low stock", "Out of stock"],
+    theme: "Theme",
 
     encouragement: [
       "A new day, new cases, new lives to help. 🐾",
@@ -182,7 +249,9 @@ const cardColors = [
 ];
 
 export default function Home() {
-  const [darkMode, setDarkMode] = useState(true);
+  const router = useRouter();
+  const [theme, setTheme] = useState<DashboardTheme>("midnight");
+  const [lastDarkTheme, setLastDarkTheme] = useState<DashboardTheme>("midnight");
   const [language, setLanguage] = useState<Language>("ar");
   const [ready, setReady] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -191,13 +260,18 @@ export default function Home() {
     useState<ClinicContext | null>(null);
 
   const [clinicLoading, setClinicLoading] = useState(true);
+  const [todayStats, setTodayStats] = useState<Array<number | null>>([null, null, null, null]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
     const savedLanguage = localStorage.getItem("vetra-language");
 
-    if (savedTheme === "light") {
-      setDarkMode(false);
+    if (savedTheme && Object.hasOwn(dashboardThemes, savedTheme)) {
+      const selectedTheme = savedTheme as DashboardTheme;
+      // Restore the browser preference after hydration to keep the server render stable.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTheme(selectedTheme);
+      if (selectedTheme !== "light") setLastDarkTheme(selectedTheme);
     }
 
     if (savedLanguage === "en") {
@@ -212,14 +286,14 @@ export default function Home() {
 
     localStorage.setItem(
       "vetra-theme",
-      darkMode ? "dark" : "light"
+      theme
     );
 
     localStorage.setItem(
       "vetra-language",
       language
     );
-  }, [darkMode, language, ready]);
+  }, [theme, language, ready]);
 
   useEffect(() => {
     if (!ready) return;
@@ -271,7 +345,7 @@ export default function Home() {
         if (mounted) {
           setClinicContext(null);
           setClinicLoading(false);
-          window.location.replace("/clinic-setup");
+          router.replace("/clinic-setup");
         }
 
         return;
@@ -288,10 +362,64 @@ export default function Home() {
     return () => {
       mounted = false;
     };
-  }, [ready]);
+  }, [ready, router]);
+
+  useEffect(() => {
+    const clinicId = clinicContext?.clinic_id;
+    if (!ready || !clinicId) return;
+
+    let mounted = true;
+
+    async function loadTodayStats() {
+      try {
+        const db = await getClinicDb();
+        const today = new Date();
+        const dateKey = [
+          today.getFullYear(),
+          String(today.getMonth() + 1).padStart(2, "0"),
+          String(today.getDate()).padStart(2, "0"),
+        ].join("-");
+
+        const [appointmentsResult, vaccinesResult, productsResult] = await Promise.all([
+          db.from("appointments").select("id, status").eq("clinic_id", clinicId).eq("appointment_date", dateKey),
+          db.from("vaccinations").select("next_dose_at").eq("clinic_id", clinicId).not("next_dose_at", "is", null),
+          db.from("products").select("quantity, reorder_level").eq("clinic_id", clinicId).eq("is_active", true),
+        ]);
+
+        if (appointmentsResult.error) throw appointmentsResult.error;
+        if (vaccinesResult.error) throw vaccinesResult.error;
+        if (productsResult.error) throw productsResult.error;
+
+        const vaccinationsToday = (vaccinesResult.data || []).filter((item) => {
+          const value = String(item.next_dose_at || "");
+          return value.slice(0, 10) === dateKey;
+        }).length;
+        const lowStock = (productsResult.data || []).filter((item) => Number(item.quantity) > 0 && Number(item.quantity) <= Number(item.reorder_level)).length;
+        const outOfStock = (productsResult.data || []).filter((item) => Number(item.quantity) <= 0).length;
+        const appointmentsToday = (appointmentsResult.data || []).filter((item) => !["cancelled", "no_show"].includes(String(item.status))).length;
+
+        if (mounted) setTodayStats([appointmentsToday, vaccinationsToday, lowStock, outOfStock]);
+      } catch (error) {
+        console.error("VETRA DASHBOARD STATS ERROR:", error);
+        if (mounted) setTodayStats([null, null, null, null]);
+      }
+    }
+
+    void loadTodayStats();
+    return () => {
+      mounted = false;
+    };
+  }, [clinicContext?.clinic_id, ready]);
 
   const t = translations[language];
   const isArabic = language === "ar";
+  const darkMode = theme !== "light";
+  const palette = dashboardThemes[theme];
+
+  const selectTheme = (nextTheme: DashboardTheme) => {
+    if (nextTheme !== "light") setLastDarkTheme(nextTheme);
+    setTheme(nextTheme);
+  };
 
   const doctorName =
     clinicContext?.doctor_name ||
@@ -338,7 +466,7 @@ export default function Home() {
 
   const goTo = (href: string) => {
     if (href !== "#") {
-      window.location.href = href;
+      router.push(href);
     }
   };
 
@@ -350,7 +478,7 @@ export default function Home() {
       supabase.auth.signOut(),
     ]);
 
-    window.location.href = "/login";
+    router.replace("/login");
   };
 
   const navItems = [
@@ -360,33 +488,30 @@ export default function Home() {
   ["📅", t.nav.appointments, "/appointments"],
   ["🩺", t.nav.visits, "/dashboard/visits"],
   ["💉", t.nav.vaccines, "/vaccinations"],
+  ["💬", t.nav.messages, "/messages"],
+  ["👩‍⚕️", t.nav.staff, "/staff"],
   ["📦", t.nav.inventory, "/inventory/products"],
   ["💰", t.nav.finance, "/finance"],
   ["📊", t.nav.reports, "/reports"],
+  ["🟢", isArabic ? "نشاط العملاء" : "Client activity", "/dashboard/clients-activity"],
 ];
   return (
     <main
       dir={isArabic ? "rtl" : "ltr"}
-      className={`min-h-screen transition-colors duration-500 ${
-        darkMode
-          ? "bg-[#0F1115] text-white"
-          : "bg-[#F7F8FA] text-slate-800"
-      }`}
+      className={`min-h-screen transition-colors duration-500 ${palette.page}`}
     >
       <div className="flex min-h-screen">
 
         {/* ================= SIDEBAR ================= */}
 
         <aside
-          className={`hidden w-72 shrink-0 border-l px-7 py-8 transition-all duration-500 lg:block ${
-            darkMode
-              ? "border-white/[0.06] bg-[#13161B]"
-              : "border-slate-100 bg-white"
+          className={`sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-l px-5 py-7 transition-all duration-500 xl:w-72 xl:px-7 xl:py-8 lg:block ${
+            palette.sidebar
           }`}
         >
           {/* Logo */}
 
-          <div className="mb-12">
+          <div className="mb-9">
             <h1
               className={`text-4xl font-black tracking-tight transition-all duration-300 hover:tracking-wider ${
                 darkMode
@@ -452,7 +577,7 @@ export default function Home() {
 
           {/* Navigation */}
 
-          <nav className="space-y-2">
+          <nav aria-label={isArabic ? "التنقل الرئيسي" : "Main navigation"} className="space-y-1.5">
             {navItems.map(([icon, title, href], index) => {
               const isHome = index === 0;
               const isClients = index === 1;
@@ -462,15 +587,14 @@ export default function Home() {
                 <button
                   key={title}
                   onClick={() => goTo(href)}
-                  className={`group w-full rounded-2xl px-5 py-4 text-base font-medium transition-all duration-300 hover:translate-x-1 ${
+                  aria-current={isHome ? "page" : undefined}
+                  className={`group w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition-all duration-200 hover:translate-x-1 ${
                     isArabic
                       ? "text-right"
                       : "text-left"
                   } ${
                     isHome
-                      ? darkMode
-                        ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15"
-                        : "bg-blue-50 text-blue-800 hover:bg-blue-100"
+                      ? palette.activeNav
                       : darkMode
                         ? "text-slate-400 hover:bg-white/[0.04] hover:text-white"
                         : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
@@ -534,16 +658,17 @@ export default function Home() {
 
         {/* ================= MAIN ================= */}
 
-        <section className="min-w-0 flex-1 px-3 pb-5 pt-3 transition-colors duration-500 sm:p-8 lg:p-12">
+        <section className="min-w-0 flex-1 px-3 pb-8 pt-3 transition-colors duration-500 sm:px-6 sm:py-7 xl:px-10">
+          <div className="mx-auto w-full max-w-[1600px]">
 
           {/* ================= HEADER ================= */}
 
-          <header className="mb-5 flex flex-wrap items-start justify-between gap-3 sm:mb-10 sm:gap-4">
+          <header className={`relative mb-6 flex flex-wrap items-start justify-between gap-4 overflow-hidden rounded-3xl border p-4 shadow-sm sm:mb-8 sm:gap-6 sm:p-7 lg:p-8 ${palette.header}`}>
 
             <div className="min-w-0">
 
               <p
-                className={`mb-3 text-sm font-medium transition-colors duration-500 sm:text-base ${
+                className={`mb-2 text-xs font-semibold tracking-wide transition-colors duration-500 sm:mb-3 sm:text-sm ${
                   darkMode
                     ? "text-slate-500"
                     : "text-slate-400"
@@ -552,7 +677,8 @@ export default function Home() {
                 {formattedDate}
               </p>
 
-              <h2 className="text-xl font-black tracking-tight sm:text-4xl">
+              <p className={`mb-2 text-xs font-bold uppercase tracking-[0.18em] ${palette.accentText}`}>{t.workspace}</p>
+              <h2 className="text-2xl font-black tracking-tight sm:text-4xl lg:text-[2.65rem]">
                 {t.welcome}، {doctorName}{" "}
 
                 <span className="inline-block transition-transform duration-300 hover:rotate-12">
@@ -643,9 +769,26 @@ export default function Home() {
 
               {/* Theme */}
 
+              <label className={`flex h-10 items-center gap-2 rounded-2xl border px-2.5 text-xs font-bold transition sm:h-12 sm:px-3 ${darkMode ? "border-white/[0.06] bg-[#181B21]" : "border-slate-100 bg-white"}`}>
+                <span aria-hidden="true">🎨</span>
+                <span className="sr-only">{t.theme}</span>
+                <select
+                  aria-label={t.theme}
+                  value={theme}
+                  onChange={(event) => selectTheme(event.target.value as DashboardTheme)}
+                  className={`max-w-[92px] cursor-pointer bg-transparent outline-none sm:max-w-[118px] ${darkMode ? "text-slate-200" : "text-slate-700"}`}
+                >
+                  {(Object.keys(dashboardThemes) as DashboardTheme[]).map((key) => (
+                    <option key={key} value={key} className={darkMode ? "bg-[#181B21] text-white" : "bg-white text-slate-800"}>
+                      {isArabic ? dashboardThemes[key].labelAr : dashboardThemes[key].labelEn}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <button
                 onClick={() =>
-                  setDarkMode(!darkMode)
+                  selectTheme(darkMode ? "light" : lastDarkTheme)
                 }
                 className={`flex h-10 w-10 items-center justify-center rounded-2xl border text-xl transition-all duration-500 active:scale-90 sm:h-12 sm:w-12 sm:hover:-translate-y-0.5 ${
                   darkMode
@@ -663,18 +806,11 @@ export default function Home() {
 
               {/* Notifications */}
 
-              <button
-                className={`hidden h-12 w-12 items-center justify-center rounded-2xl border text-xl transition-all duration-300 hover:-translate-y-0.5 active:scale-90 sm:flex ${
-                  darkMode
-                    ? "border-white/[0.06] bg-[#181B21] hover:bg-[#1D2128]"
-                    : "border-slate-100 bg-white hover:bg-slate-50"
-                }`}
-                aria-label={t.notifications}
-              >
-                <span className="inline-block transition-transform duration-300 hover:rotate-12">
-                  🔔
-                </span>
-              </button>
+              <PushNotificationsButton
+                audience="clinic"
+                language={isArabic ? "ar" : "en"}
+                darkMode={darkMode}
+              />
 
               {/* Profile */}
 
@@ -734,7 +870,15 @@ export default function Home() {
 
           {/* ================= CARDS ================= */}
 
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-5 xl:grid-cols-4">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-2 sm:mb-5">
+            <div>
+              <h3 className="text-lg font-black tracking-tight sm:text-xl">{t.shortcutsTitle}</h3>
+              <p className={`mt-1 text-xs font-medium sm:text-sm ${darkMode ? "text-slate-500" : "text-slate-500"}`}>{t.shortcutsSubtitle}</p>
+            </div>
+            <span className={`hidden rounded-full px-3 py-1.5 text-xs font-bold sm:inline-flex ${darkMode ? "bg-white/[0.04] text-slate-400" : "bg-white text-slate-500 shadow-sm"}`}>{t.cards.length} {isArabic ? "أدوات" : "tools"}</span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
 
             {t.cards.map((card, index) => {
               const [title, subtitle, icon] = card;
@@ -780,23 +924,27 @@ export default function Home() {
                       case 10:
                         goTo("/dashboard/visits");
                         break;
+                      case 11:
+                        goTo("/messages");
+                        break;
+                      case 12:
+                        goTo("/staff");
+                        break;
                       default:
                         goTo("/dashboard");
                     }
                   }}
-                  className={`group relative min-h-[150px] overflow-hidden rounded-2xl p-3 transition-all duration-300 ease-out active:scale-[0.98] sm:min-h-[220px] sm:rounded-[32px] sm:p-7 sm:hover:-translate-y-2 sm:hover:scale-[1.01] ${
+                  className={`group relative flex min-h-[118px] items-center gap-4 overflow-hidden rounded-2xl p-4 text-start transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 ${palette.focus} focus-visible:ring-offset-2 active:scale-[0.99] sm:min-h-[152px] sm:gap-5 sm:rounded-3xl sm:p-5 lg:min-h-[166px] lg:p-6 sm:hover:-translate-y-1 ${
                     isArabic
                       ? "text-right"
                       : "text-left"
                   } ${
                     featured
-                      ? "bg-[#0B2540] text-white shadow-lg shadow-slate-900/20 hover:bg-[#123B54] hover:shadow-xl hover:shadow-slate-900/30"
+                      ? "bg-[linear-gradient(135deg,#0b2d45,#0b2540_58%,#123d52)] text-white shadow-lg shadow-slate-900/20 hover:shadow-xl hover:shadow-slate-900/30"
                       : quickSale
-                        ? darkMode
-                          ? "border border-teal-400/20 bg-teal-500/10 text-white shadow-sm hover:border-teal-300/30 hover:bg-teal-500/[0.14] hover:shadow-md"
-                          : "border border-teal-100 bg-teal-50 text-slate-800 shadow-sm hover:border-teal-300 hover:shadow-md"
+                        ? `${palette.quickSale} ${darkMode ? "border text-white shadow-sm hover:shadow-md" : "border text-slate-800 shadow-sm"}`
                         : darkMode
-                          ? "border border-white/[0.06] bg-[#181B21] text-white shadow-sm hover:border-white/[0.10] hover:bg-[#1C2026] hover:shadow-xl"
+                          ? `${palette.card} ${palette.cardHover}`
                           : "border border-slate-100 bg-white text-slate-800 shadow-sm hover:border-slate-200 hover:shadow-xl"
                   }`}
                 >
@@ -816,13 +964,11 @@ export default function Home() {
                   {/* Icon */}
 
                   <div
-                    className={`relative mb-4 flex h-11 w-11 items-center justify-center rounded-2xl text-2xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 sm:mb-7 sm:h-16 sm:w-16 sm:rounded-3xl sm:text-3xl ${
+                    className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 sm:h-14 sm:w-14 sm:rounded-2xl sm:text-3xl ${
                       featured
                         ? "bg-white/15"
                         : quickSale
-                          ? darkMode
-                            ? "bg-teal-500/15 text-teal-300"
-                            : "bg-teal-100 text-teal-700"
+                          ? palette.quickSaleIcon
                           : `${darkMode ? colors.dark : colors.light} ${colors.icon}`
                     }`}
                   >
@@ -833,39 +979,16 @@ export default function Home() {
 
                   {/* Title */}
 
-                  <h3 className="relative text-base font-black tracking-tight transition-transform duration-300 group-hover:translate-x-1 sm:text-2xl">
-                    {title}
-                  </h3>
-
-                  {/* Subtitle */}
-
-                  <p
-                    className={`relative mt-2 text-xs font-medium leading-5 transition-colors duration-300 sm:mt-3 sm:text-base sm:leading-7 ${
-                      featured
-                        ? "text-blue-100"
-                        : darkMode
-                          ? "text-slate-500"
-                          : "text-slate-400"
-                    }`}
-                  >
-                    {subtitle}
-                  </p>
-
-                  {/* Open */}
-
-                  <div
-                    className={`relative mt-4 text-xs font-bold transition-all duration-300 sm:mt-6 sm:text-sm ${
-                      featured
-                        ? "text-white"
-                        : quickSale
-                          ? darkMode ? "text-teal-300" : "text-teal-700"
-                          : "text-teal-500 sm:translate-y-1 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100"
-                    }`}
-                  >
-                    {t.open}{" "}
-                    {isArabic
-                      ? "←"
-                      : "→"}
+                  <div className="relative min-w-0 flex-1">
+                    <h3 className="text-base font-black tracking-tight transition-transform duration-300 group-hover:translate-x-0.5 sm:text-lg lg:text-xl">
+                      {title}
+                    </h3>
+                    <p className={`mt-1.5 text-xs font-medium leading-5 transition-colors duration-300 sm:text-sm ${featured ? "text-blue-100/80" : darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      {subtitle}
+                    </p>
+                    <div className={`mt-3 text-xs font-bold transition-colors duration-300 ${featured ? "text-white" : quickSale ? palette.quickSaleText : palette.accentText}`}>
+                      {t.open}{" "}{isArabic ? "←" : "→"}
+                    </div>
                   </div>
 
                 </button>
@@ -874,6 +997,33 @@ export default function Home() {
 
           </div>
 
+          <section className="mt-8">
+            <div className="mb-4">
+              <h3 className="text-lg font-black tracking-tight sm:text-xl">{t.todayStatsTitle}</h3>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {[
+                ["📅", t.todayStats[0], "text-blue-400", "bg-blue-500/10"],
+                ["💉", t.todayStats[1], "text-emerald-400", "bg-emerald-500/10"],
+                ["📦", t.todayStats[2], "text-amber-400", "bg-amber-500/10"],
+                ["⚠️", t.todayStats[3], "text-rose-400", "bg-rose-500/10"],
+              ].map(([icon, label, accent, iconBg], index) => (
+                <div
+                  key={label}
+                  className={`min-h-[132px] rounded-2xl border p-4 sm:p-5 ${darkMode ? "border-white/[0.06] bg-[#181B21]" : "border-slate-100 bg-white shadow-sm"}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className={`flex h-10 w-10 items-center justify-center rounded-xl text-xl ${iconBg}`}>{icon}</span>
+                    <span className={`text-3xl font-black ${accent}`}>{todayStats[index] ?? "—"}</span>
+                  </div>
+                  <p className={`mt-4 text-sm font-bold ${darkMode ? "text-slate-300" : "text-slate-600"}`}>{label}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          </div>
         </section>
       </div>
     </main>

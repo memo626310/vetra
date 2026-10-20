@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import ClientAppInstallPrompt from "@/components/client-interface/ClientAppInstallPrompt";
+import ClientActivityTracker from "@/components/client-interface/ClientActivityTracker";
 
 export const metadata: Metadata = {
   title: "VETRA Care",
@@ -46,6 +47,7 @@ export default function ClientInterfaceLayout({
 }: Readonly<{ children: ReactNode }>) {
   return (
     <>
+      <ClientActivityTracker />
       {children}
       <ClientAppInstallPrompt />
     </>

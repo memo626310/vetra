@@ -4,8 +4,6 @@ import { WheelPicker } from "./NewVisitClinicalWidgets";
 type Props = {
   darkMode: boolean;
   t: VisitTranslations;
-  reason: string;
-  setReason: (value: string) => void;
   examStatus: "normal" | "abnormal" | "";
   setExamStatus: (value: "normal" | "abnormal" | "") => void;
   examination: string;
@@ -24,57 +22,12 @@ type Props = {
 
 export default function NewVisitClinicalFields(props: Props) {
   const {
-    darkMode, t, reason, setReason, examStatus, setExamStatus,
+    darkMode, t, examStatus, setExamStatus,
     examination, setExamination, weight, handleWeightChange,
     temperature, setTemperature, heartRate, setHeartRate,
     respiratoryRate, setRespiratoryRate, diagnosis, setDiagnosis,
   } = props;
   return (<>
-
-                <div className="lg:col-span-2">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <label
-                      className={`block text-sm font-semibold ${
-                        darkMode ? "text-slate-300" : "text-slate-700"
-                      }`}
-                    >
-                      {t.reason}
-                    </label>
-                    <span className={`text-[11px] font-medium ${darkMode ? "text-slate-500" : "text-slate-400"}`}>
-                      {t.quickReasons}
-                    </span>
-                  </div>
-
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {t.reasons.map((label, index) => (
-                      <button
-                        key={label}
-                        type="button"
-                        onClick={() => setReason(label)}
-                        className={`rounded-full border px-3 py-2 text-xs font-semibold transition-all ${
-                          reason === label
-                            ? "border-blue-500 bg-blue-600 text-white shadow-sm"
-                            : darkMode
-                            ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-600"
-                            : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <input
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder={t.reasonPlaceholder}
-                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
-                  />
-                </div>
 
                 <div className="lg:col-span-2">
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -152,7 +105,8 @@ export default function NewVisitClinicalFields(props: Props) {
                   )}
                 </div>
 
-                <div>
+                <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-4">
+                <div className="min-w-0">
                   <label
                     className={`mb-2 block text-sm font-semibold ${
                       darkMode ? "text-slate-300" : "text-slate-700"
@@ -173,7 +127,7 @@ export default function NewVisitClinicalFields(props: Props) {
                   />
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <label
                     className={`mb-2 block text-sm font-semibold ${
                       darkMode ? "text-slate-300" : "text-slate-700"
@@ -192,6 +146,7 @@ export default function NewVisitClinicalFields(props: Props) {
                     hint={t.wheelSwipeHint}
                     darkMode={darkMode}
                   />
+                </div>
                 </div>
 
                 <div>

@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
+import { vetraCore } from "@/lib/vetra-core";
+import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
+import { loadClinicProfile } from "@/lib/clinic-profile";
 
 type Language = "ar" | "en";
 type Status =
@@ -298,6 +301,7 @@ export default function AppointmentsPage() {
   const [pets, setPets] = useState<Pet[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [clinicName, setClinicName] = useState("");
+  const [clinicId, setClinicId] = useState("");
 
   const [tab, setTab] = useState<"today" | "upcoming" | "all">("today");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -349,8 +353,11 @@ export default function AppointmentsPage() {
     try {
       const context = await getClinicContext();
       setClinicName(context.clinic_name);
+      setClinicId(context.clinic_id);
 
       const db = await getClinicDb();
+      const clinicProfile = await loadClinicProfile(db, context.clinic_id);
+      setClinicName(clinicProfile?.display_name || context.clinic_name);
 
       const [aResult, cResult, pResult, sResult] = await Promise.all([
         db
@@ -537,12 +544,65 @@ export default function AppointmentsPage() {
 
       if (updateError) throw updateError;
 
+      if (status !== a.status && (status === "confirmed" || status === "cancelled")) {
+        void notifyPetOwner(a.id, status);
+      }
+
       setMessage(t.appointmentSaved);
       await loadData();
     } catch (e) {
       console.error("APPOINTMENT STATUS ERROR:", e);
       setError(e instanceof Error ? e.message : t.error);
     }
+  }
+
+  async function notifyPetOwner(
+    appointmentId: string,
+    status: "confirmed" | "cancelled" | "pending",
+    eventType: "status" | "rescheduled" = "status"
+  ) {
+    try {
+      const { data } = await vetraCore.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return;
+      await fetch("/api/push/notify-owner", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ appointmentId, status, eventType, language }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      // Appointment status changes remain saved if push delivery is unavailable.
+    }
+  }
+
+  async function shareAppointmentWhatsApp(appointment: Appointment) {
+    const reasonText = (appointment.reason || "").toLowerCase();
+    const key = /surg|جراح/.test(reasonText)
+      ? "surgery_reminder"
+      : /follow.?up|متابع/.test(reasonText)
+        ? "followup_reminder"
+        : "appointment_reminder";
+    const opened = await openWhatsAppTemplate(
+      appointment.client?.phone,
+      key,
+      language,
+      {
+        customer_name: appointment.client?.name || "",
+        pet_name: appointment.pet?.name || "",
+        appointment_date: dayLabel(appointment.appointment_date, language),
+        appointment_time: timeLabel(appointment, language),
+        follow_up_date: dayLabel(appointment.appointment_date, language),
+        notes: appointment.notes || "",
+        doctor_name: "",
+        brand_name: clinicName || "VETRA",
+      },
+      clinicId,
+    );
+    if (!opened) setError(appointment.client?.phone ? (language === "ar" ? "اسمح بفتح واتساب للمتابعة." : "Allow WhatsApp to open to continue.") : (language === "ar" ? "لا يوجد رقم هاتف محفوظ للعميل." : "No customer phone number is saved."));
   }
 
   async function saveAppointment() {
@@ -578,6 +638,7 @@ export default function AppointmentsPage() {
         reason: reason.trim() || null,
         notes: notes.trim() || null,
         source: "clinic",
+        updated_at: new Date().toISOString(),
       };
 
       if (selectedAppointment) {
@@ -587,12 +648,20 @@ export default function AppointmentsPage() {
           .eq("id", selectedAppointment.id);
 
         if (updateError) throw updateError;
+        if (selectedAppointment.status === "pending" || selectedAppointment.status === "confirmed") {
+          void notifyPetOwner(selectedAppointment.id, selectedAppointment.status, "rescheduled");
+        }
       } else {
-        const { error: insertError } = await db
+        const { data: insertedAppointment, error: insertError } = await db
           .from("appointments")
-          .insert({ ...payload, status: "confirmed" });
+          .insert({ ...payload, status: "confirmed" })
+          .select("id")
+          .single();
 
         if (insertError) throw insertError;
+        if (insertedAppointment?.id) {
+          void notifyPetOwner(String(insertedAppointment.id), "confirmed");
+        }
       }
 
       setModal(null);
@@ -1014,6 +1083,7 @@ export default function AppointmentsPage() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex flex-wrap gap-2">
+                          {a.client?.phone && !["cancelled", "no_show"].includes(a.status) && <button onClick={() => void shareAppointmentWhatsApp(a)} className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-400">{language === "ar" ? "واتساب" : "WhatsApp"}</button>}
                           {(a.status === "pending" || a.status === "confirmed" || computed === "late") && (
                             <button onClick={() => void updateStatus(a, "arrived")} className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-400">{t.arrivedAction}</button>
                           )}
@@ -1022,7 +1092,7 @@ export default function AppointmentsPage() {
                             <button onClick={() => router.push(`/visits/new?appointment=${a.id}&pet=${a.pet_id}`)} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">{t.startVisit}</button>
                           )}
 
-                          {a.status === "confirmed" && (
+                          {a.status === "pending" && (
                             <button onClick={() => void updateStatus(a, "confirmed")} className="rounded-xl bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-400">{t.confirm}</button>
                           )}
 

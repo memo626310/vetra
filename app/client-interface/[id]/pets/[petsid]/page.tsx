@@ -86,6 +86,8 @@ type Vaccine = {
 
 };
 
+type PetMedicalRecord = { id: string; pet_id: string; visit_id: string | null; record_type: "lab" | "surgery"; title: string; status: string; result: string | null; notes: string | null; performed_at: string | null; created_at: string };
+
 
 
 type Status = "not_due" | "current" | "grace" | "overdue";
@@ -815,6 +817,8 @@ export default function ClientPetProfilePage() {
   const [visits, setVisits] = useState<Visit[]>([]);
 
   const [vaccines, setVaccines] = useState<Vaccine[]>([]);
+  const [medicalRecords, setMedicalRecords] = useState<PetMedicalRecord[]>([]);
+  const [medicalRecordsUnavailable, setMedicalRecordsUnavailable] = useState(false);
 
   const [loading, setLoading] = useState(true);
 
@@ -893,6 +897,8 @@ export default function ClientPetProfilePage() {
 
       if (vaccineResult.error) throw new Error(vaccineResult.error.message);
 
+      const recordsResult = await withTimeout(db.rpc("vetra_get_pet_medical_records", { p_pet_id: petId }));
+
 
 
       setClient(clientResult.data as Client);
@@ -902,6 +908,9 @@ export default function ClientPetProfilePage() {
       setVisits((visitResult.data || []) as Visit[]);
 
       setVaccines((vaccineResult.data || []) as Vaccine[]);
+      setMedicalRecords((recordsResult.data || []) as PetMedicalRecord[]);
+      setMedicalRecordsUnavailable(Boolean(recordsResult.error));
+      if (recordsResult.error) console.warn("CLIENT PET MEDICAL RECORDS LOAD ERROR:", recordsResult.error);
 
     } catch (e) {
 
@@ -985,9 +994,16 @@ export default function ClientPetProfilePage() {
 
     const vaccineEvents = vaccines.filter(v => v.administered_at).map(v => ({ id: `vaccine-${v.id}`, date: v.administered_at as string, kind: "vaccine" as const, title: v.vaccine_name || v.vaccine_type || t.vaccineHistory, sub: v.next_dose_at ? `${t.nextDue}: ${formatDate(v.next_dose_at, lang)}` : "" }));
 
-    return [...visitEvents, ...vaccineEvents].sort((a, b) => +new Date(b.date) - +new Date(a.date)).slice(0, 12);
+    const medicalEvents = medicalRecords.map((record) => ({
+      id: `medical-${record.id}`, date: record.performed_at || record.created_at,
+      kind: record.record_type === "surgery" ? "surgery" as const : "lab" as const,
+      title: record.title,
+      sub: [record.record_type === "lab" ? (lang === "ar" ? "تحليل" : "Lab test") : (lang === "ar" ? "جراحة" : "Surgery"), record.status === "completed" ? (lang === "ar" ? "مكتمل" : "Completed") : (lang === "ar" ? "قيد المتابعة" : "In progress"), record.result, record.notes].filter(Boolean).join(" · "),
+    }));
 
-  }, [visits, vaccines, t, lang]);
+    return [...visitEvents, ...vaccineEvents, ...medicalEvents].sort((a, b) => +new Date(b.date) - +new Date(a.date)).slice(0, 20);
+
+  }, [visits, vaccines, medicalRecords, t, lang]);
 
 
 
@@ -1015,7 +1031,8 @@ export default function ClientPetProfilePage() {
 
           <Link href={`/client-interface/${clientId}`} className="min-w-0 flex-1 break-words rounded-2xl border border-white/10 bg-white/[.04] px-2 py-2 text-center text-xs font-black text-slate-300 sm:px-4">← {t.back}</Link>
 
-          <Link href={`/client-interface/${clientId}/vaccinations?pet=${pet.id}`} className="min-w-0 flex-1 break-words rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-2 py-2.5 text-center text-xs font-black text-slate-950 sm:px-4">💉 {t.vaccinations}</Link>
+          <Link href={`/client-interface/${clientId}/pets/${pet.id}/gallery`} className="min-w-0 flex-1 break-words rounded-2xl border border-white/10 bg-white/[.04] px-2 py-2.5 text-center text-xs font-black text-slate-200 sm:px-4">▧ {lang === "ar" ? "معرض الصور" : "Photo gallery"}</Link>
+          <Link href={`/client-interface/${clientId}/vaccinations?pet=${pet.id}`} className="min-w-0 flex-1 break-words rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-2 py-2.5 text-center text-xs font-black text-slate-950 sm:px-4">💉 {t.vaccinations}</Link>
 
         </header>
 
@@ -1100,6 +1117,19 @@ export default function ClientPetProfilePage() {
         </section>
 
 
+
+        <section className={dark ? "mt-5 rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5 sm:p-6" : "mt-5 rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6"}>
+          <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold text-cyan-300">{lang === "ar" ? "التحاليل والجراحات" : "Lab tests & surgeries"}</p><h2 className="mt-1 text-xl font-black">{lang === "ar" ? "سجل الإجراءات" : "Procedure history"}</h2></div><span className="rounded-full bg-cyan-400/10 px-3 py-1.5 text-[10px] font-black text-cyan-300">{medicalRecords.length}</span></div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {medicalRecordsUnavailable && <p className="text-sm text-amber-500 sm:col-span-2">{lang === "ar" ? "سجل التحاليل والجراحات غير مفعّل بعد لدى العيادة." : "The clinic has not enabled lab and surgery records yet."}</p>}
+            {medicalRecords.map((record) => <article key={record.id} className={dark ? "rounded-2xl border border-white/[.05] bg-white/[.025] p-4" : "rounded-2xl border border-slate-100 bg-slate-50 p-4"}>
+              <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-black">{record.title}</h3><span className="rounded-full bg-cyan-400/10 px-2 py-1 text-[10px] font-bold text-cyan-300">{record.record_type === "lab" ? (lang === "ar" ? "تحليل" : "Lab") : (lang === "ar" ? "جراحة" : "Surgery")} · {record.status === "completed" ? (lang === "ar" ? "مكتمل" : "Completed") : (lang === "ar" ? "قيد المتابعة" : "In progress")}</span></div>
+              <p className="mt-1 text-[10px] text-slate-500">{formatDate(record.performed_at || record.created_at, lang)}</p>
+              {record.result && <p className="mt-2 text-sm">{lang === "ar" ? "النتيجة:" : "Result:"} {record.result}</p>}{record.notes && <p className="mt-2 text-xs leading-6 text-slate-500">{record.notes}</p>}
+            </article>)}
+            {!medicalRecords.length && <p className="text-sm text-slate-500">{lang === "ar" ? "لا توجد تحاليل أو جراحات مسجلة حتى الآن." : "No lab tests or surgeries have been recorded yet."}</p>}
+          </div>
+        </section>
 
         <section className={dark ? "mt-5 rounded-[2rem] border border-white/[.07] bg-white/[.035] p-5 sm:p-6" : "mt-5 rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6"}>
 

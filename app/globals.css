@@ -24,9 +24,144 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Owner dashboard palette overrides. Palette tokens are supplied by the page so every
+   dashboard surface, including shared care and medication components, follows one theme. */
+[data-vetra-page-theme="client"] {
+  background-color: var(--vetra-bg) !important;
+  color: var(--vetra-text) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="bg-white/"],
+[data-vetra-page-theme="client"] [class~="bg-white"],
+[data-vetra-page-theme="client"] [class*="bg-[#0a1520]"],
+[data-vetra-page-theme="client"] [class*="bg-[#0b1622]"],
+[data-vetra-page-theme="client"] [class*="bg-[#101c28]"] {
+  background-color: var(--vetra-surface) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="bg-white/[.025]"] {
+  background-color: var(--vetra-muted-surface) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="bg-white/[.035]"],
+[data-vetra-page-theme="client"] [class*="bg-white/[.03]"],
+[data-vetra-page-theme="client"] [class*="bg-slate-50"],
+[data-vetra-page-theme="client"] [class*="bg-slate-100"] {
+  background-color: var(--vetra-card) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="bg-cyan-50"],
+[data-vetra-page-theme="client"] [class*="bg-cyan-100"],
+[data-vetra-page-theme="client"] [class*="bg-cyan-300/"],
+[data-vetra-page-theme="client"] [class*="bg-cyan-400/"] {
+  background-color: var(--vetra-accent-soft) !important;
+}
+
+[data-vetra-page-theme="client"] [class~="bg-cyan-400"] {
+  background-color: var(--vetra-accent) !important;
+  color: var(--vetra-accent-ink) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="from-white/"] {
+  background-image: linear-gradient(135deg, var(--vetra-card), var(--vetra-surface)) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="from-[#0e2330]"] {
+  background-image: linear-gradient(135deg, var(--vetra-panel), var(--vetra-panel-end)) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="from-cyan-400/[.08]"],
+[data-vetra-page-theme="client"] [class*="from-cyan-50"] {
+  background-image: linear-gradient(135deg, var(--vetra-accent-soft), var(--vetra-card), var(--vetra-muted-surface)) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="from-cyan-400"][class*="to-violet-500"] {
+  background-image: linear-gradient(90deg, var(--vetra-accent), var(--vetra-accent-end)) !important;
+  color: var(--vetra-accent-ink) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="bg-gradient-to-b"][class*="from-cyan-400"] {
+  background-image: linear-gradient(to bottom, var(--vetra-accent), var(--vetra-accent-end), transparent) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="from-[#0e2330]"] [class*="text-slate-"] {
+  color: rgb(255 255 255 / 76%) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="from-[#0e2330]"] [class*="text-cyan-"] {
+  color: var(--vetra-warm) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="text-slate-300"],
+[data-vetra-page-theme="client"] [class*="text-slate-400"],
+[data-vetra-page-theme="client"] [class*="text-slate-500"],
+[data-vetra-page-theme="client"] [class*="text-slate-600"],
+[data-vetra-page-theme="client"] [class*="text-slate-700"] {
+  color: var(--vetra-muted) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="text-slate-900"] {
+  color: var(--vetra-text) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="text-cyan-200"],
+[data-vetra-page-theme="client"] [class*="text-cyan-300"],
+[data-vetra-page-theme="client"] [class*="text-cyan-400"] {
+  color: var(--vetra-accent) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="text-cyan-700"],
+[data-vetra-page-theme="client"] [class*="text-cyan-800"],
+[data-vetra-page-theme="client"] [class*="text-cyan-900"] {
+  color: var(--vetra-accent-strong) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="border-white/"],
+[data-vetra-page-theme="client"] [class*="border-slate-100"],
+[data-vetra-page-theme="client"] [class*="border-slate-200"],
+[data-vetra-page-theme="client"] [class*="border-slate-300"] {
+  border-color: var(--vetra-border) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="border-cyan-"] {
+  border-color: var(--vetra-border-accent) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="focus:border-cyan-"]:focus {
+  border-color: var(--vetra-accent) !important;
+}
+
+[data-vetra-page-theme="client"] [class*="to-violet-500"] {
+  --tw-gradient-to: var(--vetra-accent-end) var(--tw-gradient-to-position) !important;
+}
+
 /* VETRA_CLINIC_MOBILE_SHELL_CSS */
 @media (max-width: 1023px) {
   html.clinic-mobile-shell body {
     padding-bottom: calc(5rem + env(safe-area-inset-bottom));
   }
 }
+
+/* Visit workspace palette follows the clinic dashboard in both themes. */
+[data-vetra-visit-theme="dark"] {
+  color-scheme: dark;
+}
+
+[data-vetra-visit-theme="dark"] [class~="bg-slate-900"] { background-color: #181b21 !important; }
+[data-vetra-visit-theme="dark"] [class~="bg-slate-950"] { background-color: #111419 !important; }
+[data-vetra-visit-theme="dark"] [class~="bg-slate-800"] { background-color: #20242a !important; }
+[data-vetra-visit-theme="dark"] [class~="border-slate-800"],
+[data-vetra-visit-theme="dark"] [class~="border-slate-700"] { border-color: rgb(255 255 255 / 8%) !important; }
+[data-vetra-visit-theme="dark"] [class~="text-slate-500"] { color: #8b949e !important; }
+[data-vetra-visit-theme="dark"] [class~="text-slate-400"] { color: #a0a9b3 !important; }
+[data-vetra-visit-theme="dark"] [class~="text-slate-300"],
+[data-vetra-visit-theme="dark"] [class~="text-slate-200"] { color: #d2d7dc !important; }
+[data-vetra-visit-theme="dark"] [class~="text-slate-100"] { color: #f1f4f6 !important; }
+
+[data-vetra-visit-theme] [class~="bg-blue-600"] { background-color: #0d9488 !important; }
+[data-vetra-visit-theme] [class~="hover:bg-blue-700"]:hover { background-color: #0f766e !important; }
+[data-vetra-visit-theme] [class~="border-blue-500"] { border-color: #14b8a6 !important; }
+[data-vetra-visit-theme] [class~="focus:border-blue-500"]:focus { border-color: #14b8a6 !important; }
+[data-vetra-visit-theme] select option { background: #fff; color: #111827; }
+[data-vetra-visit-theme="dark"] select option { background: #181b21; color: #f1f4f6; }

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 type Lang = "ar" | "en";
 type PetInfo = {
@@ -105,10 +105,12 @@ export default function ClientCareHub({
   const dueSoonCount = allUniqueSchedules.filter((v) => (v.days as number) >= 0 && (v.days as number) <= 30).length;
   const surface = dark
     ? "border border-white/[.07] bg-white/[.035] text-white"
-    : "border border-slate-100 bg-white text-slate-900 shadow-sm";
+    : "border border-slate-200 bg-white text-slate-900 shadow-sm";
   const inner = dark
     ? "border border-white/[.06] bg-white/[.025]"
-    : "border border-slate-100 bg-slate-50";
+    : "border border-slate-200 bg-slate-50";
+  const mutedText = dark ? "text-slate-400" : "text-slate-600";
+  const accentText = dark ? "text-cyan-300" : "text-cyan-800";
 
   function printPassport() {
     const popup = window.open("", "_blank", "width=900,height=720");
@@ -158,9 +160,9 @@ export default function ClientCareHub({
     <section className={`mt-5 rounded-[2rem] p-5 sm:p-6 ${surface}`} aria-labelledby="client-care-hub-title">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[.12em] text-cyan-400">{label(lang, "مركز رعاية الحيوان", "PET CARE CENTER")}</p>
+          <p className={`text-xs font-bold uppercase tracking-[.12em] ${accentText}`}>{label(lang, "مركز رعاية الحيوان", "PET CARE CENTER")}</p>
           <h2 id="client-care-hub-title" className="mt-1 text-2xl font-black">{label(lang, `كل ما يخص ${pet.name}`, `Everything about ${pet.name}`)}</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{label(lang, "ملخص سريع للرعاية، المواعيد، والتاريخ الطبي. البيانات هنا مبنية على ما تم تسجيله في العيادة.", "A quick view of care, due dates, and medical history based on information recorded by the clinic.")}</p>
+          <p className={`mt-2 max-w-2xl text-sm leading-6 ${mutedText}`}>{label(lang, "ملخص سريع للرعاية، المواعيد، والتاريخ الطبي. البيانات هنا مبنية على ما تم تسجيله في العيادة.", "A quick view of care, due dates, and medical history based on information recorded by the clinic.")}</p>
         </div>
         <button type="button" onClick={printPassport} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition ${dark ? "border-white/10 bg-white/[.04] hover:bg-white/[.08]" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
           <span aria-hidden="true">📄</span>{label(lang, "طباعة الملف الصحي", "Print health passport")}
@@ -169,29 +171,29 @@ export default function ClientCareHub({
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <button type="button" onClick={() => openSection("daily-medication-todo")} className={`rounded-2xl border p-4 text-start transition hover:-translate-y-0.5 ${inner}`}>
-          <div className="text-2xl">💊</div><div className="mt-2 font-black">{label(lang, "أدوية اليوم", "Today's medications")}</div><p className="mt-1 text-xs leading-5 text-slate-500">{label(lang, "تابع الجرعات وسجّل ما تم إعطاؤه", "Review doses and mark completed check-ins")}</p><span className="mt-3 inline-block text-xs font-bold text-cyan-400">{label(lang, "فتح المتابعة ←", "Open tracker →")}</span>
+          <div className="text-2xl">💊</div><div className="mt-2 font-black">{label(lang, "أدوية اليوم", "Today's medications")}</div><p className={`mt-1 text-xs leading-5 ${mutedText}`}>{label(lang, "تابع الجرعات وسجّل ما تم إعطاؤه", "Review doses and mark completed check-ins")}</p><span className={`mt-3 inline-block text-xs font-bold ${accentText}`}>{label(lang, "فتح المتابعة ←", "Open tracker →")}</span>
         </button>
         <button type="button" onClick={() => openSection("vaccination-history")} className={`rounded-2xl border p-4 text-start transition hover:-translate-y-0.5 ${inner}`}>
-          <div className="text-2xl">💉</div><div className="mt-2 font-black">{label(lang, "مركز التطعيمات", "Vaccination center")}</div><p className="mt-1 text-xs leading-5 text-slate-500">{label(lang, "اعرف الجرعات المسجلة ومواعيدها", "View recorded vaccines and their due dates")}</p><span className="mt-3 inline-block text-xs font-bold text-cyan-400">{label(lang, "عرض السجل ←", "View history →")}</span>
+          <div className="text-2xl">💉</div><div className="mt-2 font-black">{label(lang, "مركز التطعيمات", "Vaccination center")}</div><p className={`mt-1 text-xs leading-5 ${mutedText}`}>{label(lang, "اعرف الجرعات المسجلة ومواعيدها", "View recorded vaccines and their due dates")}</p><span className={`mt-3 inline-block text-xs font-bold ${accentText}`}>{label(lang, "عرض السجل ←", "View history →")}</span>
         </button>
         <button type="button" onClick={() => openSection("health-trends")} className={`rounded-2xl border p-4 text-start transition hover:-translate-y-0.5 ${inner}`}>
-          <div className="text-2xl">📈</div><div className="mt-2 font-black">{label(lang, "رحلة الصحة", "Health journey")}</div><p className="mt-1 text-xs leading-5 text-slate-500">{label(lang, "تابع القياسات والرسوم عبر الزيارات", "Review measurements and trends across visits")}</p><span className="mt-3 inline-block text-xs font-bold text-cyan-400">{label(lang, "عرض المؤشرات ←", "View trends →")}</span>
+          <div className="text-2xl">📈</div><div className="mt-2 font-black">{label(lang, "رحلة الصحة", "Health journey")}</div><p className={`mt-1 text-xs leading-5 ${mutedText}`}>{label(lang, "تابع القياسات والرسوم عبر الزيارات", "Review measurements and trends across visits")}</p><span className={`mt-3 inline-block text-xs font-bold ${accentText}`}>{label(lang, "عرض المؤشرات ←", "View trends →")}</span>
         </button>
         <a href={`/client-interface/${encodeURIComponent(clientId)}/appointments`} className={`block rounded-2xl border p-4 text-start transition hover:-translate-y-0.5 ${inner}`}>
-          <div className="text-2xl">🗓️</div><div className="mt-2 font-black">{label(lang, "حجز ومتابعة", "Booking & follow-up")}</div><p className="mt-1 text-xs leading-5 text-slate-500">{label(lang, "اطلب موعد متابعة من العيادة", "Request a follow-up through the clinic")}</p><span className="mt-3 inline-block text-xs font-bold text-cyan-400">{label(lang, "فتح المواعيد ←", "Open appointments →")}</span>
+          <div className="text-2xl">🗓️</div><div className="mt-2 font-black">{label(lang, "حجز ومتابعة", "Booking & follow-up")}</div><p className={`mt-1 text-xs leading-5 ${mutedText}`}>{label(lang, "اطلب موعد متابعة من العيادة", "Request a follow-up through the clinic")}</p><span className={`mt-3 inline-block text-xs font-bold ${accentText}`}>{label(lang, "فتح المواعيد ←", "Open appointments →")}</span>
         </a>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <div className={`rounded-2xl border p-4 ${inner}`}><p className="text-xs font-semibold text-slate-500">{label(lang, "آخر زيارة", "Last visit")}</p><p className="mt-2 text-lg font-black">{formatDate(latestVisit?.visit_date || null, lang)}</p><p className="mt-1 truncate text-xs text-slate-500">{latestVisit?.reason || label(lang, "لا توجد زيارة مسجلة", "No visit recorded")}</p></div>
-        <div className={`rounded-2xl border p-4 ${inner}`}><p className="text-xs font-semibold text-slate-500">{label(lang, "التطعيمات المتأخرة", "Overdue vaccinations")}</p><p className={`mt-2 text-lg font-black ${overdueCount ? "text-rose-400" : "text-emerald-400"}`}>{overdueCount}</p><p className="mt-1 text-xs text-slate-500">{label(lang, "حسب المواعيد المسجلة فقط", "Based on recorded due dates only")}</p></div>
-        <div className={`rounded-2xl border p-4 ${inner}`}><p className="text-xs font-semibold text-slate-500">{label(lang, "ملف العائلة", "Pet family")}</p><p className="mt-2 text-lg font-black">{petCount} {label(lang, "حيوان", "pet(s)")}</p><p className="mt-1 text-xs text-slate-500">{label(lang, "الحيوانات محفوظة بشكل مستقل", "Each pet keeps a separate record")}</p></div>
+        <div className={`rounded-2xl border p-4 ${inner}`}><p className={`text-xs font-semibold ${mutedText}`}>{label(lang, "آخر زيارة", "Last visit")}</p><p className="mt-2 text-lg font-black">{formatDate(latestVisit?.visit_date || null, lang)}</p><p className={`mt-1 truncate text-xs ${mutedText}`}>{latestVisit?.reason || label(lang, "لا توجد زيارة مسجلة", "No visit recorded")}</p></div>
+        <div className={`rounded-2xl border p-4 ${inner}`}><p className={`text-xs font-semibold ${mutedText}`}>{label(lang, "التطعيمات المتأخرة", "Overdue vaccinations")}</p><p className={`mt-2 text-lg font-black ${overdueCount ? (dark ? "text-rose-300" : "text-rose-800") : (dark ? "text-emerald-300" : "text-emerald-800")}`}>{overdueCount}</p><p className={`mt-1 text-xs ${mutedText}`}>{label(lang, "حسب المواعيد المسجلة فقط", "Based on recorded due dates only")}</p></div>
+        <div className={`rounded-2xl border p-4 ${inner}`}><p className={`text-xs font-semibold ${mutedText}`}>{label(lang, "ملف العائلة", "Pet family")}</p><p className="mt-2 text-lg font-black">{petCount} {label(lang, "حيوان", "pet(s)")}</p><p className={`mt-1 text-xs ${mutedText}`}>{label(lang, "الحيوانات محفوظة بشكل مستقل", "Each pet keeps a separate record")}</p></div>
       </div>
 
       <div className="mt-5">
         <div className="flex flex-wrap items-end justify-between gap-2">
-          <div><h3 className="text-base font-black">{label(lang, "مواعيد التطعيم القادمة", "Vaccination due dates")}</h3><p className="mt-1 text-xs text-slate-500">{label(lang, "العدادات مبنية على تاريخ الاستحقاق المسجل، وليست إثباتًا لإعطاء الجرعة.", "Countdowns use recorded due dates and do not confirm that a dose was administered.")}</p></div>
-          {dueSoonCount > 0 && <span className="rounded-full bg-amber-400/10 px-3 py-1.5 text-xs font-bold text-amber-500">{dueSoonCount} {label(lang, "خلال 30 يومًا", "due within 30 days")}</span>}
+          <div><h3 className="text-base font-black">{label(lang, "مواعيد التطعيم القادمة", "Vaccination due dates")}</h3><p className={`mt-1 text-xs ${mutedText}`}>{label(lang, "العدادات مبنية على تاريخ الاستحقاق المسجل، وليست إثباتًا لإعطاء الجرعة.", "Countdowns use recorded due dates and do not confirm that a dose was administered.")}</p></div>
+          {dueSoonCount > 0 && <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${dark ? "bg-amber-400/10 text-amber-300" : "bg-amber-100 text-amber-900"}`}>{dueSoonCount} {label(lang, "خلال 30 يومًا", "due within 30 days")}</span>}
         </div>
         {uniqueSchedules.length > 0 ? (
           <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -204,30 +206,30 @@ export default function ClientCareHub({
                   : days <= 30
                     ? label(lang, "قريبًا", "Due soon")
                     : label(lang, "مجدول", "Scheduled");
-              const accent = days < 0 ? "text-rose-400" : days <= 30 ? "text-amber-400" : "text-emerald-400";
+              const accent = days < 0 ? (dark ? "text-rose-300" : "text-rose-800") : days <= 30 ? (dark ? "text-amber-300" : "text-amber-800") : (dark ? "text-emerald-300" : "text-emerald-800");
               return (
                 <article key={v.id} className={`flex items-center gap-3 rounded-2xl border p-3 ${inner}`}>
                   <div className={`flex h-[68px] w-[68px] shrink-0 flex-col items-center justify-center rounded-full border-4 ${days < 0 ? "border-rose-400/50" : days <= 30 ? "border-amber-400/50" : "border-emerald-400/40"}`}>
                     <strong className={`text-lg leading-none ${accent}`}>{days < 0 ? Math.abs(days) : days}</strong>
-                    <span className="mt-1 text-[9px] text-slate-500">{days < 0 ? label(lang, "يوم تأخير", "days late") : label(lang, "يوم", "days")}</span>
+                    <span className={`mt-1 text-[9px] ${mutedText}`}>{days < 0 ? label(lang, "يوم تأخير", "days late") : label(lang, "يوم", "days")}</span>
                   </div>
-                  <div className="min-w-0"><h4 className="truncate text-sm font-black">{v.vaccine_name || v.vaccine_type || label(lang, "تطعيم", "Vaccination")}</h4><p className={`mt-1 text-xs font-bold ${accent}`}>{status}</p><p className="mt-1 text-[11px] text-slate-500">{formatDate(v.next_dose_at, lang)}</p></div>
+                  <div className="min-w-0"><h4 className="truncate text-sm font-black">{v.vaccine_name || v.vaccine_type || label(lang, "تطعيم", "Vaccination")}</h4><p className={`mt-1 text-xs font-bold ${accent}`}>{status}</p><p className={`mt-1 text-[11px] ${mutedText}`}>{formatDate(v.next_dose_at, lang)}</p></div>
                 </article>
               );
             })}
           </div>
         ) : (
-          <div className={`mt-3 rounded-2xl border border-dashed p-4 text-sm text-slate-500 ${inner}`}>{label(lang, "لا توجد مواعيد تطعيم قادمة مسجلة لهذا الحيوان.", "No upcoming vaccination due dates are recorded for this pet.")}</div>
+          <div className={`mt-3 rounded-2xl border border-dashed p-4 text-sm ${mutedText} ${inner}`}>{label(lang, "لا توجد مواعيد تطعيم قادمة مسجلة لهذا الحيوان.", "No upcoming vaccination due dates are recorded for this pet.")}</div>
         )}
       </div>
 
       <div className={`mt-4 flex items-start gap-3 rounded-2xl border p-3 ${overdueCount > 0 ? "border-rose-400/20 bg-rose-400/[.05]" : "border-cyan-400/15 bg-cyan-400/[.04]"}`}>
         <span className="text-xl" aria-hidden="true">{overdueCount > 0 ? "⚠️" : "🔔"}</span>
-        <div><p className="text-sm font-black">{label(lang, "مركز التنبيهات", "Care alerts")}</p><p className="mt-1 text-xs leading-5 text-slate-500">{overdueCount > 0
+        <div><p className="text-sm font-black">{label(lang, "مركز التنبيهات", "Care alerts")}</p><p className={`mt-1 text-xs leading-5 ${mutedText}`}>{overdueCount > 0
           ? label(lang, `يوجد ${overdueCount} موعد تطعيم متأخر حسب السجل. راجع الطبيب لتأكيد الخطوة المناسبة.`, `${overdueCount} vaccination due date(s) are overdue in the record. Contact the clinic to confirm next steps.`)
           : dueSoonCount > 0
             ? label(lang, `يوجد ${dueSoonCount} موعد تطعيم خلال 30 يومًا.`, `${dueSoonCount} vaccination(s) are due within 30 days.`)
-            : label(lang, "لا توجد مواعيد تطعيم مسجلة متأخرة أو خلال 30 يومًا. تظل متابعة العلاج اليومية متاحة بالأسفل.", "No recorded vaccine dates are overdue or due within 30 days. Daily medication tracking remains available below.")}</p><button type="button" onClick={() => openSection("daily-medication-todo")} className="mt-2 text-xs font-bold text-cyan-400">{label(lang, "افتح قائمة أدوية اليوم ←", "Open today's medication checklist →")}</button></div>
+            : label(lang, "لا توجد مواعيد تطعيم مسجلة متأخرة أو خلال 30 يومًا. تظل متابعة العلاج اليومية متاحة بالأسفل.", "No recorded vaccine dates are overdue or due within 30 days. Daily medication tracking remains available below.")}</p><button type="button" onClick={() => openSection("daily-medication-todo")} className={`mt-2 text-xs font-bold ${accentText}`}>{label(lang, "افتح قائمة أدوية اليوم ←", "Open today's medication checklist →")}</button></div>
       </div>
     </section>
   );

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 
@@ -13,6 +14,18 @@ type Client = {
   address: string | null;
   notes: string | null;
   created_at: string;
+};
+
+type PetSummary = { id: string; client_id: string; name: string };
+type VisitSummary = { client_id: string; visit_date: string };
+type InvoiceSummary = { client_id: string; status: string; total: number | null; paid_amount: number | null };
+type AppointmentSummary = { client_id: string; appointment_date: string; start_time: string; status: string };
+type ClientSummary = {
+  pets: PetSummary[];
+  lastVisit: string | null;
+  dueBalance: number;
+  visits: number;
+  upcomingVisit: AppointmentSummary | null;
 };
 
 type ClinicContext = {
@@ -34,7 +47,9 @@ type ClinicContext = {
 };
 
 export default function ClientsPage() {
+  const router = useRouter();
   const [clients, setClients] = useState<Client[]>([]);
+  const [summaries, setSummaries] = useState<Record<string, ClientSummary>>({});
   const [search, setSearch] = useState("");
 
   const [loading, setLoading] = useState(true);
@@ -45,7 +60,7 @@ export default function ClientsPage() {
 
   const [errorMessage, setErrorMessage] = useState("");
 
-  async function loadClinicContext() {
+  const loadClinicContext = useCallback(async () => {
     setClinicLoading(true);
     setErrorMessage("");
 
@@ -102,9 +117,9 @@ export default function ClientsPage() {
     setClinicLoading(false);
 
     return true;
-  }
+  }, []);
 
-  async function loadClients() {
+  const loadClients = useCallback(async () => {
     setLoading(true);
     setErrorMessage("");
 
@@ -141,13 +156,55 @@ export default function ClientsPage() {
       return;
     }
 
-    setClients((data || []) as Client[]);
+    const loadedClients = (data || []) as Client[];
+    setClients(loadedClients);
+
+    const clientIds = loadedClients.map((client) => client.id);
+    if (clientIds.length) {
+      const [petsResult, visitsResult, invoicesResult, appointmentsResult] = await Promise.all([
+        db.from("pets").select("id,client_id,name").in("client_id", clientIds).order("created_at", { ascending: false }),
+        db.from("visits").select("client_id,visit_date").in("client_id", clientIds).order("visit_date", { ascending: false }),
+        db.from("invoices").select("client_id,status,total,paid_amount").in("client_id", clientIds),
+        db.from("appointments").select("client_id,appointment_date,start_time,status").in("client_id", clientIds)
+          .in("status", ["pending", "confirmed", "arrived", "in_progress"]),
+      ]);
+
+      const pets = (petsResult.data || []) as PetSummary[];
+      const visits = (visitsResult.data || []) as VisitSummary[];
+      const invoices = (invoicesResult.data || []) as InvoiceSummary[];
+      const appointments = (appointmentsResult.data || []) as AppointmentSummary[];
+      const now = new Date();
+      const nextAppointments = appointments.filter((appointment) =>
+        new Date(`${appointment.appointment_date}T${appointment.start_time || "00:00"}`).getTime() >= now.getTime()
+      );
+
+      setSummaries(Object.fromEntries(clientIds.map((clientId) => {
+        const clientVisits = visits.filter((visit) => visit.client_id === clientId);
+        const clientAppointments = nextAppointments
+          .filter((appointment) => appointment.client_id === clientId)
+          .sort((a, b) => `${a.appointment_date}T${a.start_time}`.localeCompare(`${b.appointment_date}T${b.start_time}`));
+        const dueBalance = invoices
+          .filter((invoice) => invoice.client_id === clientId && !["draft", "cancelled", "returned"].includes(invoice.status))
+          .reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.paid_amount || 0)), 0);
+
+        return [clientId, {
+          pets: pets.filter((pet) => pet.client_id === clientId),
+          lastVisit: clientVisits[0]?.visit_date || null,
+          dueBalance,
+          visits: clientVisits.length,
+          upcomingVisit: clientAppointments[0] || null,
+        } satisfies ClientSummary];
+      })));
+    } else {
+      setSummaries({});
+    }
     setLoading(false);
-  }
+  }, [loadClinicContext]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadClients();
-  }, []);
+  }, [loadClients]);
 
   const filteredClients = clients.filter(
     (client) => {
@@ -176,9 +233,24 @@ export default function ClientsPage() {
   );
 
   function openClient(id: string) {
-    window.location.href =
-      `/clients/${id}`;
+    router.push(`/clients/${id}`);
   }
+
+  function formatDate(value: string | null) {
+    if (!value) return "—";
+    return new Date(value).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  function formatUpcoming(appointment: AppointmentSummary | null) {
+    if (!appointment) return "—";
+    const date = formatDate(appointment.appointment_date);
+    const time = appointment.start_time?.slice(0, 5);
+    return time ? `${date} · ${time}` : date;
+  }
+
+  const formatMoney = (amount: number) => new Intl.NumberFormat("en-EG", {
+    style: "currency", currency: "EGP", maximumFractionDigits: 0,
+  }).format(amount);
 
   if (
     loading ||
@@ -212,10 +284,7 @@ export default function ClientsPage() {
       >
         <div className="mx-auto max-w-6xl">
           <button
-            onClick={() =>
-              (window.location.href =
-                "/dashboard")
-            }
+            onClick={() => router.push("/dashboard")}
             className="mb-6 text-sm text-slate-500 transition hover:text-slate-900"
           >
             ← الرئيسية
@@ -260,10 +329,7 @@ export default function ClientsPage() {
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <button
-              onClick={() =>
-                (window.location.href =
-                  "/dashboard")
-              }
+              onClick={() => router.push("/dashboard")}
               className="mb-3 text-sm text-slate-500 transition hover:text-slate-900"
             >
               ← الرئيسية
@@ -297,10 +363,7 @@ export default function ClientsPage() {
           </div>
 
           <button
-            onClick={() =>
-              (window.location.href =
-                "/clients/new")
-            }
+            onClick={() => router.push("/clients/new")}
             className="rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
           >
             + عميل جديد
@@ -346,75 +409,51 @@ export default function ClientsPage() {
         {/* Clients */}
 
         {filteredClients.length > 0 && (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-3">
             {filteredClients.map(
-              (client) => (
+              (client) => {
+                const summary = summaries[client.id] || { pets: [], lastVisit: null, dueBalance: 0, visits: 0, upcomingVisit: null };
+                const metrics: [string, string][] = [
+                  ["Last visit", formatDate(summary.lastVisit)],
+                  ["Due balance", formatMoney(summary.dueBalance)],
+                  ["Visits", String(summary.visits)],
+                  ["Upcoming visit", formatUpcoming(summary.upcomingVisit)],
+                ];
+
+                return (
                 <button
                   key={client.id}
-                  onClick={() =>
-                    openClient(client.id)
-                  }
-                  className="group rounded-3xl border border-slate-100 bg-white p-6 text-right shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
+                  onClick={() => openClient(client.id)}
+                  className="group w-full rounded-xl border border-slate-200 bg-white p-4 text-right shadow-sm transition hover:border-cyan-300 hover:shadow-md sm:p-5"
                 >
-                  <div className="mb-5 flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-2xl transition group-hover:scale-105">
-                      👤
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <h2 className="truncate text-lg font-bold">
-                        {client.name}
-                      </h2>
-
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="text-xs font-medium text-slate-400">
-                          Client ID
-                        </span>
-
-                        <span
-                          dir="ltr"
-                          className="rounded-lg bg-slate-100 px-2.5 py-1 text-sm font-bold tracking-wider text-slate-700"
-                        >
-                          {client.client_code}
-                        </span>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h2 className="truncate text-lg font-bold text-slate-900">{client.name}</h2>
+                          <p dir="ltr" className="mt-1 text-start text-sm text-slate-600">{client.phone || "—"}</p>
+                        </div>
+                        <div className="text-start">
+                          <span className="block text-[11px] font-medium text-slate-500">Client ID</span>
+                          <span dir="ltr" className="text-sm font-bold text-slate-700">#{client.client_code}</span>
+                        </div>
+                        <p dir="ltr" className="min-w-0 basis-full truncate text-start text-sm text-slate-500">{client.email || "—"}</p>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="space-y-2 text-sm text-slate-600">
-                    {client.phone && (
-                      <div className="flex items-center gap-2">
-                        <span>📞</span>
-                        <span dir="ltr">
-                          {client.phone}
-                        </span>
+                      <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+                        {summary.pets.length ? <>
+                          {summary.pets.slice(0, 3).map((pet, index) => <span key={pet.id} className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">PET {index + 1} · {pet.name}</span>)}
+                          {summary.pets.length > 3 && <span className="rounded-md bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700">+{summary.pets.length - 3} ETC</span>}
+                        </> : <span className="text-xs text-slate-400">No pets</span>}
                       </div>
-                    )}
 
-                    {client.email && (
-                      <div className="flex items-center gap-2">
-                        <span>✉️</span>
-                        <span className="truncate">
-                          {client.email}
-                        </span>
+                      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 sm:grid-cols-4">
+                        {metrics.map(([label, value]) => <div key={label} className="min-w-0 rounded-lg bg-slate-50 px-3 py-2 text-start">
+                          <span className="block text-[10px] font-semibold uppercase text-slate-500">{label}</span>
+                          <span className={`mt-1 block truncate text-sm font-bold ${label === "Due balance" && summary.dueBalance > 0 ? "text-rose-700" : "text-slate-800"}`}>{value}</span>
+                        </div>)}
                       </div>
-                    )}
-
-                    {client.address && (
-                      <div className="flex items-center gap-2">
-                        <span>📍</span>
-                        <span className="truncate">
-                          {client.address}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-5 border-t border-slate-100 pt-4 text-sm font-semibold text-slate-500 transition group-hover:text-slate-900">
-                    فتح ملف العميل ←
-                  </div>
                 </button>
-              )
+                );
+              }
             )}
           </div>
         )}

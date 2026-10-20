@@ -27,11 +27,11 @@ export default function AuthGuard({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [checking, setChecking] = useState(true);
+  const [checkedPath, setCheckedPath] = useState("");
+  const [checkError, setCheckError] = useState(false);
 
   useEffect(() => {
     if (isPublicPath(pathname)) {
-      setChecking(false);
       return;
     }
 
@@ -55,8 +55,30 @@ export default function AuthGuard({
         return;
       }
 
+      const staffStateResponse = await fetch("/api/staff/auth-state", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: "no-store",
+      });
+      const staffState = await staffStateResponse.json().catch(() => null) as { mustChangePassword?: boolean } | null;
+      if (!staffStateResponse.ok || !staffState) {
+        if (mounted) {
+          setCheckError(true);
+          setCheckedPath(pathname);
+        }
+        return;
+      }
+      if (staffState.mustChangePassword && pathname !== "/change-password") {
+        router.replace("/change-password");
+        return;
+      }
+      if (!staffState.mustChangePassword && pathname === "/change-password") {
+        router.replace("/dashboard");
+        return;
+      }
+
       if (mounted) {
-        setChecking(false);
+        setCheckError(false);
+        setCheckedPath(pathname);
       }
     }
 
@@ -71,9 +93,6 @@ export default function AuthGuard({
           return;
         }
 
-        if (session && mounted) {
-          setChecking(false);
-        }
       }
     );
 
@@ -83,7 +102,7 @@ export default function AuthGuard({
     };
   }, [pathname, router]);
 
-  if (checking && !isPublicPath(pathname)) {
+  if ((checkedPath !== pathname || checkError) && !isPublicPath(pathname)) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="text-center">
@@ -92,7 +111,7 @@ export default function AuthGuard({
           </div>
 
           <p className="text-sm text-slate-500">
-            Loading VETRA...
+            {checkError ? "Could not verify account security. Refresh or sign in again." : "Loading VETRA..."}
           </p>
         </div>
       </main>

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { BSAVAFormularyPicker, type FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
+import { BSAVAFormularyPicker, createBsavaVisitDraft, type FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
 import type { ExternalMedicationDraft, Language, Medication, MedicationDraft, PetDetails, VaccinationDraft, VisitTranslations } from "./new-visit-types";
 import { getVaccinationStageOptions, calculateNextVaccinationDose } from "./new-visit-utils";
 import DrugEyeProductLinks from "./DrugEyeProductLinks";
+import NewVisitCommonConditions from "./NewVisitCommonConditions";
 
 type DrugEyeResult = {
   id: string;
@@ -14,13 +15,14 @@ type DrugEyeResult = {
 };
 
 type Props = {
+  clinicId: string;
   language: Language;
   darkMode: boolean;
   t: VisitTranslations;
   petDetails: PetDetails;
   weight: string;
   formularyDrafts: FormularyVisitDraft[];
-  setFormularyDrafts: (value: FormularyVisitDraft[]) => void;
+  setFormularyDrafts: (value: FormularyVisitDraft[] | ((current: FormularyVisitDraft[]) => FormularyVisitDraft[])) => void;
   externalMedicationDrafts: ExternalMedicationDraft[];
   onAddManualExternalMedication: (draft: ExternalMedicationDraft) => void;
   onRemoveManualExternalMedication: (id: string) => void;
@@ -29,6 +31,7 @@ type Props = {
   filteredMedications: Medication[];
   addMedication: (medicationId?: string) => void;
   medications: Medication[];
+  setMessage: (value: string) => void;
   medicationDrafts: MedicationDraft[];
   removeMedication: (id: string) => void;
   treatment: string;
@@ -47,10 +50,10 @@ type Props = {
 };
 
 export default function NewVisitTreatmentFields({
-  language, darkMode, t, petDetails, weight, formularyDrafts, setFormularyDrafts,
+  clinicId, language, darkMode, t, petDetails, weight, formularyDrafts, setFormularyDrafts,
   externalMedicationDrafts, onAddManualExternalMedication, onRemoveManualExternalMedication,
   medicationSearch, setMedicationSearch,
-  filteredMedications, addMedication, medications, medicationDrafts, removeMedication,
+  filteredMedications, addMedication, medications, setMessage, medicationDrafts, removeMedication,
   treatment, setTreatment, vaccinations, addVaccination, updateVaccination, removeVaccination,
   resetVaccinationNextDoseToAutomatic, visitNotes, setVisitNotes, followUp, setFollowUp,
   followUpDetails, setFollowUpDetails,
@@ -62,6 +65,30 @@ export default function NewVisitTreatmentFields({
   const [drugEyeResultQuery, setDrugEyeResultQuery] = useState("");
   const query = medicationSearch.trim().replace(/\s+/g, " ");
   const matchingMedications = query ? filteredMedications.slice(0, 8) : [];
+
+  async function applyCommonProtocol(ids: string[]) {
+    const clinicMedicationIds = ids.filter((id) => !id.startsWith("bsava:"));
+    clinicMedicationIds.forEach((id) => addMedication(id));
+    const formularyReferences = ids.filter((id) => id.startsWith("bsava:"));
+    if (!formularyReferences.length) return;
+    try {
+      const nextDrafts = await Promise.all(formularyReferences.map(async (reference) => {
+        const [, id, route] = reference.split(":");
+        return createBsavaVisitDraft(Number(id), petDetails?.species || "", route || "", weight ? Number(weight) : null);
+      }));
+      const usable = nextDrafts.filter((draft): draft is FormularyVisitDraft => Boolean(draft));
+      if (!usable.length) {
+        setMessage(language === "ar" ? "أدخل وزن الحيوان لاستخدام جرعة BSAVA المحسوبة." : "Enter the pet's weight to calculate the BSAVA dose.");
+        return;
+      }
+      setFormularyDrafts((current) => {
+        const added = usable.filter((draft) => !current.some((item) => item.drugId === draft.drugId && item.route === draft.route));
+        return [...current, ...added];
+      });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : (language === "ar" ? "تعذر تحميل مرجع BSAVA." : "Could not load BSAVA reference."));
+    }
+  }
 
   // Query DrugEye from VETRA's own route after a short pause. Abort stale requests
   // so a slow response for an earlier query never replaces the latest results.
@@ -110,21 +137,21 @@ export default function NewVisitTreatmentFields({
 
   return (<>
                 <div className="lg:col-span-2">
-                  <BSAVAFormularyPicker
+                  <NewVisitCommonConditions
+                    clinicId={clinicId}
+                    petSpecies={petDetails?.species || ""}
                     language={language}
                     darkMode={darkMode}
-                    petSpecies={petDetails?.species}
-                    weightKg={weight ? Number(weight) : null}
-                    drafts={formularyDrafts}
-                    onChange={setFormularyDrafts}
+                    medications={medications}
+                    medicationDrafts={medicationDrafts}
+                    formularyDrafts={formularyDrafts}
+                    onApply={applyCommonProtocol}
                   />
-                </div>
-                <div className="lg:col-span-2">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <label className={`block text-sm font-semibold ${darkMode ? "text-slate-300" : "text-slate-700"}`}>{t.treatment}</label>
                       <p className={`mt-1 text-xs ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                        {language === "ar" ? "ابحث في مكتبة VETRA وDrugEye. نتائج VETRA تُضاف مباشرةً، ونتائج DrugEye مرجعية." : "Search VETRA and DrugEye. VETRA results can be added directly; DrugEye results are reference information."}
+                        {language === "ar" ? "ابحث في خانة واحدة: أدوية العيادة أولًا، ثم BSAVA البيطري، ثم DrugEye. جرعات BSAVA تُحسب حسب الوزن والطريق." : "One search: clinic medications first, then BSAVA veterinary protocols, then DrugEye references. BSAVA doses use weight and route."}
                       </p>
                     </div>
                     <span className="rounded-full bg-blue-500/10 px-3 py-1 text-[11px] font-bold text-blue-600 dark:text-blue-300">Medication Library + dose calculator</span>
@@ -168,6 +195,24 @@ export default function NewVisitTreatmentFields({
                               {language === "ar" ? "لا توجد نتيجة مطابقة في مكتبة VETRA." : "No matching result in VETRA's library."}
                             </div>
                           )}
+
+                          <section className={`border-b px-3 py-3 ${darkMode ? "border-slate-800" : "border-slate-100"}`}>
+                            <div className={`mb-2 text-[11px] font-bold uppercase tracking-wide ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
+                              {language === "ar" ? "مرجع بيطري — BSAVA" : "Veterinary reference — BSAVA"}
+                            </div>
+                            <BSAVAFormularyPicker
+                              language={language}
+                              darkMode={darkMode}
+                              petSpecies={petDetails?.species}
+                              weightKg={weight ? Number(weight) : null}
+                              drafts={formularyDrafts}
+                              onChange={setFormularyDrafts}
+                              searchQuery={medicationSearch}
+                              onSearchQueryChange={setMedicationSearch}
+                              hideSearchInput
+                              hideDrafts
+                            />
+                          </section>
 
                           <div className={`sticky top-0 z-10 flex items-center justify-between gap-3 border-y px-3 py-2 text-[11px] font-bold uppercase tracking-wide ${darkMode ? "border-slate-800 bg-slate-900 text-sky-300" : "border-slate-100 bg-sky-50 text-sky-800"}`}>
                             <span>DrugEye</span>

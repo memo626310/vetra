@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
+import { vetraCore } from "@/lib/vetra-core";
 import type { FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
 import type {
   Language, Client, Pet, Visit, Medication, MedicationDraft, ExternalMedicationDraft,
@@ -23,6 +24,11 @@ import NewVisitTreatmentFields from "@/components/visits/NewVisitTreatmentFields
 import NewVisitEditorSection from "@/components/visits/NewVisitEditorSection";
 import NewVisitHistory from "@/components/visits/NewVisitHistory";
 import NewVisitDetailsModal from "@/components/visits/NewVisitDetailsModal";
+import NewVisitMedicalRecordsFields, { emptyMedicalRecordDraft, type MedicalRecordDraft } from "@/components/visits/NewVisitMedicalRecordsFields";
+
+type SymptomDraft = { id: string; name: string; days: string };
+type VisitServiceDraft = { id: string; name: string; quantity: number; price: number };
+type VisitAttachmentDraft = { id: string; file: File; category: "analysis" | "xray" };
 
 export default function NewVisitPage() {
   const router = useRouter();
@@ -34,6 +40,7 @@ export default function NewVisitPage() {
 
   const [clients, setClients] = useState<Client[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
+  const [clinicId, setClinicId] = useState("");
 
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedPetId, setSelectedPetId] = useState("");
@@ -49,6 +56,16 @@ export default function NewVisitPage() {
   const [loadingDetails, setLoadingDetails] = useState(false);
 
   const [started, setStarted] = useState(false);
+  const [showVisitStartModal, setShowVisitStartModal] = useState(false);
+  const [visitSource, setVisitSource] = useState<"appointment" | "new_visit">("appointment");
+  const [appointmentId, setAppointmentId] = useState("");
+  const [appointmentOptions, setAppointmentOptions] = useState<Array<{ id: string; appointment_date: string; start_time: string; reason: string | null }>>([]);
+  const [performingDoctor, setPerformingDoctor] = useState("");
+  const [groomingType, setGroomingType] = useState("");
+  const [consultationFee, setConsultationFee] = useState(0);
+  const [symptoms, setSymptoms] = useState<SymptomDraft[]>([]);
+  const [visitServices, setVisitServices] = useState<VisitServiceDraft[]>([]);
+  const [attachments, setAttachments] = useState<VisitAttachmentDraft[]>([]);
 
   const [reason, setReason] = useState("");
   const [examStatus, setExamStatus] = useState<"normal" | "abnormal" | "">("");
@@ -77,6 +94,7 @@ export default function NewVisitPage() {
   const [formularyDrafts, setFormularyDrafts] = useState<FormularyVisitDraft[]>([]);
   const [externalMedicationDrafts, setExternalMedicationDrafts] = useState<ExternalMedicationDraft[]>([]);
   const [vaccinations, setVaccinations] = useState<VaccinationDraft[]>([]);
+  const [medicalRecordDraft, setMedicalRecordDraft] = useState<MedicalRecordDraft>(emptyMedicalRecordDraft);
 
   const t = translations[language];
 
@@ -96,6 +114,11 @@ export default function NewVisitPage() {
 
     const params = new URLSearchParams(window.location.search);
     setPetFromUrl(params.get("pet"));
+    const appointmentParam = params.get("appointment");
+    if (appointmentParam) {
+      setAppointmentId(appointmentParam);
+      setVisitSource("appointment");
+    }
   }, []);
 
   useEffect(() => {
@@ -140,7 +163,13 @@ export default function NewVisitPage() {
     setLoadingClients(true);
 
     try {
+      const context = await getClinicContext();
+      setClinicId(context.clinic_id || "");
+      setPerformingDoctor(context.doctor_name || "");
       const db = await getClinicDb();
+      const { data: billingSettings } = await db.from("billing_settings")
+        .select("consultation_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
+      setConsultationFee(Number(billingSettings?.consultation_fee || 0));
 
       const { data, error } = await db
         .from("clients")
@@ -227,7 +256,8 @@ export default function NewVisitPage() {
       setSelectedClientId(data.client_id);
 
       await loadVisits(data.id);
-      setStarted(true);
+      await loadAppointments(data.client_id, data.id);
+      setShowVisitStartModal(true);
     } catch (error) {
       console.error("LOAD PET FROM URL ERROR:", error);
       setMessage(error instanceof Error ? error.message : t.loadError);
@@ -314,13 +344,41 @@ export default function NewVisitPage() {
       setPetDetails(data as PetDetails);
 
       await loadVisits(selectedPetId);
-      setStarted(true);
+      await loadAppointments(selectedClientId, selectedPetId);
+      setShowVisitStartModal(true);
     } catch (error) {
       console.error("START EXAMINATION ERROR:", error);
       setMessage(error instanceof Error ? error.message : t.loadError);
     } finally {
       setLoadingDetails(false);
     }
+  }
+
+  async function loadAppointments(clientId: string, petId: string) {
+    try {
+      const db = await getClinicDb();
+      const { data, error } = await db.from("appointments")
+        .select("id, appointment_date, start_time, reason")
+        .eq("client_id", clientId).eq("pet_id", petId)
+        .in("status", ["pending", "confirmed", "arrived"])
+        .gte("appointment_date", new Date().toISOString().slice(0, 10))
+        .order("appointment_date", { ascending: true });
+      if (error) throw error;
+      setAppointmentOptions(data || []);
+    } catch (error) {
+      console.error("LOAD VISIT APPOINTMENTS ERROR:", error);
+      setAppointmentOptions([]);
+    }
+  }
+
+  function beginVisit(source: "appointment" | "new_visit") {
+    if (source === "appointment" && !appointmentId) {
+      setMessage(language === "ar" ? "اختر الموعد أولاً" : "Select an appointment first");
+      return;
+    }
+    setVisitSource(source);
+    setShowVisitStartModal(false);
+    setStarted(true);
   }
 
   async function loadMedications() {
@@ -512,7 +570,7 @@ export default function NewVisitPage() {
     return labels[followUp] || "";
   }, [followUp, language, t]);
 
-  async function saveVisit() {
+  async function saveVisit(createBill = false) {
     setMessage("");
 
     if (!selectedPetId || !selectedClientId) {
@@ -522,6 +580,26 @@ export default function NewVisitPage() {
 
     if (petDetails?.is_deceased) {
       setMessage(t.deceasedPet);
+      return;
+    }
+    if (!["examination", "vaccination", "surgery", "grooming", "followup"].includes(reason)) {
+      setMessage(language === "ar" ? "اختر سبب الزيارة" : "Select a visit reason");
+      return;
+    }
+    if (!performingDoctor.trim()) {
+      setMessage(language === "ar" ? "حدد الطبيب الذي سيجري الزيارة" : "Enter the performing doctor");
+      return;
+    }
+    if (reason === "surgery" && !medicalRecordDraft.surgeryTitle.trim()) {
+      setMessage(language === "ar" ? "أدخل عنوان الجراحة" : "Enter a surgery title");
+      return;
+    }
+    if (reason === "grooming" && !groomingType.trim()) {
+      setMessage(language === "ar" ? "حدد نوع التجميل" : "Enter a grooming type");
+      return;
+    }
+    if (createBill && consultationFee <= 0 && !visitServices.some((line) => line.name.trim() && line.price >= 0 && line.quantity > 0)) {
+      setMessage(language === "ar" ? "أضف خدمة واحدة على الأقل للفاتورة" : "Add at least one service to the bill");
       return;
     }
 
@@ -566,7 +644,8 @@ export default function NewVisitPage() {
           .join("; ");
         return `[DrugEye / manual dose — clinician entered] ${draft.productName}${metadata ? ` (${metadata})` : ""}: ${details.join(" - ")}`;
       }).join("\n");
-      const finalTreatment = [treatment.trim(), medicationText, formularyText, externalMedicationText].filter(Boolean).join("\n\n");
+      const serviceText = visitServices.filter((service) => service.name.trim()).map((service) => `${service.name.trim()} × ${service.quantity} (${(service.quantity * service.price).toFixed(2)} EGP)`).join("\n");
+      const finalTreatment = [treatment.trim(), serviceText, medicationText, formularyText, externalMedicationText].filter(Boolean).join("\n\n");
       const finalExamination =
         examStatus === "normal"
           ? "Normal"
@@ -575,10 +654,20 @@ export default function NewVisitPage() {
             ? `Abnormal: ${examination.trim()}`
             : "Abnormal"
           : examination.trim();
+      const symptomText = symptoms.filter((item) => item.name.trim()).map((item) => `${item.name.trim()}${item.days ? ` (${item.days} ${language === "ar" ? "يوم" : "days"})` : ""}`).join("\n");
+      const examinationWithSymptoms = [symptomText, finalExamination].filter(Boolean).join("\n\n");
       const followUpText = followUp && followUp !== "none"
         ? `Follow-up: ${selectedFollowUpLabel}${followUp === "custom" && followUpDetails.trim() ? ` — ${followUpDetails.trim()}` : ""}`
         : "";
-      const finalVisitNotes = [visitNotes.trim(), followUpText].filter(Boolean).join("\n\n");
+      const sourceLabel = visitSource === "appointment" ? `Appointment: ${appointmentId}` : "Visit type: New walk-in visit";
+      const metadata = [
+        sourceLabel,
+        performingDoctor.trim() ? `${language === "ar" ? "الطبيب المعالج" : "Performing doctor"}: ${performingDoctor.trim()}` : "",
+        reason === "grooming" && groomingType.trim() ? `${language === "ar" ? "نوع التجميل" : "Grooming type"}: ${groomingType.trim()}` : "",
+        reason === "surgery" && medicalRecordDraft.surgeryBeforeStatus.trim() ? `${language === "ar" ? "الحالة قبل الجراحة" : "Pre-surgery status"}: ${medicalRecordDraft.surgeryBeforeStatus.trim()}` : "",
+        reason === "surgery" && medicalRecordDraft.surgeryAfterStatus.trim() ? `${language === "ar" ? "الحالة بعد الجراحة" : "Post-surgery status"}: ${medicalRecordDraft.surgeryAfterStatus.trim()}` : "",
+      ].filter(Boolean).join("\n");
+      const finalVisitNotes = [visitNotes.trim(), followUpText, metadata].filter(Boolean).join("\n\n");
 
       const { data: visit, error: visitError } = await db
         .from("visits")
@@ -586,7 +675,7 @@ export default function NewVisitPage() {
           client_id: selectedClientId,
           pet_id: selectedPetId,
           reason: reason.trim() || null,
-          examination: finalExamination || null,
+          examination: examinationWithSymptoms || null,
           diagnosis: diagnosis.trim() || null,
           treatment: finalTreatment || null,
           weight: weight ? Number(weight) : null,
@@ -599,7 +688,38 @@ export default function NewVisitPage() {
         .single();
 
       if (visitError || !visit) throw visitError || new Error(t.saveError);
+      const uploadedAttachmentPaths: string[] = [];
+      let createdInvoiceId = "";
       try {
+        for (const item of attachments) {
+          const fileName = item.file.name.replace(/[^\w.-]+/g, "_");
+          const path = `${clinicContext.clinic_id}/${selectedPetId}/${visit.id}/${crypto.randomUUID()}-${fileName}`;
+          const { error: uploadError } = await db.storage.from("visit-attachments").upload(path, item.file, { contentType: item.file.type, upsert: false });
+          if (uploadError) throw uploadError;
+          uploadedAttachmentPaths.push(path);
+          const { error: metadataError } = await db.from("visit_attachments").insert({
+            clinic_id: clinicContext.clinic_id, visit_id: visit.id, client_id: selectedClientId, pet_id: selectedPetId,
+            file_name: item.file.name, storage_path: path, mime_type: item.file.type, size_bytes: item.file.size, category: item.category,
+          });
+          if (metadataError) throw metadataError;
+        }
+
+        const medicalRows = [
+          ...medicalRecordDraft.labTests.split(/\r?\n/).map((name) => name.trim()).filter(Boolean).map((title) => ({
+            clinic_id: clinicContext.clinic_id, pet_id: selectedPetId, client_id: selectedClientId,
+            visit_id: visit.id, record_type: "lab", title, status: "ordered", notes: medicalRecordDraft.labNotes.trim() || null,
+          })),
+          ...(reason === "surgery" && medicalRecordDraft.surgeryTitle.trim() ? [{
+            clinic_id: clinicContext.clinic_id, pet_id: selectedPetId, client_id: selectedClientId,
+            visit_id: visit.id, record_type: "surgery", title: medicalRecordDraft.surgeryTitle.trim(),
+            status: medicalRecordDraft.surgeryStatus, notes: [medicalRecordDraft.surgeryNotes.trim(), medicalRecordDraft.surgeryBeforeStatus.trim() ? `Before: ${medicalRecordDraft.surgeryBeforeStatus.trim()}` : "", medicalRecordDraft.surgeryAfterStatus.trim() ? `After: ${medicalRecordDraft.surgeryAfterStatus.trim()}` : ""].filter(Boolean).join("\n") || null,
+            performed_at: medicalRecordDraft.surgeryDate ? new Date(`${medicalRecordDraft.surgeryDate}T12:00:00`).toISOString() : null,
+          }] : []),
+        ];
+        if (medicalRows.length) {
+          const { error: recordsError } = await db.from("pet_medical_records").insert(medicalRows);
+          if (recordsError) throw recordsError;
+        }
 
         if (medicationDrafts.length) {
           const medicationRows = medicationDrafts.map((draft) => ({
@@ -649,9 +769,43 @@ export default function NewVisitPage() {
           if (vaccineError) throw vaccineError;
         }
 
+        if (createBill) {
+          const { data: { user } } = await vetraCore.auth.getUser();
+          if (!user) throw new Error(language === "ar" ? "انتهت جلسة الدخول" : "Your session has expired");
+          const invoiceLines = [
+            ...(consultationFee > 0 ? [{ name: "Consultation", quantity: 1, unit_price: consultationFee }] : []),
+            ...visitServices.filter((line) => line.name.trim()).map((line) => ({ name: line.name.trim(), quantity: line.quantity, unit_price: line.price })),
+          ];
+          if (!invoiceLines.length) throw new Error(language === "ar" ? "أضف خدمة واحدة على الأقل للفاتورة" : "Add at least one service to the bill");
+          const subtotal = invoiceLines.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
+          const { data: invoice, error: invoiceError } = await db.from("invoices").insert({
+            clinic_id: clinicContext.clinic_id, client_id: selectedClientId, pet_id: selectedPetId, visit_id: visit.id,
+            status: "draft", payment_method: null, subtotal, discount: 0, total: subtotal, paid_amount: 0,
+            notes: language === "ar" ? "مسودة فاتورة أُنشئت من الزيارة" : "Draft bill created from visit", issued_at: null, paid_at: null,
+            created_by: user.id, updated_by: user.id,
+          }).select("id").single();
+          if (invoiceError || !invoice) throw invoiceError || new Error(t.saveError);
+          createdInvoiceId = invoice.id;
+          const { error: itemError } = await db.from("invoice_items").insert(invoiceLines.map((line) => ({
+            clinic_id: clinicContext.clinic_id, invoice_id: invoice.id, item_type: "service", product_id: null,
+            service_name: line.name, description: line.name, quantity: line.quantity, unit_price: line.unit_price,
+            discount: 0, total: line.quantity * line.unit_price,
+          })));
+          if (itemError) throw itemError;
+        }
+        if (createBill && createdInvoiceId) {
+          window.localStorage.setItem("vetra-data-version", String(Date.now()));
+          router.push(`/invoices/${createdInvoiceId}`);
+          return;
+        }
+
       } catch (relatedSaveError) {
         await db.from("visit_medications").delete().eq("visit_id", visit.id);
         await db.from("vaccinations").delete().eq("visit_id", visit.id);
+        await db.from("pet_medical_records").delete().eq("visit_id", visit.id);
+        await db.from("visit_attachments").delete().eq("visit_id", visit.id);
+        if (uploadedAttachmentPaths.length) await db.storage.from("visit-attachments").remove(uploadedAttachmentPaths);
+        if (createdInvoiceId) await db.from("invoices").delete().eq("id", createdInvoiceId).eq("clinic_id", clinicContext.clinic_id);
         await db.from("visits").delete().eq("id", visit.id);
         throw relatedSaveError;
       }
@@ -663,6 +817,9 @@ export default function NewVisitPage() {
       setMessage(t.visitSaved);
 
       setReason("");
+      setPerformingDoctor("");
+      setGroomingType("");
+      setAppointmentId("");
       setExamStatus("");
       setExamination("");
       setFollowUp("");
@@ -677,12 +834,11 @@ export default function NewVisitPage() {
       setMedicationDrafts([]);
       setFormularyDrafts([]);
       setVaccinations([]);
+      setMedicalRecordDraft(emptyMedicalRecordDraft);
 
       await loadVisits(selectedPetId);
 
-      router.push(
-        `/prescriptions/${encodeURIComponent(visit.id)}`
-      );
+      router.push(`/visits/${encodeURIComponent(visit.id)}`);
     } catch (error) {
       console.error("SAVE VISIT ERROR:", error);
       setMessage(error instanceof Error ? error.message : t.saveError);
@@ -726,28 +882,32 @@ export default function NewVisitPage() {
     );
   }, [pets, petSearch]);
 
+  const visitServiceTotal = visitServices.reduce((sum, service) => sum + Math.max(0, service.quantity) * Math.max(0, service.price), 0);
+  const visitBillTotal = consultationFee + visitServiceTotal;
+
   const pageClasses = darkMode
-    ? "min-h-screen bg-slate-950 text-slate-100"
-    : "min-h-screen bg-slate-50 text-slate-900";
+    ? "min-h-screen bg-[#0F1115] text-slate-100"
+    : "min-h-screen bg-[#F7F8FA] text-slate-900";
 
   return (
     <main
       dir={language === "ar" ? "rtl" : "ltr"}
+      data-vetra-visit-theme={darkMode ? "dark" : "light"}
       className={pageClasses}
     >
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* HEADER */}
         <header
-          className={`mb-8 flex flex-col gap-4 rounded-3xl border p-5 shadow-sm transition-colors duration-300 sm:flex-row sm:items-center sm:justify-between ${
+          className={`mb-6 flex flex-col gap-4 rounded-2xl border p-4 shadow-sm transition-colors duration-200 sm:flex-row sm:items-center sm:justify-between sm:p-5 ${
             darkMode
-              ? "border-slate-800 bg-slate-900"
+              ? "border-white/[0.07] bg-[#181B21]"
               : "border-slate-200 bg-white"
           }`}
         >
           <div>
             <div className="mb-2 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-xl text-white shadow-lg shadow-blue-600/20">
-                🩺
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-600 text-sm font-bold text-white">
+                V
               </div>
 
               <div>
@@ -779,7 +939,7 @@ export default function NewVisitPage() {
                   : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               }`}
             >
-              🏠 {t.dashboard}
+              {t.dashboard}
             </Link>
 
             <button
@@ -793,7 +953,7 @@ export default function NewVisitPage() {
                   : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               }`}
             >
-              🌐 {t.language}
+              {t.language}
             </button>
 
             <button
@@ -806,7 +966,7 @@ export default function NewVisitPage() {
                   : "border-slate-200 bg-white hover:bg-slate-50"
               }`}
             >
-              {darkMode ? "☀️" : "🌙"}
+              <span aria-hidden="true" className={`relative block h-5 w-5 rounded-full border-2 ${darkMode ? "border-amber-400" : "border-slate-500"}`}><span className={`absolute inset-0.5 rounded-full ${darkMode ? "bg-amber-400" : "bg-transparent"}`} /></span>
             </button>
           </div>
         </header>
@@ -848,6 +1008,27 @@ export default function NewVisitPage() {
           loadingDetails={loadingDetails}
         />
 
+        {showVisitStartModal && petDetails && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="visit-start-title">
+            <div className={`w-full max-w-lg rounded-2xl border p-6 shadow-2xl ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`}>
+              <h2 id="visit-start-title" className="text-xl font-bold">{language === "ar" ? "بدء زيارة" : "Start visit"}</h2>
+              <p className="mt-1 text-sm text-slate-500">{petDetails.client?.name} · {petDetails.name}</p>
+              <div className="mt-5 space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  {([["appointment", language === "ar" ? "موعد" : "Appointment"], ["new_visit", language === "ar" ? "بدء زيارة جديدة" : "Start a new visit"]] as const).map(([source, label]) => <button key={source} type="button" onClick={() => setVisitSource(source)} className={`rounded-lg border px-3 py-3 text-sm font-semibold ${visitSource === source ? "border-blue-500 bg-blue-600 text-white" : darkMode ? "border-slate-700" : "border-slate-200"}`}>{label}</button>)}
+                </div>
+                {visitSource === "appointment" ? <label className="block text-sm font-semibold">{language === "ar" ? "الموعد المسجل" : "Scheduled appointment"}
+                  <select className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent p-3" value={appointmentId} onChange={(event) => setAppointmentId(event.target.value)}>
+                    <option value="">{language === "ar" ? "اختر موعدًا" : "Select an appointment"}</option>
+                    {appointmentOptions.map((item) => <option key={item.id} value={item.id}>{item.appointment_date} {item.start_time?.slice(0, 5)}{item.reason ? ` · ${item.reason}` : ""}</option>)}
+                  </select>
+                </label> : <p className="rounded-lg border border-slate-300 p-3 text-sm text-slate-500">{language === "ar" ? "سيبدأ سجل زيارة جديد لهذا الحيوان." : "A new visit record will be started for this pet."}</p>}
+                <button type="button" disabled={visitSource === "appointment" && !appointmentId} onClick={() => beginVisit(visitSource)} className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-40">{language === "ar" ? "متابعة" : "Continue"}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* EXAMINATION */}
         {started && petDetails && (
           <div className="space-y-6">
@@ -861,12 +1042,35 @@ export default function NewVisitPage() {
               onOldVisitSelect={setSelectedOldVisit}
             />
 
-            <NewVisitEditorSection darkMode={darkMode} t={t} saving={saving} onSave={saveVisit}>
+            <NewVisitEditorSection darkMode={darkMode} t={t} saving={saving} onSave={() => saveVisit(false)} onSaveWithBill={() => saveVisit(true)} billLabel={language === "ar" ? "حفظ الزيارة وإنشاء فاتورة" : "Save visit & create bill"}>
+              <section className={`grid gap-4 rounded-2xl border p-4 sm:grid-cols-2 ${darkMode ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
+                <label className="text-sm font-semibold">{language === "ar" ? "سبب الزيارة" : "Visit reason"}
+                  <select required className="mt-2 w-full rounded-xl border border-slate-300 bg-transparent p-3" value={reason} onChange={(event) => setReason(event.target.value)}>
+                    <option value="">{language === "ar" ? "اختر السبب" : "Select reason"}</option>
+                    {[["examination", "Examination", "كشف"], ["vaccination", "Vaccination", "تطعيم"], ["surgery", "Surgery", "جراحة"], ["grooming", "Grooming", "تجميل"], ["followup", "Follow-up", "متابعة"]].map(([value, en, ar]) => <option key={value} value={value}>{language === "ar" ? ar : en}</option>)}
+                  </select>
+                </label>
+                <label className="text-sm font-semibold">{language === "ar" ? "الطبيب الذي سيجري الزيارة" : "Performing doctor"}
+                  <input className="mt-2 w-full rounded-xl border border-slate-300 bg-transparent p-3" value={performingDoctor} onChange={(event) => setPerformingDoctor(event.target.value)} placeholder={language === "ar" ? "اسم الطبيب" : "Doctor name"} />
+                </label>
+                {reason === "grooming" && <label className="text-sm font-semibold sm:col-span-2">{language === "ar" ? "نوع التجميل" : "Grooming type"}
+                  <input className="mt-2 w-full rounded-xl border border-slate-300 bg-transparent p-3" value={groomingType} onChange={(event) => setGroomingType(event.target.value)} placeholder={language === "ar" ? "مثال: استحمام، قص شعر، قص أظافر" : "e.g. bath, haircut, nail trim"} />
+                </label>}
+              </section>
+              <section className={`space-y-4 rounded-2xl border p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-bold">{language === "ar" ? "الأعراض" : "Symptoms"}</h3>
+                  <button type="button" onClick={() => setSymptoms((current) => [...current, { id: crypto.randomUUID(), name: "", days: "" }])} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-sm font-semibold text-cyan-700 dark:text-cyan-300">{language === "ar" ? "+ إضافة عرض" : "+ Add symptom"}</button>
+                </div>
+                {symptoms.map((symptom) => <div key={symptom.id} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_40px]">
+                  <input className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2.5 text-sm dark:border-slate-700" value={symptom.name} onChange={(event) => setSymptoms((current) => current.map((item) => item.id === symptom.id ? { ...item, name: event.target.value } : item))} placeholder={language === "ar" ? "العرض" : "Symptom"} />
+                  <label className="text-xs text-slate-500">{language === "ar" ? "استمر منذ (أيام)" : "Persisted (days)"}<input type="number" min="0" step="1" className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2.5 text-sm dark:border-slate-700" value={symptom.days} onChange={(event) => setSymptoms((current) => current.map((item) => item.id === symptom.id ? { ...item, days: event.target.value } : item))} /></label>
+                  <button type="button" onClick={() => setSymptoms((current) => current.filter((item) => item.id !== symptom.id))} aria-label={language === "ar" ? "حذف العرض" : "Remove symptom"} className="self-end rounded-lg border border-rose-400/30 px-2 py-2 text-rose-500">×</button>
+                </div>)}
+              </section>
               <NewVisitClinicalFields
                 darkMode={darkMode}
                 t={t}
-                reason={reason}
-                setReason={setReason}
                 examStatus={examStatus}
                 setExamStatus={setExamStatus}
                 examination={examination}
@@ -883,6 +1087,7 @@ export default function NewVisitPage() {
                 setDiagnosis={setDiagnosis}
               />
               <NewVisitTreatmentFields
+                clinicId={clinicId}
                 language={language}
                 darkMode={darkMode}
                 t={t}
@@ -898,6 +1103,7 @@ export default function NewVisitPage() {
                 filteredMedications={filteredMedications}
                 addMedication={addMedication}
                 medications={medications}
+                setMessage={setMessage}
                 medicationDrafts={medicationDrafts}
                 removeMedication={removeMedication}
                 treatment={treatment}
@@ -913,6 +1119,48 @@ export default function NewVisitPage() {
                 setFollowUp={setFollowUp}
                 followUpDetails={followUpDetails}
                 setFollowUpDetails={setFollowUpDetails}
+              />
+              <section className={`space-y-4 rounded-2xl border p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
+                <div>
+                  <h3 className="font-bold">{language === "ar" ? "خدمات الزيارة" : "Visit services"}</h3>
+                  <p className="mt-1 text-xs text-slate-500">{language === "ar" ? "أضف الخدمات المنفذة مع الكمية والسعر." : "Add performed services with quantity and price."}</p>
+                </div>
+                <div className="space-y-2">
+                  {visitServices.map((service) => <div key={service.id} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_100px_130px_40px]">
+                    <input className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2.5 text-sm dark:border-slate-700" value={service.name} onChange={(event) => setVisitServices((current) => current.map((item) => item.id === service.id ? { ...item, name: event.target.value } : item))} placeholder={language === "ar" ? "اسم الخدمة، مثل قص الشعر" : "Service, e.g. hair trimming"} />
+                    <input type="number" min="1" step="1" className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2.5 text-sm dark:border-slate-700" value={service.quantity} onChange={(event) => setVisitServices((current) => current.map((item) => item.id === service.id ? { ...item, quantity: Number(event.target.value) || 1 } : item))} aria-label={language === "ar" ? "الكمية" : "Quantity"} />
+                    <input type="number" min="0" step="0.01" className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2.5 text-sm dark:border-slate-700" value={service.price} onChange={(event) => setVisitServices((current) => current.map((item) => item.id === service.id ? { ...item, price: Number(event.target.value) || 0 } : item))} aria-label={language === "ar" ? "السعر" : "Price"} />
+                    <button type="button" onClick={() => setVisitServices((current) => current.filter((item) => item.id !== service.id))} aria-label={language === "ar" ? "حذف الخدمة" : "Remove service"} className="rounded-lg border border-rose-400/30 px-2 py-2 text-rose-500">×</button>
+                  </div>)}
+                </div>
+                <button type="button" onClick={() => setVisitServices((current) => [...current, { id: crypto.randomUUID(), name: "", quantity: 1, price: 0 }])} className="w-full rounded-lg border border-dashed border-cyan-500/40 px-4 py-3 text-sm font-semibold text-cyan-700 dark:text-cyan-300">{language === "ar" ? "+ إضافة خدمة" : "+ Add service"}</button>
+                <div className={`ml-auto max-w-sm space-y-2 border-t pt-3 text-sm ${darkMode ? "border-slate-700" : "border-slate-200"}`}>
+                  {consultationFee > 0 && <div className="flex justify-between"><span>{language === "ar" ? "الكشف" : "Consultation"}</span><span>{consultationFee.toFixed(2)} EGP</span></div>}
+                  <div className="flex justify-between"><span>{language === "ar" ? "الخدمات" : "Services"}</span><span>{visitServiceTotal.toFixed(2)} EGP</span></div>
+                  <div className="flex justify-between border-t pt-2 text-base font-bold text-cyan-700 dark:border-slate-700 dark:text-cyan-300"><span>{language === "ar" ? "الإجمالي" : "Total"}</span><span>{visitBillTotal.toFixed(2)} EGP</span></div>
+                </div>
+              </section>
+              <section className={`space-y-3 rounded-2xl border p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
+                <div><h3 className="font-bold">{language === "ar" ? "التحاليل والأشعة المرفقة" : "Analysis and X-ray attachments"}</h3><p className="mt-1 text-xs text-slate-500">{language === "ar" ? "PDF أو صور، بحد أقصى 10 ميجابايت لكل ملف." : "PDF or images, up to 10 MB per file."}</p></div>
+                <input type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => {
+                  const selected = Array.from(event.target.files || []);
+                  const oversized = selected.some((file) => file.size > 10 * 1024 * 1024);
+                  if (oversized) { setMessage(language === "ar" ? "حجم الملف يجب ألا يتجاوز 10 ميجابايت" : "Each file must be 10 MB or smaller"); event.target.value = ""; return; }
+                  setAttachments((current) => [...current, ...selected.map((file) => ({ id: crypto.randomUUID(), file, category: /x.?ray|radiograph/i.test(file.name) ? "xray" as const : "analysis" as const }))]);
+                  event.target.value = "";
+                }} className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-600 file:px-4 file:py-2 file:font-semibold file:text-white" />
+                {attachments.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate">{item.file.name}</span>
+                  <select value={item.category} onChange={(event) => setAttachments((current) => current.map((row) => row.id === item.id ? { ...row, category: event.target.value as VisitAttachmentDraft["category"] } : row))} className="rounded-lg border border-slate-300 bg-transparent px-2 py-1.5 dark:border-slate-700"><option value="analysis">{language === "ar" ? "تحليل" : "Analysis"}</option><option value="xray">{language === "ar" ? "أشعة" : "X-ray"}</option></select>
+                  <button type="button" onClick={() => setAttachments((current) => current.filter((row) => row.id !== item.id))} className="px-2 py-1 text-rose-500" aria-label={language === "ar" ? "إزالة المرفق" : "Remove attachment"}>×</button>
+                </div>)}
+              </section>
+              <NewVisitMedicalRecordsFields
+                value={medicalRecordDraft}
+                onChange={setMedicalRecordDraft}
+                language={language}
+                darkMode={darkMode}
+                visitReason={reason}
               />
             </NewVisitEditorSection>
 

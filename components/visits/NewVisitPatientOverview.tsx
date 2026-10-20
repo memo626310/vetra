@@ -44,21 +44,16 @@ export default function NewVisitPatientOverview({
   return (<>
             {/* PATIENT HEADER */}
             <section
-              className={`overflow-hidden rounded-3xl border shadow-sm transition-all duration-300 ${
+              className={`overflow-hidden rounded-2xl border shadow-sm transition-colors duration-200 ${
                 darkMode
-                  ? "border-slate-800 bg-slate-900"
+                  ? "border-white/[0.07] bg-[#181B21]"
                   : "border-slate-200 bg-white"
               }`}
             >
               <div className="flex flex-col gap-5 p-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-3xl text-white shadow-lg shadow-blue-500/20">
-                    {petDetails.species?.toLowerCase() === "cat"
-                      ? "🐱"
-                      : petDetails.species?.toLowerCase() ===
-                        "dog"
-                      ? "🐶"
-                      : "🐾"}
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10 text-sm font-bold text-cyan-700 dark:text-cyan-300">
+                    {petDetails.species?.slice(0, 1).toUpperCase() || "P"}
                   </div>
 
                   <div>
@@ -129,15 +124,15 @@ export default function NewVisitPatientOverview({
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4">
                 <div
-                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  className={`min-w-[148px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                     darkMode
                       ? "border-slate-800 bg-slate-900"
                       : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="mb-3 text-xl">👤</div>
+                  <div className="mb-1 flex h-7 w-7 items-center justify-center rounded-md bg-cyan-500/10 text-xs font-bold text-cyan-700 dark:text-cyan-300">O</div>
 
                   <div
                     className={`text-xs ${
@@ -171,13 +166,13 @@ export default function NewVisitPatientOverview({
                 </div>
 
                 <div
-                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  className={`min-w-[148px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                     darkMode
                       ? "border-slate-800 bg-slate-900"
                       : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="mb-3 text-xl">🐾</div>
+                  <div className="mb-1 flex h-7 w-7 items-center justify-center rounded-md bg-cyan-500/10 text-xs font-bold text-cyan-700 dark:text-cyan-300">P</div>
 
                   <div
                     className={`text-xs ${
@@ -199,13 +194,13 @@ export default function NewVisitPatientOverview({
                 </div>
 
                 <div
-                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  className={`min-w-[148px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                     darkMode
                       ? "border-slate-800 bg-slate-900"
                       : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="mb-3 text-xl">🎂</div>
+                  <div className="mb-1 flex h-7 w-7 items-center justify-center rounded-md bg-cyan-500/10 text-xs font-bold text-cyan-700 dark:text-cyan-300">A</div>
 
                   <div
                     className={`text-xs ${
@@ -247,13 +242,13 @@ export default function NewVisitPatientOverview({
                 </div>
 
                 <div
-                  className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                  className={`min-w-[148px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                     darkMode
                       ? "border-slate-800 bg-slate-900"
                       : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="mb-3 text-xl">🆔</div>
+                  <div className="mb-1 text-xs font-bold uppercase text-cyan-600 sm:mb-3">ID</div>
 
                   <div
                     className={`text-xs ${
@@ -285,7 +280,7 @@ export default function NewVisitPatientOverview({
               }`}
             >
               <div className="flex items-start gap-3">
-                <div className="text-xl">⚠️</div>
+                <div className="text-xs font-bold uppercase">!</div>
 
                 <div>
                   <h3
@@ -312,16 +307,16 @@ export default function NewVisitPatientOverview({
             </section>
 
             {/* LAST VISIT SUMMARY */}
-            <section className="grid gap-4 lg:grid-cols-3">
+            <section className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3">
               <div
-                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                className={`min-w-[210px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                   darkMode
                     ? "border-slate-800 bg-slate-900"
                     : "border-slate-200 bg-white"
                 }`}
               >
-                <div className="mb-3 flex items-center gap-2">
-                  <span>📅</span>
+                <div className="mb-1 flex items-center gap-2 sm:mb-3">
+                  <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">DATE</span>
 
                   <h3
                     className={`font-bold ${
@@ -349,14 +344,14 @@ export default function NewVisitPatientOverview({
               </div>
 
               <div
-                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                className={`min-w-[210px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                   darkMode
                     ? "border-slate-800 bg-slate-900"
                     : "border-slate-200 bg-white"
                 }`}
               >
-                <div className="mb-3 flex items-center gap-2">
-                  <span>🩺</span>
+                <div className="mb-1 flex items-center gap-2 sm:mb-3">
+                  <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">DX</span>
 
                   <h3
                     className={`font-bold ${
@@ -380,14 +375,14 @@ export default function NewVisitPatientOverview({
               </div>
 
               <div
-                className={`rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                className={`min-w-[210px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
                   darkMode
                     ? "border-slate-800 bg-slate-900"
                     : "border-slate-200 bg-white"
                 }`}
               >
-                <div className="mb-3 flex items-center gap-2">
-                  <span>💊</span>
+                <div className="mb-1 flex items-center gap-2 sm:mb-3">
+                  <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">RX</span>
 
                   <h3
                     className={`font-bold ${
@@ -419,7 +414,7 @@ export default function NewVisitPatientOverview({
                     darkMode ? "text-white" : "text-slate-900"
                   }`}
                 >
-                  📈 {t.trends}
+                  {t.trends}
                 </h2>
 
                 <p
@@ -433,10 +428,10 @@ export default function NewVisitPatientOverview({
                 </p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-4">
                 <VitalCard
                   title={t.weight}
-                  icon="⚖️"
+                  icon="KG"
                   latest={latestWeight}
                   previous={previousWeight}
                   unit={t.kg}
@@ -444,11 +439,12 @@ export default function NewVisitPatientOverview({
                   values={vitalData.weight}
                   onPointClick={setSelectedOldVisit}
                   darkMode={darkMode}
+                  compact
                 />
 
                 <VitalCard
                   title={t.temperature}
-                  icon="🌡️"
+                  icon="°C"
                   latest={latestTemperature}
                   previous={previousTemperature}
                   unit={t.celsius}
@@ -456,11 +452,12 @@ export default function NewVisitPatientOverview({
                   values={vitalData.temperature}
                   onPointClick={setSelectedOldVisit}
                   darkMode={darkMode}
+                  compact
                 />
 
                 <VitalCard
                   title={t.heartRate}
-                  icon="❤️"
+                  icon="HR"
                   latest={latestHeartRate}
                   previous={previousHeartRate}
                   unit={t.bpm}
@@ -468,11 +465,12 @@ export default function NewVisitPatientOverview({
                   values={vitalData.heartRate}
                   onPointClick={setSelectedOldVisit}
                   darkMode={darkMode}
+                  compact
                 />
 
                 <VitalCard
                   title={t.respiratoryRate}
-                  icon="🫁"
+                  icon="RR"
                   latest={latestRespiratoryRate}
                   previous={previousRespiratoryRate}
                   unit={t.rpm}
@@ -480,6 +478,7 @@ export default function NewVisitPatientOverview({
                   values={vitalData.respiratoryRate}
                   onPointClick={setSelectedOldVisit}
                   darkMode={darkMode}
+                  compact
                 />
               </div>
             </section>
