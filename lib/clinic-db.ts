@@ -30,9 +30,27 @@ let clinicDbPromise: Promise<SupabaseClient> | null = null;
 let clinicTokenPromise: Promise<CachedClinicToken> | null = null;
 
 export async function getClinicContext(): Promise<ClinicContext> {
-  const { data, error } = await vetraCore.rpc("get_my_clinic_context");
+  let result = await vetraCore.rpc("get_my_clinic_context");
+
+  // A stale browser session can surface as a generic fetch failure from the
+  // Supabase client. Refresh once before giving up so uploads and visit saves
+  // recover from an expired access token without forcing a full page reload.
+  if (result.error && /failed to fetch|fetch failed|jwt|token|session/i.test(result.error.message)) {
+    const { error: refreshError } = await vetraCore.auth.refreshSession();
+    if (!refreshError) {
+      result = await vetraCore.rpc("get_my_clinic_context");
+    }
+  }
+
+  const { data, error } = result;
 
   if (error) {
+    if (/failed to fetch|fetch failed/i.test(error.message)) {
+      throw new Error(
+        "Unable to connect to VETRA Core. Check your internet connection and try again."
+      );
+    }
+
     throw new Error(
       `Failed to load VETRA clinic context: ${error.message}`
     );
