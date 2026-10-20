@@ -834,7 +834,7 @@ export default function ClientPetProfilePage() {
 
     if (savedLanguage === "ar" || savedLanguage === "en") setLang(savedLanguage);
 
-    setDark(savedTheme === "dark");
+    setDark(savedTheme !== "light");
 
   }, []);
 

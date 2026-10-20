@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
+import { readVetraTheme, writeVetraThemeMode } from "@/lib/theme";
 
 type Pet = {
   id: string;
@@ -89,18 +90,14 @@ export default function PetPage() {
   // =========================
 
   useEffect(() => {
-    const savedMode = localStorage.getItem("vetra-dark-mode");
-
-    if (savedMode === "true") {
-      setDarkMode(true);
-    }
+    setDarkMode(readVetraTheme() !== "light");
   }, []);
 
   function toggleDarkMode() {
     const nextMode = !darkMode;
 
     setDarkMode(nextMode);
-    localStorage.setItem("vetra-dark-mode", String(nextMode));
+    writeVetraThemeMode(nextMode);
   }
 
   // =========================

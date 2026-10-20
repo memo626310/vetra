@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb } from "@/lib/clinic-db";
 import PushNotificationsButton from "@/components/PushNotificationsButton";
+import { writeVetraTheme } from "@/lib/theme";
 // VETRA_DASHBOARD_CURRENT_DESIGN_POLISH_V1
 
 type Language = "ar" | "en";
@@ -284,10 +285,7 @@ export default function Home() {
   useEffect(() => {
     if (!ready) return;
 
-    localStorage.setItem(
-      "vetra-theme",
-      theme
-    );
+    writeVetraTheme(theme);
 
     localStorage.setItem(
       "vetra-language",
@@ -351,8 +349,22 @@ export default function Home() {
         return;
       }
 
+      let displayContext = context;
+      try {
+        const db = await getClinicDb();
+        const { data: clinicProfile } = await db.from("clinic_profile_settings")
+          .select("doctor_name")
+          .eq("clinic_id", context.clinic_id)
+          .maybeSingle();
+        if (clinicProfile?.doctor_name) {
+          displayContext = { ...context, doctor_name: clinicProfile.doctor_name };
+        }
+      } catch {
+        // Keep the VETRA account name if the clinic profile is not configured yet.
+      }
+
       if (mounted) {
-        setClinicContext(context);
+        setClinicContext(displayContext);
         setClinicLoading(false);
       }
     }
@@ -1009,16 +1021,19 @@ export default function Home() {
                 ["📦", t.todayStats[2], "text-amber-400", "bg-amber-500/10"],
                 ["⚠️", t.todayStats[3], "text-rose-400", "bg-rose-500/10"],
               ].map(([icon, label, accent, iconBg], index) => (
-                <div
+                <button
                   key={label}
-                  className={`min-h-[132px] rounded-2xl border p-4 sm:p-5 ${darkMode ? "border-white/[0.06] bg-[#181B21]" : "border-slate-100 bg-white shadow-sm"}`}
+                  type="button"
+                  onClick={() => goTo(["/appointments", "/vaccinations", "/inventory/products?stock=low", "/inventory/products?stock=out"][index])}
+                  aria-label={`${label}: ${todayStats[index] ?? "—"}`}
+                  className={`group min-h-[132px] rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-500/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 sm:p-5 ${darkMode ? "border-white/[0.06] bg-[#181B21]" : "border-slate-100 bg-white shadow-sm"}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <span className={`flex h-10 w-10 items-center justify-center rounded-xl text-xl ${iconBg}`}>{icon}</span>
                     <span className={`text-3xl font-black ${accent}`}>{todayStats[index] ?? "—"}</span>
                   </div>
-                  <p className={`mt-4 text-sm font-bold ${darkMode ? "text-slate-300" : "text-slate-600"}`}>{label}</p>
-                </div>
+                  <div className="mt-4 flex items-center justify-between gap-2"><p className={`text-sm font-bold ${darkMode ? "text-slate-300" : "text-slate-600"}`}>{label}</p><span aria-hidden="true" className="text-xs text-slate-400 transition group-hover:translate-x-0.5">{isArabic ? "←" : "→"}</span></div>
+                </button>
               ))}
             </div>
           </section>

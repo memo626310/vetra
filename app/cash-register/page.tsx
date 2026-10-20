@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 type Lang = "ar" | "en";
 type AccountType = "cash" | "bank" | "wallet" | "card" | "other";
@@ -105,7 +106,7 @@ export default function CashRegisterPage() {
     document.documentElement.lang = isAr ? "ar" : "en";
     document.documentElement.classList.toggle("dark", dark);
     window.localStorage.setItem("vetra-language", lang);
-    window.localStorage.setItem("vetra-theme", dark ? "dark" : "light");
+    writeVetraThemeMode(dark);
   }, [ready, isAr, lang, dark]);
 
   const loadData = useCallback(async () => {

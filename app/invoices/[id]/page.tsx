@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 type Client = {
   id: string;
@@ -117,6 +118,7 @@ export default function InvoiceDetailsPage() {
 
   const [language, setLanguage] = useState<"en" | "ar">("en");
   const [darkMode, setDarkMode] = useState(false);
+  const [themeReady, setThemeReady] = useState(false);
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [items, setItems] = useState<InvoiceItem[]>([]);
@@ -141,9 +143,10 @@ export default function InvoiceDetailsPage() {
       setLanguage(savedLanguage);
     }
 
-    if (savedTheme === "dark") {
+    if (savedTheme !== "light") {
       setDarkMode(true);
     }
+    setThemeReady(true);
   }, []);
 
   useEffect(() => {
@@ -152,13 +155,14 @@ export default function InvoiceDetailsPage() {
   }, [invoiceId]);
 
   useEffect(() => {
+    if (!themeReady) return;
     document.documentElement.dir = isAr ? "rtl" : "ltr";
     document.documentElement.lang = isAr ? "ar" : "en";
     document.documentElement.classList.toggle("dark", darkMode);
 
     window.localStorage.setItem("vetra-language", language);
-    window.localStorage.setItem("vetra-theme", darkMode ? "dark" : "light");
-  }, [isAr, language, darkMode]);
+    writeVetraThemeMode(darkMode);
+  }, [isAr, language, darkMode, themeReady]);
 
   async function loadInvoice() {
     setLoading(true);
@@ -1018,6 +1022,15 @@ export default function InvoiceDetailsPage() {
             )}
           </div>
         </section>
+        <div className="mt-5 flex justify-end print:hidden">
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard")}
+            className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-bold text-slate-950 shadow-sm transition hover:bg-cyan-400"
+          >
+            {isAr ? "إنهاء والعودة للداشبورد" : "Finish and return to dashboard"}
+          </button>
+        </div>
       </div>
 
       {showCancel && (

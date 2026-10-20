@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 type Language = "ar" | "en";
 type RangeKey = "7" | "30" | "90" | "365" | "all";
@@ -444,7 +445,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (!ready) return;
-    localStorage.setItem("vetra-theme", darkMode ? "dark" : "light");
+    writeVetraThemeMode(darkMode);
     localStorage.setItem("vetra-language", language);
   }, [darkMode, language, ready]);
 

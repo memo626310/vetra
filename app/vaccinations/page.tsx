@@ -7,6 +7,7 @@ import { vetraCore } from "@/lib/vetra-core";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
 import { loadClinicProfile } from "@/lib/clinic-profile";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 type Lang = "ar" | "en";
 type Status = "not_due" | "current" | "grace" | "overdue" | "due" | "no_repeat";
@@ -730,6 +731,7 @@ export default function ClinicVaccinationsPage() {
 
   const [lang, setLang] = useState<Lang>("ar");
   const [dark, setDark] = useState(true);
+  const [themeReady, setThemeReady] = useState(false);
 
   const [pets, setPets] = useState<Pet[]>([]);
   const [vaccines, setVaccines] = useState<Vaccine[]>([]);
@@ -810,14 +812,13 @@ export default function ClinicVaccinationsPage() {
     }
 
     setDark(savedTheme !== "light");
+    setThemeReady(true);
   }, []);
 
   useEffect(() => {
+    if (!themeReady) return;
     localStorage.setItem("vetra-language", lang);
-    localStorage.setItem(
-      "vetra-theme",
-      dark ? "dark" : "light"
-    );
+    writeVetraThemeMode(dark);
 
     document.documentElement.dir =
       lang === "ar" ? "rtl" : "ltr";
@@ -827,7 +828,7 @@ export default function ClinicVaccinationsPage() {
       "dark",
       dark
     );
-  }, [lang, dark]);
+  }, [lang, dark, themeReady]);
 
   async function loadData() {
     setLoading(true);

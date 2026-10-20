@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { PushSetupError, resolveClinicPushContext } from "@/lib/push-server";
+import { getCoreAdminClient, PushSetupError, resolveClinicPushContext } from "@/lib/push-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,13 +12,15 @@ function errorResponse(error: unknown) {
   if (error instanceof PushSetupError) {
     return Response.json({ error: error.message }, { status: error.status });
   }
+  const message = error instanceof Error ? error.message : String(error);
   console.error("VISIT ATTACHMENT API ERROR:", error);
-  return Response.json({ error: "تعذر رفع المرفق الطبي." }, { status: 500 });
+  return Response.json({ error: `تعذر رفع المرفق الطبي: ${message}` }, { status: 500 });
 }
 
 export async function POST(request: Request) {
   let uploadedPath = "";
   let clinicDb: Awaited<ReturnType<typeof resolveClinicPushContext>>["clinicDb"] | null = null;
+  let admin: ReturnType<typeof getCoreAdminClient> | null = null;
   try {
     const form = await request.formData();
     const file = form.get("file");
@@ -37,9 +39,10 @@ export async function POST(request: Request) {
     const context = await resolveClinicPushContext(request);
     clinicDb = context.clinicDb;
     const { clinicId } = context;
+    admin = getCoreAdminClient();
     const fileName = file.name.replace(/[^\w.-]+/g, "_");
     uploadedPath = `${clinicId}/${petId}/${visitId}/${randomUUID()}-${fileName}`;
-    const { error: uploadError } = await clinicDb.storage.from(bucket).upload(uploadedPath, new Uint8Array(await file.arrayBuffer()), {
+    const { error: uploadError } = await admin.storage.from(bucket).upload(uploadedPath, new Uint8Array(await file.arrayBuffer()), {
       contentType: file.type,
       upsert: false,
     });
@@ -62,11 +65,30 @@ export async function POST(request: Request) {
   } catch (error) {
     if (uploadedPath) {
       try {
-        await clinicDb?.storage.from(bucket).remove([uploadedPath]);
+        await admin?.storage.from(bucket).remove([uploadedPath]);
       } catch {
         // Preserve the original upload error.
       }
     }
+    return errorResponse(error);
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const attachmentId = new URL(request.url).searchParams.get("id");
+    if (!attachmentId) return Response.json({ error: "معرّف المرفق مطلوب." }, { status: 400 });
+    const { clinicId, clinicDb } = await resolveClinicPushContext(request);
+    const { data: attachment, error } = await clinicDb.from("visit_attachments")
+      .select("storage_path")
+      .eq("id", attachmentId)
+      .eq("clinic_id", clinicId)
+      .maybeSingle();
+    if (error || !attachment) return Response.json({ error: "المرفق غير موجود أو غير متاح." }, { status: 404 });
+    const { data, error: signedError } = await getCoreAdminClient().storage.from(bucket).createSignedUrl(attachment.storage_path, 300);
+    if (signedError || !data?.signedUrl) throw signedError || new Error("Could not create a secure attachment link.");
+    return Response.json({ url: data.signedUrl }, { headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) {
     return errorResponse(error);
   }
 }

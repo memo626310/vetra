@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 type Movement = {
   id: string;
@@ -67,6 +68,7 @@ export default function InventoryMovementsPage() {
 
   const [language, setLanguage] = useState<"ar" | "en">("ar");
   const [darkMode, setDarkMode] = useState(true);
+  const [themeReady, setThemeReady] = useState(false);
 
   const [movements, setMovements] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,16 +88,18 @@ export default function InventoryMovementsPage() {
     }
 
     setDarkMode(savedTheme !== "light");
+    setThemeReady(true);
   }, []);
 
   useEffect(() => {
+    if (!themeReady) return;
     document.documentElement.dir = isAr ? "rtl" : "ltr";
     document.documentElement.lang = isAr ? "ar" : "en";
     document.documentElement.classList.toggle("dark", darkMode);
 
     window.localStorage.setItem("vetra-language", language);
-    window.localStorage.setItem("vetra-theme", darkMode ? "dark" : "light");
-  }, [isAr, language, darkMode]);
+    writeVetraThemeMode(darkMode);
+  }, [isAr, language, darkMode, themeReady]);
 
   async function loadMovements() {
     setLoading(true);

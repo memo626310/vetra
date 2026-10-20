@@ -7,6 +7,7 @@ import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
 import { loadClinicProfile } from "@/lib/clinic-profile";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 type Language = "ar" | "en";
 type Status =
@@ -342,8 +343,19 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     if (!ready) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new") !== "1") return;
+    setClientId(params.get("client") || "");
+    setPetId(params.get("pet") || "");
+    setSelectedAppointment(null);
+    setModal("appointment");
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready) return;
     localStorage.setItem("vetra-language", language);
-    localStorage.setItem("vetra-theme", darkMode ? "dark" : "light");
+    writeVetraThemeMode(darkMode);
   }, [language, darkMode, ready]);
 
   async function loadData() {
@@ -527,6 +539,7 @@ export default function AppointmentsPage() {
     setMessage("");
 
     try {
+      const context = await getClinicContext();
       const db = await getClinicDb();
       const patch: Record<string, unknown> = {
         status,
@@ -622,6 +635,7 @@ export default function AppointmentsPage() {
     setMessage("");
 
     try {
+      const context = await getClinicContext();
       const db = await getClinicDb();
       const [h, m] = startTime.split(":").map(Number);
       const total = h * 60 + m + Number(duration || 30);
@@ -630,6 +644,7 @@ export default function AppointmentsPage() {
       const endTime = `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}:00`;
 
       const payload = {
+        clinic_id: context.clinic_id,
         client_id: clientId,
         pet_id: petId,
         appointment_date: appointmentDate,
@@ -668,8 +683,14 @@ export default function AppointmentsPage() {
       setMessage(t.appointmentSaved);
       await loadData();
     } catch (e) {
-      console.error("APPOINTMENT SAVE ERROR:", e);
-      setError(e instanceof Error ? e.message : t.error);
+      const dbError = e as { message?: string; code?: string; details?: string; hint?: string };
+      console.error("APPOINTMENT SAVE ERROR:", {
+        message: dbError?.message,
+        code: dbError?.code,
+        details: dbError?.details,
+        hint: dbError?.hint,
+      });
+      setError(dbError?.message || t.error);
     } finally {
       setSavingAppointment(false);
     }

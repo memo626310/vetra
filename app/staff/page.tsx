@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import Link from "next/link";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 type Language = "ar" | "en";
 type StaffType = "doctor" | "assistant" | "front_desk";
@@ -236,7 +237,7 @@ export default function StaffPage() {
         <div className="flex items-center gap-2">
           <Link href="/dashboard" className={`rounded-lg border px-3 py-2 text-sm font-semibold ${input}`}>{t.back}</Link>
           <button type="button" onClick={() => setLanguage(ar ? "en" : "ar")} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${input}`}>{ar ? "English" : "العربية"}</button>
-          <button type="button" onClick={() => { const next = !dark; setDark(next); localStorage.setItem("vetra-theme", next ? "dark" : "light"); }} aria-label={dark ? "Light mode" : "Dark mode"} className={`h-10 w-10 rounded-lg border ${input}`}><span className={`mx-auto block h-4 w-4 rounded-full border-2 ${dark ? "border-amber-400 bg-amber-400" : "border-slate-500"}`} /></button>
+          <button type="button" onClick={() => { const next = !dark; setDark(next); writeVetraThemeMode(next); }} aria-label={dark ? "Light mode" : "Dark mode"} className={`h-10 w-10 rounded-lg border ${input}`}><span className={`mx-auto block h-4 w-4 rounded-full border-2 ${dark ? "border-amber-400 bg-amber-400" : "border-slate-500"}`} /></button>
         </div>
       </header>
 

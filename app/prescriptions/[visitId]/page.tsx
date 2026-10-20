@@ -327,7 +327,7 @@ export default function PrescriptionPage() {
       setVisit(visitData as Visit);
       setPet(petData as Pet);
       setClient(clientData as Client);
-      setClinic({ ...context, ...profile } as ClinicContext);
+      setClinic({ ...context, ...profile, doctor_name: profile?.doctor_name || context.doctor_name } as ClinicContext);
       setVisitMedications(rows);
       setMedications(medicationMap);
       setVaccinations((vaccinationData || []) as Vaccination[]);
@@ -523,6 +523,13 @@ export default function PrescriptionPage() {
           <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
             <button
               type="button"
+              onClick={() => router.push("/dashboard")}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 sm:w-auto"
+            >
+              {"Dashboard / الداشبورد"}
+            </button>
+            <button
+              type="button"
               onClick={handleDownloadPdf}
               disabled={pdfPreparing || !pdfBlob}
               className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
@@ -559,24 +566,32 @@ export default function PrescriptionPage() {
             className="prescription-sheet relative mx-auto w-full max-w-[794px] overflow-hidden bg-white px-4 py-6 text-slate-900 shadow-xl sm:px-10 sm:py-9"
             dir="rtl"
           >
-            <img src="/vetra-prescription-template.png" alt="" className="rx-print-template absolute inset-0 hidden h-full w-full object-fill" />
-            <div className="rx-print-content absolute inset-0 hidden text-slate-950">
-              {(clinic?.logo_url || (clinic?.display_name && clinic.display_name !== clinic.clinic_name) || clinic?.website_url) && <div className="absolute left-[8%] top-[8%] h-[21%] w-[35%] bg-white" />}
-              {clinic?.logo_url && <img src={clinic.logo_url} crossOrigin="anonymous" alt="" className="absolute left-[13%] top-[10%] h-[9%] w-[25%] object-contain" />}
-              <div className="absolute left-[10%] top-[20%] w-[31%] truncate text-center text-[16px] font-bold">{clinic?.display_name || clinic?.clinic_name || "VETRA Veterinary Clinic"}</div>
-              {clinic?.website_url && <div className="absolute left-[10%] top-[24%] w-[31%] truncate text-center text-[10px] text-slate-600">{clinic.website_url}</div>}
-              <div className="absolute left-[60%] top-[9.1%] w-[35%] truncate text-[14px] font-bold">{pet.name}</div>
-              <div className="absolute left-[60%] top-[12.4%] w-[35%] truncate text-[12px] font-semibold">{visit.examination || visit.reason || "—"}</div>
-              <div className="absolute left-[60%] top-[15.7%] w-[35%] truncate text-[12px] font-semibold">{visit.temperature != null ? `${formatNumber(visit.temperature, 1)} °C` : "—"}</div>
-              <div className="absolute left-[60%] top-[19.1%] w-[35%] truncate text-[12px] font-semibold">{visit.diagnosis || "—"}</div>
-              <div className="absolute left-[60%] top-[22.4%] w-[35%] truncate text-[12px] font-semibold">{followUpData.followUp || "—"}</div>
-              <div className="absolute left-[8%] right-[8%] top-[29%] max-h-[53%] overflow-hidden">
-                <div className="mb-3 border-b border-slate-200 pb-2 text-sm font-black tracking-wide">PRESCRIPTION / العلاج</div>
-                {medicationRows.length ? <div className="space-y-2">{medicationRows.map(({ row, medication }, index) => <div key={row.id} className="grid grid-cols-[24px_1fr] gap-2 border-b border-slate-100 pb-2 text-[11px] leading-5">
-                  <span className="font-black text-blue-700">{index + 1}.</span><div><div className="font-bold">{medication?.name || "Medication"}</div><div>{[row.calculated_dose != null ? `${formatNumber(row.calculated_dose)} ${row.calculated_dose_unit || ""}` : "", row.calculated_volume != null ? `${formatNumber(row.calculated_volume)} ${row.volume_unit || "mL"}` : "", row.route, row.frequency, row.duration_days != null ? `${row.duration_days} days` : ""].filter(Boolean).join(" · ")}</div>{row.instructions && <div className="text-slate-600">{row.instructions}</div>}</div>
-                </div>)}</div> : <div className="whitespace-pre-wrap text-xs leading-6">{visit.treatment || "—"}</div>}
-                {vaccinations.length > 0 && <div className="mt-3 text-[11px] leading-5"><b>Vaccination / التطعيمات:</b> {vaccinations.map((item) => item.vaccine_name).filter(Boolean).join("، ")}</div>}
-              </div>
+            <div className="rx-print-content relative hidden min-h-[1047px] bg-white px-12 py-10 text-slate-950">
+              <header className="flex items-start justify-between gap-6 border-b-2 border-cyan-700 pb-5">
+                <div className="flex min-w-0 items-center gap-4">
+                  {clinic?.logo_url && <img src={clinic.logo_url} crossOrigin="anonymous" alt="" className="h-20 w-20 shrink-0 object-contain" />}
+                  <div className="min-w-0"><h1 className="break-words text-2xl font-black">{clinic?.display_name || clinic?.clinic_name || "VETRA Veterinary Clinic"}</h1><p className="mt-1 text-xs text-slate-500">VETERINARY PRESCRIPTION</p>{clinic?.website_url && <p className="mt-1 break-all text-xs text-slate-500">{clinic.website_url}</p>}</div>
+                </div>
+                <div className="shrink-0 text-left text-xs leading-6"><b>{formatDate(visit.visit_date)}</b><br />{formatTime(visit.visit_date)}<br />{clinic?.doctor_name || "Veterinarian"}</div>
+              </header>
+              <section className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3 border-b border-slate-200 pb-5 text-sm">
+                <div><span className="text-slate-500">Pet / الحيوان</span><div className="mt-1 font-bold">{pet.name}</div></div>
+                <div><span className="text-slate-500">Owner / المالك</span><div className="mt-1 font-bold">{client.name}</div></div>
+                <div><span className="text-slate-500">Clinical signs / العلامات</span><div className="mt-1 whitespace-pre-wrap font-semibold">{visit.examination || visit.reason || "—"}</div></div>
+                <div><span className="text-slate-500">Diagnosis / التشخيص</span><div className="mt-1 whitespace-pre-wrap font-semibold">{visit.diagnosis || "—"}</div></div>
+                <div><span className="text-slate-500">Temperature / الحرارة</span><div className="mt-1 font-semibold">{visit.temperature != null ? `${formatNumber(visit.temperature, 1)} °C` : "—"}</div></div>
+                <div><span className="text-slate-500">Follow-up / المتابعة</span><div className="mt-1 whitespace-pre-wrap font-semibold">{followUpData.followUp || "—"}</div></div>
+              </section>
+              <section className="mt-6 flex-1">
+                <h2 className="border-b border-slate-300 pb-2 text-base font-black">PRESCRIPTION / العلاج</h2>
+                {medicationRows.length ? <div className="mt-3 space-y-3">{medicationRows.map(({ row, medication }, index) => <article key={row.id} className="break-inside-avoid border-b border-slate-100 pb-3 text-sm leading-6">
+                  <h3 className="font-bold">{index + 1}. {medication?.name || "Medication"}</h3>
+                  <p>{[row.calculated_dose != null ? `${formatNumber(row.calculated_dose)} ${row.calculated_dose_unit || ""}` : "", row.calculated_volume != null ? `${formatNumber(row.calculated_volume)} ${row.volume_unit || "mL"}` : "", row.route, row.frequency, row.duration_days != null ? `${row.duration_days} days` : ""].filter(Boolean).join(" · ")}</p>
+                  {row.instructions && <p className="whitespace-pre-wrap text-slate-600">{row.instructions}</p>}
+                </article>)}</div> : <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{visit.treatment || "—"}</p>}
+                {vaccinations.length > 0 && <p className="mt-5 text-sm leading-6"><b>Vaccination / التطعيمات:</b> {vaccinations.map((item) => item.vaccine_name).filter(Boolean).join("، ")}</p>}
+              </section>
+              <footer className="mt-10 flex justify-between gap-8 border-t border-slate-200 pt-5 text-xs text-slate-600"><span>Veterinarian: {clinic?.doctor_name || "VETRA Veterinarian"}</span><span>{clinic?.display_name || clinic?.clinic_name || "VETRA Veterinary Clinic"}</span></footer>
             </div>
             <svg className="pointer-events-none absolute inset-x-0 top-0 h-36 w-full" viewBox="0 0 794 144" preserveAspectRatio="none" aria-hidden="true">
               <path d="M0 0H794C560 16 270 19 0 132Z" fill="#1764a3" />
@@ -803,17 +818,13 @@ export default function PrescriptionPage() {
         .prescription-pdf-layout {
           width: 794px !important;
           max-width: none !important;
+          height: auto !important;
           min-height: 1123px !important;
+          overflow: visible !important;
           padding: 38px 42px !important;
         }
         .prescription-pdf-layout > :not(.rx-print-template):not(.rx-print-content) { display: none !important; }
-        .prescription-pdf-layout .rx-print-template,
-        .prescription-pdf-layout .rx-print-content { display: block !important; }
-        .prescription-pdf-layout .patient-grid,
-        .prescription-pdf-layout .vital-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
-        .prescription-pdf-layout .rx-header { grid-template-columns: .9fr 1.1fr !important; padding-top: 48px !important; }
-        .prescription-pdf-layout .rx-mobile-meds { display: none !important; }
-        .prescription-pdf-layout .rx-med-table { display: block !important; }
+        .prescription-pdf-layout .rx-print-content { display: flex !important; flex-direction: column !important; }
 
         @media print {
           @page {
@@ -841,7 +852,9 @@ export default function PrescriptionPage() {
             position: absolute;
             inset: 0;
             width: 794px !important;
+            height: auto !important;
             min-height: 1123px !important;
+            overflow: visible !important;
             margin: 0 !important;
             padding: 38px 42px !important;
             box-shadow: none !important;
@@ -850,10 +863,7 @@ export default function PrescriptionPage() {
           .prescription-sheet > :not(.rx-print-template):not(.rx-print-content) {
             display: none !important;
           }
-          .prescription-sheet .rx-print-template,
-          .prescription-sheet .rx-print-content {
-            display: block !important;
-          }
+          .prescription-sheet .rx-print-content { display: flex !important; flex-direction: column !important; }
 
           .prescription-sheet table {
             break-inside: auto;

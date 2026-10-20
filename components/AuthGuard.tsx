@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
 
@@ -29,6 +29,7 @@ export default function AuthGuard({
   const pathname = usePathname();
   const [checkedPath, setCheckedPath] = useState("");
   const [checkError, setCheckError] = useState(false);
+  const verifiedState = useRef<{ userId: string; verifiedAt: number; mustChangePassword: boolean } | null>(null);
 
   useEffect(() => {
     if (isPublicPath(pathname)) {
@@ -51,7 +52,25 @@ export default function AuthGuard({
       }
 
       if (!session) {
+        verifiedState.current = null;
         router.replace("/login");
+        return;
+      }
+
+      const cached = verifiedState.current;
+      if (cached?.userId === session.user.id && Date.now() - cached.verifiedAt < 30_000) {
+        if (cached.mustChangePassword && pathname !== "/change-password") {
+          router.replace("/change-password");
+          return;
+        }
+        if (!cached.mustChangePassword && pathname === "/change-password") {
+          router.replace("/dashboard");
+          return;
+        }
+        if (mounted) {
+          setCheckError(false);
+          setCheckedPath(pathname);
+        }
         return;
       }
 
@@ -61,6 +80,7 @@ export default function AuthGuard({
       });
       const staffState = await staffStateResponse.json().catch(() => null) as { mustChangePassword?: boolean } | null;
       if (!staffStateResponse.ok || !staffState) {
+        verifiedState.current = null;
         if (mounted) {
           setCheckError(true);
           setCheckedPath(pathname);
@@ -68,14 +88,17 @@ export default function AuthGuard({
         return;
       }
       if (staffState.mustChangePassword && pathname !== "/change-password") {
+        verifiedState.current = { userId: session.user.id, verifiedAt: Date.now(), mustChangePassword: true };
         router.replace("/change-password");
         return;
       }
       if (!staffState.mustChangePassword && pathname === "/change-password") {
+        verifiedState.current = { userId: session.user.id, verifiedAt: Date.now(), mustChangePassword: false };
         router.replace("/dashboard");
         return;
       }
 
+      verifiedState.current = { userId: session.user.id, verifiedAt: Date.now(), mustChangePassword: Boolean(staffState.mustChangePassword) };
       if (mounted) {
         setCheckError(false);
         setCheckedPath(pathname);
@@ -104,15 +127,10 @@ export default function AuthGuard({
 
   if ((checkedPath !== pathname || checkError) && !isPublicPath(pathname)) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <div className="text-center">
-          <div className="mb-3 text-4xl">
-            🐾
-          </div>
-
-          <p className="text-sm text-slate-500">
-            {checkError ? "Could not verify account security. Refresh or sign in again." : "Loading VETRA..."}
-          </p>
+      <main className="min-h-screen bg-[#f7f8fa] px-4 pt-3 dark:bg-[#0f1115]">
+        <div className="mx-auto flex max-w-7xl items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#181b21]" role="status" aria-live="polite">
+          <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-cyan-500 dark:border-white/15 dark:border-t-cyan-400" />
+          <p className="text-sm text-slate-600 dark:text-slate-300">{checkError ? "Could not verify account security. Refresh or sign in again." : "Loading VETRA..."}</p>
         </div>
       </main>
     );

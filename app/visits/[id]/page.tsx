@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getClinicDb } from "@/lib/clinic-db";
+import { vetraCore } from "@/lib/vetra-core";
 import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
+import { readVetraTheme, writeVetraThemeMode } from "@/lib/theme";
 
 type VisitRow = {
   id: string; client_id: string; pet_id: string; visit_date: string; reason: string | null;
@@ -32,9 +34,8 @@ export default function VisitDetailsPage() {
 
   useEffect(() => {
     const savedLanguage = localStorage.getItem("vetra-language");
-    const savedTheme = localStorage.getItem("vetra-dark-mode");
     setLanguage(savedLanguage === "ar" ? "ar" : "en");
-    setDarkMode(savedTheme === "true");
+    setDarkMode(readVetraTheme() !== "light");
   }, []);
 
   const loadVisit = useCallback(async () => {
@@ -60,8 +61,15 @@ export default function VisitDetailsPage() {
         setMessage(ar ? "شغّل إعدادات المرفقات على قاعدة بيانات العيادة لعرض الملفات." : "Run the visit-attachments tenant SQL to enable file attachments.");
       } else {
         const linked = await Promise.all((attachmentsResult.data || []).map(async (file) => {
-          const { data: signed } = await db.storage.from("visit-attachments").createSignedUrl(file.storage_path, 3600);
-          return { ...file, url: signed?.signedUrl || "" } as Attachment;
+          const { data: session } = await vetraCore.auth.getSession();
+          const token = session.session?.access_token;
+          if (!token) return { ...file, url: "" } as Attachment;
+          const response = await fetch(`/api/visits/attachments?id=${encodeURIComponent(file.id)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          });
+          const result = await response.json().catch(() => null) as { url?: string } | null;
+          return { ...file, url: response.ok ? result?.url || "" : "" } as Attachment;
         }));
         setAttachments(linked.filter((file) => file.url));
       }
@@ -116,7 +124,7 @@ export default function VisitDetailsPage() {
           <button type="button" onClick={shareFollowup} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">{ar ? "إرسال متابعة واتساب" : "Send follow-up on WhatsApp"}</button>
           <Link href={`/prescriptions/${id}`} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${field}`}>{ar ? "عرض الروشتة" : "View prescription"}</Link>
           <Link href="/dashboard" className={`rounded-lg border px-3 py-2 text-sm font-semibold ${field}`}>{ar ? "الرئيسية" : "Dashboard"}</Link>
-          <button type="button" onClick={() => { const next = !darkMode; setDarkMode(next); localStorage.setItem("vetra-dark-mode", String(next)); }} aria-label={darkMode ? "Light mode" : "Dark mode"} className={`h-10 w-10 rounded-lg border ${field}`}><span className={`mx-auto block h-4 w-4 rounded-full border-2 ${darkMode ? "border-amber-400 bg-amber-400" : "border-slate-500"}`} /></button>
+          <button type="button" onClick={() => { const next = !darkMode; setDarkMode(next); writeVetraThemeMode(next); }} aria-label={darkMode ? "Light mode" : "Dark mode"} className={`h-10 w-10 rounded-lg border ${field}`}><span className={`mx-auto block h-4 w-4 rounded-full border-2 ${darkMode ? "border-amber-400 bg-amber-400" : "border-slate-500"}`} /></button>
         </div>
       </header>
 

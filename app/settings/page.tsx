@@ -6,6 +6,7 @@ import { usePwaInstall } from "@/components/PwaInstallProvider";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { loadClinicProfile, type ClinicProfile } from "@/lib/clinic-profile";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 type Language = "ar" | "en";
 
@@ -71,6 +72,9 @@ const text = {
     clinicProfile: "ملف العيادة",
     clinicProfileHint: "الهوية التي تظهر للعملاء وعلى الروشتات المطبوعة.",
     displayName: "اسم العرض",
+    doctorName: "اسم الطبيب الظاهر",
+    doctorNameLimit: "يمكن تعديل اسم الطبيب مرة واحدة كل 6 أشهر.",
+    doctorNameAvailable: "يمكن تعديل الاسم مرة أخرى بعد",
     website: "الموقع الإلكتروني",
     logo: "شعار العيادة",
     uploadLogo: "تغيير الشعار",
@@ -79,6 +83,7 @@ const text = {
     saveProfile: "حفظ ملف العيادة",
     profileSaved: "تم حفظ ملف العيادة.",
     profileSaveError: "تعذر حفظ ملف العيادة. تحقق من إعداد قاعدة بيانات العيادة.",
+    doctorNameSetupError: "شغّل تحديث إعدادات ملف العيادة على قاعدة العيادة قبل تعديل اسم الطبيب.",
     profileNameRequired: "أدخل اسم العيادة.",
     websiteInvalid: "أدخل رابط موقع صحيحًا يبدأ بـ https:// أو http://.",
     logoInvalid: "اختر صورة PNG أو JPG أو WebP لا يتجاوز حجمها 5 ميجابايت.",
@@ -161,6 +166,9 @@ const text = {
     clinicProfile: "Clinic profile",
     clinicProfileHint: "The identity shown to clients and on printed prescriptions.",
     displayName: "Display name",
+    doctorName: "Doctor name",
+    doctorNameLimit: "The doctor name can be changed once every six months.",
+    doctorNameAvailable: "Available to change again after",
     website: "Website",
     logo: "Clinic logo",
     uploadLogo: "Replace logo",
@@ -169,6 +177,7 @@ const text = {
     saveProfile: "Save clinic profile",
     profileSaved: "Clinic profile saved.",
     profileSaveError: "Could not save the clinic profile. Check the clinic database setup.",
+    doctorNameSetupError: "Apply the clinic profile settings SQL to the clinic database before changing the doctor name.",
     profileNameRequired: "Enter the clinic name.",
     websiteInvalid: "Enter a valid website URL beginning with https:// or http://.",
     logoInvalid: "Choose a PNG, JPG or WebP image no larger than 5 MB.",
@@ -251,6 +260,14 @@ function formatDate(value: string | null, language: Language) {
   }).format(new Date(value));
 }
 
+function addSixMonths(value: string) {
+  const date = new Date(value);
+  const day = date.getDate();
+  date.setMonth(date.getMonth() + 6);
+  if (date.getDate() !== day) date.setDate(0);
+  return date;
+}
+
 export default function SettingsPage() {
   const router = useRouter();
 
@@ -261,6 +278,8 @@ export default function SettingsPage() {
   const [context, setContext] = useState<ClinicContext | null>(null);
   const [clinicProfile, setClinicProfile] = useState<ClinicProfile | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [doctorName, setDoctorName] = useState("");
+  const [doctorNameLocked, setDoctorNameLocked] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [logoPath, setLogoPath] = useState("");
@@ -286,15 +305,18 @@ export default function SettingsPage() {
   const [installStatus, setInstallStatus] = useState("");
 
   useEffect(() => {
-    setDarkMode(localStorage.getItem("vetra-theme") !== "light");
-    setLanguage(localStorage.getItem("vetra-language") === "en" ? "en" : "ar");
-    setReady(true);
+    const timer = window.setTimeout(() => {
+      setDarkMode(localStorage.getItem("vetra-theme") !== "light");
+      setLanguage(localStorage.getItem("vetra-language") === "en" ? "en" : "ar");
+      setReady(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
     if (!ready) return;
 
-    localStorage.setItem("vetra-theme", darkMode ? "dark" : "light");
+    writeVetraThemeMode(darkMode);
     localStorage.setItem("vetra-language", language);
   }, [darkMode, language, ready]);
 
@@ -323,8 +345,13 @@ export default function SettingsPage() {
 
         const profile = await loadClinicProfile(db, clinicContext.clinic_id);
         if (!cancelled) {
+          const availableAt = profile?.doctor_name_changed_at
+            ? addSixMonths(profile.doctor_name_changed_at)
+            : null;
           setClinicProfile(profile);
           setDisplayName(profile?.display_name || clinicContext.clinic_name || "");
+          setDoctorName(profile?.doctor_name || clinicContext.doctor_name || "");
+          setDoctorNameLocked(Boolean(availableAt && availableAt.getTime() > Date.now()));
           setWebsiteUrl(profile?.website_url || "");
           setLogoUrl(profile?.logo_url || "");
           setLogoPath(profile?.logo_path || "");
@@ -372,6 +399,9 @@ export default function SettingsPage() {
   const t = text[language];
   const { canInstall, isInstalled, isIOS, installApp } = usePwaInstall();
   const isAdmin = context ? ["owner", "admin"].includes(context.role) : false;
+  const doctorNameAvailableAt = clinicProfile?.doctor_name_changed_at
+    ? addSixMonths(clinicProfile.doctor_name_changed_at)
+    : null;
 
   function selectClinicLogo(file: File | undefined) {
     if (!file) return;
@@ -387,8 +417,16 @@ export default function SettingsPage() {
   async function saveClinicProfile() {
     if (!context || savingProfile) return;
     const cleanName = displayName.trim();
+    const cleanDoctorName = doctorName.trim();
+    const currentDoctorName = clinicProfile?.doctor_name || context.doctor_name || "";
+    const doctorNameChanged = cleanDoctorName !== currentDoctorName;
     if (!cleanName) {
       setError(t.profileNameRequired);
+      setMessage("");
+      return;
+    }
+    if (doctorNameChanged && doctorNameLocked) {
+      setError(`${t.doctorNameAvailable} ${formatDate(doctorNameAvailableAt?.toISOString() || null, language)}.`);
       setMessage("");
       return;
     }
@@ -434,15 +472,23 @@ export default function SettingsPage() {
         nextLogoPath = uploaded.path;
       }
 
-      const { error: saveError } = await db.from("clinic_profile_settings").upsert({
+      const profileValues: Record<string, string | null> = {
         clinic_id: context.clinic_id,
         display_name: cleanName,
         website_url: cleanWebsite || null,
         logo_url: nextLogoUrl,
         logo_path: nextLogoPath,
         updated_at: new Date().toISOString(),
-      }, { onConflict: "clinic_id" });
-      if (saveError) throw saveError;
+      };
+      if (doctorNameChanged) profileValues.doctor_name = cleanDoctorName || null;
+      const { data: savedProfile, error: saveError } = await db.from("clinic_profile_settings")
+        .upsert(profileValues, { onConflict: "clinic_id" })
+        .select("clinic_id,display_name,website_url,logo_url,logo_path,updated_at")
+        .single();
+      if (saveError) {
+        if (doctorNameChanged && /doctor_name|column/i.test(saveError.message)) throw new Error(t.doctorNameSetupError);
+        throw saveError;
+      }
 
       if (clinicProfile?.logo_path && clinicProfile.logo_path !== nextLogoPath) {
         const { data: sessionData } = await vetraCore.auth.getSession();
@@ -454,15 +500,14 @@ export default function SettingsPage() {
           });
         }
       }
-      const updated: ClinicProfile = {
-        clinic_id: context.clinic_id,
-        display_name: cleanName,
-        website_url: cleanWebsite || null,
-        logo_url: nextLogoUrl,
-        logo_path: nextLogoPath,
-        updated_at: new Date().toISOString(),
+      const updated = {
+        ...(savedProfile as ClinicProfile),
+        doctor_name: doctorNameChanged ? cleanDoctorName || null : clinicProfile?.doctor_name || null,
+        doctor_name_changed_at: doctorNameChanged ? new Date().toISOString() : clinicProfile?.doctor_name_changed_at || null,
       };
       setClinicProfile(updated);
+      setDoctorName(updated.doctor_name || context.doctor_name || "");
+      if (doctorNameChanged) setDoctorNameLocked(true);
       setLogoUrl(nextLogoUrl || "");
       setLogoPath(nextLogoPath || "");
       setLogoFile(null);
@@ -809,7 +854,7 @@ export default function SettingsPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <InfoCard label={t.clinicName} value={clinicProfile?.display_name || context?.clinic_name || "—"} darkMode={darkMode} />
-              <InfoCard label={t.doctor} value={context?.doctor_name || "—"} darkMode={darkMode} />
+              <InfoCard label={t.doctor} value={clinicProfile?.doctor_name || context?.doctor_name || "—"} darkMode={darkMode} />
               <InfoCard label={t.role} value={context?.role || "—"} darkMode={darkMode} />
               <InfoCard
                 label={t.databaseStatus}
@@ -841,6 +886,15 @@ export default function SettingsPage() {
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
+              <label className="block text-sm font-bold">
+                {t.doctorName}
+                <input value={doctorName} onChange={(event) => setDoctorName(event.target.value)} maxLength={120} disabled={!isAdmin || savingProfile || doctorNameLocked} className={`mt-2 w-full rounded-xl border px-4 py-3 outline-none focus:border-cyan-500 disabled:opacity-60 ${darkMode ? "border-white/10 bg-[#0F1115] text-white" : "border-slate-200 bg-slate-50 text-slate-900"}`} />
+                <span className="mt-2 block text-xs font-normal text-slate-500">
+                  {doctorNameLocked && doctorNameAvailableAt
+                    ? `${t.doctorNameAvailable} ${formatDate(doctorNameAvailableAt.toISOString(), language)}`
+                    : t.doctorNameLimit}
+                </span>
+              </label>
               <label className="block text-sm font-bold">
                 {t.displayName}
                 <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={120} disabled={!isAdmin || savingProfile} className={`mt-2 w-full rounded-xl border px-4 py-3 outline-none focus:border-cyan-500 disabled:opacity-60 ${darkMode ? "border-white/10 bg-[#0F1115] text-white" : "border-slate-200 bg-slate-50 text-slate-900"}`} />

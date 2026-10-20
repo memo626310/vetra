@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
+import { readVetraTheme, writeVetraThemeMode } from "@/lib/theme";
 import type { FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
 import type {
   Language, Client, Pet, Visit, Medication, MedicationDraft, ExternalMedicationDraft,
@@ -27,6 +28,7 @@ import NewVisitDetailsModal from "@/components/visits/NewVisitDetailsModal";
 import NewVisitMedicalRecordsFields, { emptyMedicalRecordDraft, type MedicalRecordDraft } from "@/components/visits/NewVisitMedicalRecordsFields";
 
 type SymptomDraft = { id: string; name: string; days: string };
+type AvailableDoctor = { id: string; full_name: string; specialty: string | null };
 type VisitServiceDraft = { id: string; name: string; quantity: number; price: number };
 type VisitAttachmentDraft = { id: string; file: File; category: "analysis" | "xray" };
 
@@ -61,13 +63,14 @@ export default function NewVisitPage() {
   const [appointmentId, setAppointmentId] = useState("");
   const [appointmentOptions, setAppointmentOptions] = useState<Array<{ id: string; appointment_date: string; start_time: string; reason: string | null }>>([]);
   const [performingDoctor, setPerformingDoctor] = useState("");
+  const [availableDoctors, setAvailableDoctors] = useState<AvailableDoctor[]>([]);
   const [groomingType, setGroomingType] = useState("");
   const [consultationFee, setConsultationFee] = useState(0);
   const [symptoms, setSymptoms] = useState<SymptomDraft[]>([]);
   const [visitServices, setVisitServices] = useState<VisitServiceDraft[]>([]);
   const [attachments, setAttachments] = useState<VisitAttachmentDraft[]>([]);
 
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState("examination");
   const [examStatus, setExamStatus] = useState<"normal" | "abnormal" | "">("");
   const [examination, setExamination] = useState("");
   const [followUp, setFollowUp] = useState("");
@@ -103,8 +106,7 @@ export default function NewVisitPage() {
       "vetra-language"
     ) as Language | null;
 
-    const savedDarkMode =
-      window.localStorage.getItem("vetra-dark-mode") === "true";
+    const savedDarkMode = readVetraTheme() !== "light";
 
     if (savedLanguage === "en" || savedLanguage === "ar") {
       setLanguage(savedLanguage);
@@ -128,15 +130,6 @@ export default function NewVisitPage() {
     document.documentElement.dir =
       language === "ar" ? "rtl" : "ltr";
   }, [language]);
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      "vetra-dark-mode",
-      darkMode ? "true" : "false"
-    );
-
-    document.documentElement.classList.toggle("dark", darkMode);
-  }, [darkMode]);
 
   useEffect(() => {
     loadClients();
@@ -167,6 +160,16 @@ export default function NewVisitPage() {
       setClinicId(context.clinic_id || "");
       setPerformingDoctor(context.doctor_name || "");
       const db = await getClinicDb();
+      const { data: doctorRows } = await db.from("clinic_staff")
+        .select("id, full_name, specialty")
+        .eq("clinic_id", context.clinic_id)
+        .eq("staff_type", "doctor")
+        .order("full_name", { ascending: true });
+      const doctors = (doctorRows || []) as AvailableDoctor[];
+      if (context.doctor_name && !doctors.some((doctor) => doctor.full_name === context.doctor_name)) {
+        doctors.unshift({ id: "current-user", full_name: context.doctor_name, specialty: null });
+      }
+      setAvailableDoctors(doctors);
       const { data: billingSettings } = await db.from("billing_settings")
         .select("consultation_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
       setConsultationFee(Number(billingSettings?.consultation_fee || 0));
@@ -662,7 +665,7 @@ export default function NewVisitPage() {
       const sourceLabel = visitSource === "appointment" ? `Appointment: ${appointmentId}` : "Visit type: New walk-in visit";
       const metadata = [
         sourceLabel,
-        performingDoctor.trim() ? `${language === "ar" ? "الطبيب المعالج" : "Performing doctor"}: ${performingDoctor.trim()}` : "",
+        performingDoctor.trim() ? `${language === "ar" ? "الطبيب المعالج" : "Performing doctor"}: ${performingDoctor === "__any__" ? (language === "ar" ? "أي طبيب متاح" : "Any available vet") : performingDoctor.trim()}` : "",
         reason === "grooming" && groomingType.trim() ? `${language === "ar" ? "نوع التجميل" : "Grooming type"}: ${groomingType.trim()}` : "",
         reason === "surgery" && medicalRecordDraft.surgeryBeforeStatus.trim() ? `${language === "ar" ? "الحالة قبل الجراحة" : "Pre-surgery status"}: ${medicalRecordDraft.surgeryBeforeStatus.trim()}` : "",
         reason === "surgery" && medicalRecordDraft.surgeryAfterStatus.trim() ? `${language === "ar" ? "الحالة بعد الجراحة" : "Post-surgery status"}: ${medicalRecordDraft.surgeryAfterStatus.trim()}` : "",
@@ -819,8 +822,8 @@ export default function NewVisitPage() {
 
       setMessage(t.visitSaved);
 
-      setReason("");
-      setPerformingDoctor("");
+      setReason("examination");
+      setPerformingDoctor(clinicContext.doctor_name || "__any__");
       setGroomingType("");
       setAppointmentId("");
       setExamStatus("");
@@ -961,7 +964,7 @@ export default function NewVisitPage() {
 
             <button
               type="button"
-              onClick={() => setDarkMode(!darkMode)}
+              onClick={() => { const next = !darkMode; setDarkMode(next); writeVetraThemeMode(next); }}
               aria-label={darkMode ? t.light : t.dark}
               className={`flex h-11 w-11 items-center justify-center rounded-xl border text-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
                 darkMode
@@ -1021,9 +1024,17 @@ export default function NewVisitPage() {
                   {([["appointment", language === "ar" ? "موعد" : "Appointment"], ["new_visit", language === "ar" ? "بدء زيارة جديدة" : "Start a new visit"]] as const).map(([source, label]) => <button key={source} type="button" onClick={() => setVisitSource(source)} className={`rounded-lg border px-3 py-3 text-sm font-semibold ${visitSource === source ? "border-blue-500 bg-blue-600 text-white" : darkMode ? "border-slate-700" : "border-slate-200"}`}>{label}</button>)}
                 </div>
                 {visitSource === "appointment" ? <label className="block text-sm font-semibold">{language === "ar" ? "الموعد المسجل" : "Scheduled appointment"}
-                  <select className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent p-3" value={appointmentId} onChange={(event) => setAppointmentId(event.target.value)}>
+                  <select className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent p-3" value={appointmentId} onChange={(event) => {
+                    const value = event.target.value;
+                    if (value === "__add_new__") {
+                      router.push(`/appointments?new=1&client=${encodeURIComponent(selectedClientId)}&pet=${encodeURIComponent(selectedPetId)}`);
+                      return;
+                    }
+                    setAppointmentId(value);
+                  }}>
                     <option value="">{language === "ar" ? "اختر موعدًا" : "Select an appointment"}</option>
                     {appointmentOptions.map((item) => <option key={item.id} value={item.id}>{item.appointment_date} {item.start_time?.slice(0, 5)}{item.reason ? ` · ${item.reason}` : ""}</option>)}
+                    <option value="__add_new__">{language === "ar" ? "+ إضافة موعد جديد" : "+ Add new appointment"}</option>
                   </select>
                 </label> : <p className="rounded-lg border border-slate-300 p-3 text-sm text-slate-500">{language === "ar" ? "سيبدأ سجل زيارة جديد لهذا الحيوان." : "A new visit record will be started for this pet."}</p>}
                 <button type="button" disabled={visitSource === "appointment" && !appointmentId} onClick={() => beginVisit(visitSource)} className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-40">{language === "ar" ? "متابعة" : "Continue"}</button>
@@ -1054,19 +1065,28 @@ export default function NewVisitPage() {
                   </select>
                 </label>
                 <label className="text-sm font-semibold">{language === "ar" ? "الطبيب الذي سيجري الزيارة" : "Performing doctor"}
-                  <input className="mt-2 w-full rounded-xl border border-slate-300 bg-transparent p-3" value={performingDoctor} onChange={(event) => setPerformingDoctor(event.target.value)} placeholder={language === "ar" ? "اسم الطبيب" : "Doctor name"} />
+                  <select className="mt-2 w-full rounded-xl border border-slate-300 bg-transparent p-3" value={performingDoctor} onChange={(event) => setPerformingDoctor(event.target.value)}>
+                    <option value="__any__">{language === "ar" ? "أي طبيب متاح" : "Any available vet"}</option>
+                    {availableDoctors.map((doctor) => <option key={doctor.id} value={doctor.full_name}>{doctor.full_name}{doctor.specialty ? ` · ${doctor.specialty}` : ""}</option>)}
+                  </select>
                 </label>
                 {reason === "grooming" && <label className="text-sm font-semibold sm:col-span-2">{language === "ar" ? "نوع التجميل" : "Grooming type"}
                   <input className="mt-2 w-full rounded-xl border border-slate-300 bg-transparent p-3" value={groomingType} onChange={(event) => setGroomingType(event.target.value)} placeholder={language === "ar" ? "مثال: استحمام، قص شعر، قص أظافر" : "e.g. bath, haircut, nail trim"} />
                 </label>}
               </section>
               <section className={`space-y-4 rounded-2xl border p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="font-bold">{language === "ar" ? "الأعراض" : "Symptoms"}</h3>
-                  <button type="button" onClick={() => setSymptoms((current) => [...current, { id: crypto.randomUUID(), name: "", days: "" }])} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-sm font-semibold text-cyan-700 dark:text-cyan-300">{language === "ar" ? "+ إضافة عرض" : "+ Add symptom"}</button>
+                  <button type="button" onClick={() => setSymptoms((current) => [...current, { id: crypto.randomUUID(), name: "", days: "" }])} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-sm font-semibold text-cyan-700 dark:text-cyan-300">{language === "ar" ? "+ عرض يدوي" : "+ Manual symptom"}</button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(language === "ar" ? ["قيء", "إسهال", "كحة", "خمول", "قلة شهية", "حكة", "عطس", "عرج", "إفرازات العين"] : ["Vomiting", "Diarrhea", "Cough", "Lethargy", "Poor appetite", "Itching", "Sneezing", "Lameness", "Eye discharge"]).map((name) => {
+                    const selected = symptoms.some((item) => item.name === name);
+                    return <button key={name} type="button" onClick={() => setSymptoms((current) => selected ? current.filter((item) => item.name !== name) : [...current, { id: crypto.randomUUID(), name, days: "" }])} className={`rounded-full border px-3 py-2 text-xs font-bold transition ${selected ? "border-cyan-500 bg-cyan-500 text-white" : darkMode ? "border-slate-700 bg-slate-900 text-slate-300 hover:border-cyan-500/60" : "border-slate-300 bg-white text-slate-600 hover:border-cyan-400"}`}>{name}</button>;
+                  })}
                 </div>
                 {symptoms.map((symptom) => <div key={symptom.id} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_40px]">
-                  <input className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2.5 text-sm dark:border-slate-700" value={symptom.name} onChange={(event) => setSymptoms((current) => current.map((item) => item.id === symptom.id ? { ...item, name: event.target.value } : item))} placeholder={language === "ar" ? "العرض" : "Symptom"} />
+                  <input aria-label={language === "ar" ? "اسم العرض" : "Symptom name"} className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2.5 text-sm dark:border-slate-700" value={symptom.name} onChange={(event) => setSymptoms((current) => current.map((item) => item.id === symptom.id ? { ...item, name: event.target.value } : item))} placeholder={language === "ar" ? "العرض" : "Manual symptom"} />
                   <label className="text-xs text-slate-500">{language === "ar" ? "استمر منذ (أيام)" : "Persisted (days)"}<input type="number" min="0" step="1" className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2.5 text-sm dark:border-slate-700" value={symptom.days} onChange={(event) => setSymptoms((current) => current.map((item) => item.id === symptom.id ? { ...item, days: event.target.value } : item))} /></label>
                   <button type="button" onClick={() => setSymptoms((current) => current.filter((item) => item.id !== symptom.id))} aria-label={language === "ar" ? "حذف العرض" : "Remove symptom"} className="self-end rounded-lg border border-rose-400/30 px-2 py-2 text-rose-500">×</button>
                 </div>)}

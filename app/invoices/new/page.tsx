@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 type Client = {
   id: string;
@@ -127,7 +128,7 @@ export default function NewInvoicePage() {
 
   useEffect(() => {
     if (!ready) return;
-    localStorage.setItem("vetra-theme", darkMode ? "dark" : "light");
+    writeVetraThemeMode(darkMode);
     localStorage.setItem("vetra-language", language);
   }, [darkMode, language, ready]);
 

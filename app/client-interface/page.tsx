@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { clientPortalPhotos } from "./pet-photos";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 export default function ClientPortalPage() {
   const router = useRouter();
@@ -29,7 +30,7 @@ export default function ClientPortalPage() {
     const welcomed = window.localStorage.getItem("vetra-welcome-seen");
 
     if (savedLanguage === "en") setLanguage("en");
-    if (savedTheme === "dark") setDark(true);
+    if (savedTheme !== "light") setDark(true);
 
     const previousPhoto = Number.parseInt(
       window.sessionStorage.getItem("vetra-landing-photo") ?? "-1",
@@ -70,7 +71,7 @@ export default function ClientPortalPage() {
   const toggleTheme = () => {
     setDark((value) => {
       const next = !value;
-      window.localStorage.setItem("vetra-theme", next ? "dark" : "light");
+      writeVetraThemeMode(next);
       return next;
     });
   };

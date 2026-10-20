@@ -28,7 +28,7 @@ export default function ClientLoginPage() {
       setLanguage("ar");
     }
 
-    if (savedTheme === "dark") {
+    if (savedTheme !== "light") {
       setDark(true);
     }
 

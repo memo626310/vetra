@@ -165,3 +165,213 @@ body {
 [data-vetra-visit-theme] [class~="focus:border-blue-500"]:focus { border-color: #14b8a6 !important; }
 [data-vetra-visit-theme] select option { background: #fff; color: #111827; }
 [data-vetra-visit-theme="dark"] select option { background: #181b21; color: #f1f4f6; }
+
+/* Clinic theme preference is shared across routes; page-local light/dark controls
+   only switch the shared mode and preserve the selected dark palette. */
+html[data-vetra-theme="midnight"] {
+  --vetra-page: #0f1115;
+  --vetra-shell: #13161b;
+  --vetra-surface: #181b21;
+  --vetra-raised: #20242a;
+  --vetra-border: rgb(255 255 255 / 8%);
+  --vetra-text: #f8fafc;
+  --vetra-muted: #a1aab5;
+  --vetra-accent: #2dd4bf;
+  --vetra-accent-strong: #0f766e;
+  color-scheme: dark;
+}
+
+html[data-vetra-theme="ocean"] {
+  --vetra-page: #081521;
+  --vetra-shell: #0b1d2b;
+  --vetra-surface: #102333;
+  --vetra-raised: #142b3d;
+  --vetra-border: rgb(186 230 253 / 12%);
+  --vetra-text: #f0f9ff;
+  --vetra-muted: #a7c1d2;
+  --vetra-accent: #7dd3fc;
+  --vetra-accent-strong: #0369a1;
+  color-scheme: dark;
+}
+
+html[data-vetra-theme="violet"] {
+  --vetra-page: #15111b;
+  --vetra-shell: #1b1524;
+  --vetra-surface: #211a2b;
+  --vetra-raised: #281f34;
+  --vetra-border: rgb(221 214 254 / 12%);
+  --vetra-text: #faf7ff;
+  --vetra-muted: #c0b6cf;
+  --vetra-accent: #c4b5fd;
+  --vetra-accent-strong: #7c3aed;
+  color-scheme: dark;
+}
+
+html[data-vetra-theme="light"] {
+  --vetra-page: #f7f8fa;
+  --vetra-shell: #ffffff;
+  --vetra-surface: #ffffff;
+  --vetra-raised: #f1f5f9;
+  --vetra-border: #e2e8f0;
+  --vetra-text: #1e293b;
+  --vetra-muted: #64748b;
+  --vetra-accent: #0f766e;
+  --vetra-accent-strong: #115e59;
+  color-scheme: light;
+}
+
+html[data-vetra-theme] body {
+  background-color: var(--vetra-page) !important;
+  color: var(--vetra-text);
+}
+
+html[data-vetra-theme="midnight"] [class~="bg-white"],
+html[data-vetra-theme="ocean"] [class~="bg-white"],
+html[data-vetra-theme="violet"] [class~="bg-white"] {
+  background-color: var(--vetra-surface) !important;
+  color: var(--vetra-text);
+}
+
+html[data-vetra-theme="midnight"] [class~="bg-slate-50"],
+html[data-vetra-theme="midnight"] [class~="bg-slate-100"],
+html[data-vetra-theme="midnight"] [class~="bg-gray-50"],
+html[data-vetra-theme="ocean"] [class~="bg-slate-50"],
+html[data-vetra-theme="ocean"] [class~="bg-slate-100"],
+html[data-vetra-theme="ocean"] [class~="bg-gray-50"],
+html[data-vetra-theme="violet"] [class~="bg-slate-50"],
+html[data-vetra-theme="violet"] [class~="bg-slate-100"],
+html[data-vetra-theme="violet"] [class~="bg-gray-50"] {
+  background-color: var(--vetra-raised) !important;
+}
+
+html[data-vetra-theme="midnight"] [class*="bg-[#F7F8FA]"],
+html[data-vetra-theme="midnight"] [class*="bg-[#f7f8fa]"],
+html[data-vetra-theme="midnight"] [class*="bg-[#F8FAFC]"],
+html[data-vetra-theme="ocean"] [class*="bg-[#F7F8FA]"],
+html[data-vetra-theme="ocean"] [class*="bg-[#f7f8fa]"],
+html[data-vetra-theme="ocean"] [class*="bg-[#F8FAFC]"],
+html[data-vetra-theme="violet"] [class*="bg-[#F7F8FA]"],
+html[data-vetra-theme="violet"] [class*="bg-[#f7f8fa]"],
+html[data-vetra-theme="violet"] [class*="bg-[#F8FAFC]"] {
+  background-color: var(--vetra-page) !important;
+}
+
+html[data-vetra-theme="midnight"] [class~="text-slate-900"],
+html[data-vetra-theme="midnight"] [class~="text-slate-800"],
+html[data-vetra-theme="ocean"] [class~="text-slate-900"],
+html[data-vetra-theme="ocean"] [class~="text-slate-800"],
+html[data-vetra-theme="violet"] [class~="text-slate-900"],
+html[data-vetra-theme="violet"] [class~="text-slate-800"] {
+  color: var(--vetra-text) !important;
+}
+
+html[data-vetra-theme="midnight"] [class~="text-slate-700"],
+html[data-vetra-theme="midnight"] [class~="text-slate-600"],
+html[data-vetra-theme="midnight"] [class~="text-slate-500"],
+html[data-vetra-theme="midnight"] [class~="text-slate-400"],
+html[data-vetra-theme="ocean"] [class~="text-slate-700"],
+html[data-vetra-theme="ocean"] [class~="text-slate-600"],
+html[data-vetra-theme="ocean"] [class~="text-slate-500"],
+html[data-vetra-theme="ocean"] [class~="text-slate-400"],
+html[data-vetra-theme="violet"] [class~="text-slate-700"],
+html[data-vetra-theme="violet"] [class~="text-slate-600"],
+html[data-vetra-theme="violet"] [class~="text-slate-500"],
+html[data-vetra-theme="violet"] [class~="text-slate-400"] {
+  color: var(--vetra-muted) !important;
+}
+
+html[data-vetra-theme="midnight"] [class~="border-slate-100"],
+html[data-vetra-theme="midnight"] [class~="border-slate-200"],
+html[data-vetra-theme="midnight"] [class~="border-slate-300"],
+html[data-vetra-theme="ocean"] [class~="border-slate-100"],
+html[data-vetra-theme="ocean"] [class~="border-slate-200"],
+html[data-vetra-theme="ocean"] [class~="border-slate-300"],
+html[data-vetra-theme="violet"] [class~="border-slate-100"],
+html[data-vetra-theme="violet"] [class~="border-slate-200"],
+html[data-vetra-theme="violet"] [class~="border-slate-300"] {
+  border-color: var(--vetra-border) !important;
+}
+
+html[data-vetra-theme="midnight"] [class~="bg-blue-600"],
+html[data-vetra-theme="midnight"] [class~="bg-cyan-500"] { background-color: #0d9488 !important; }
+html[data-vetra-theme="ocean"] [class~="bg-blue-600"],
+html[data-vetra-theme="ocean"] [class~="bg-cyan-500"] { background-color: #0284c7 !important; }
+html[data-vetra-theme="violet"] [class~="bg-blue-600"],
+html[data-vetra-theme="violet"] [class~="bg-cyan-500"] { background-color: #7c3aed !important; }
+
+html[data-vetra-theme] [class~="text-blue-500"],
+html[data-vetra-theme] [class~="text-blue-600"],
+html[data-vetra-theme] [class~="text-cyan-500"],
+html[data-vetra-theme] [class~="text-cyan-600"] { color: var(--vetra-accent) !important; }
+html[data-vetra-theme] [class~="border-blue-500"],
+html[data-vetra-theme] [class~="border-cyan-500"],
+html[data-vetra-theme] [class~="focus:border-blue-500"]:focus,
+html[data-vetra-theme] [class~="focus:border-cyan-500"]:focus { border-color: var(--vetra-accent) !important; }
+html[data-vetra-theme] [class~="bg-[#138780]"] { background-color: var(--vetra-accent-strong) !important; }
+
+/* Normalize legacy hard-coded page backgrounds to the active clinic palette. */
+html[data-vetra-theme] [class*="bg-[#0F1115]"],
+html[data-vetra-theme] [class*="bg-[#0f1115]"],
+html[data-vetra-theme] [class*="bg-[#06101a]"],
+html[data-vetra-theme] [class*="bg-[#07111C]"],
+html[data-vetra-theme] [class*="bg-[#081521]"],
+html[data-vetra-theme] [class*="bg-[#09111A]"],
+html[data-vetra-theme] [class*="bg-[#0a1520]"],
+html[data-vetra-theme] [class*="bg-[#0b1622]"],
+html[data-vetra-theme] [class*="bg-[#0B1825]"],
+html[data-vetra-theme] [class*="bg-[#0b1d2b]"],
+html[data-vetra-theme] [class*="bg-[#0B2540]"],
+html[data-vetra-theme] [class*="bg-[#101c28]"],
+html[data-vetra-theme] [class*="bg-[#111419]"],
+html[data-vetra-theme] [class*="bg-[#13161B]"],
+html[data-vetra-theme] [class*="bg-[#15111b]"] { background-color: var(--vetra-page) !important; }
+
+html[data-vetra-theme] [class*="bg-[#171A20]"],
+html[data-vetra-theme] [class*="bg-[#171B22]"],
+html[data-vetra-theme] [class*="bg-[#181B21]"],
+html[data-vetra-theme] [class*="bg-[#181c1d]"],
+html[data-vetra-theme] [class*="bg-[#1C2026]"],
+html[data-vetra-theme] [class*="bg-[#1D2128]"],
+html[data-vetra-theme] [class*="bg-[#1D2129]"],
+html[data-vetra-theme] [class*="bg-[#211a2b]"],
+html[data-vetra-theme] [class*="bg-[#24292a]"],
+html[data-vetra-theme] [class*="bg-[#252a2b]"],
+html[data-vetra-theme] [class*="bg-[#281f34]"] { background-color: var(--vetra-surface) !important; }
+
+html[data-vetra-theme] [class*="bg-[#292e2f]"],
+html[data-vetra-theme] [class*="bg-[#2b3031]"],
+html[data-vetra-theme] [class*="bg-[#303536]"],
+html[data-vetra-theme] [class*="bg-[#303637]"],
+html[data-vetra-theme] [class*="bg-[#343b3c]"] { background-color: var(--vetra-raised) !important; }
+
+html[data-vetra-theme="midnight"] [class*="bg-[#f5f9fc]"],
+html[data-vetra-theme="midnight"] [class*="bg-[#f7f9fc]"],
+html[data-vetra-theme="midnight"] [class*="bg-[#F8FBFF]"],
+html[data-vetra-theme="midnight"] [class*="bg-[#FAF8F4]"],
+html[data-vetra-theme="ocean"] [class*="bg-[#f5f9fc]"],
+html[data-vetra-theme="ocean"] [class*="bg-[#f7f9fc]"],
+html[data-vetra-theme="ocean"] [class*="bg-[#F8FBFF]"],
+html[data-vetra-theme="ocean"] [class*="bg-[#FAF8F4]"],
+html[data-vetra-theme="violet"] [class*="bg-[#f5f9fc]"],
+html[data-vetra-theme="violet"] [class*="bg-[#f7f9fc]"],
+html[data-vetra-theme="violet"] [class*="bg-[#F8FBFF]"],
+html[data-vetra-theme="violet"] [class*="bg-[#FAF8F4]"] { background-color: var(--vetra-raised) !important; }
+
+html[data-vetra-theme="midnight"] [class*="bg-[#E6F6F0]"],
+html[data-vetra-theme="midnight"] [class*="bg-[#F4FBF8]"],
+html[data-vetra-theme="ocean"] [class*="bg-[#E6F6F0]"],
+html[data-vetra-theme="ocean"] [class*="bg-[#F4FBF8]"],
+html[data-vetra-theme="violet"] [class*="bg-[#E6F6F0]"],
+html[data-vetra-theme="violet"] [class*="bg-[#F4FBF8]"] { background-color: var(--vetra-surface) !important; }
+
+html[data-vetra-theme="midnight"] input,
+html[data-vetra-theme="midnight"] select,
+html[data-vetra-theme="midnight"] textarea,
+html[data-vetra-theme="ocean"] input,
+html[data-vetra-theme="ocean"] select,
+html[data-vetra-theme="ocean"] textarea,
+html[data-vetra-theme="violet"] input,
+html[data-vetra-theme="violet"] select,
+html[data-vetra-theme="violet"] textarea {
+  color-scheme: dark;
+}

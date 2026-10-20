@@ -3,6 +3,7 @@ import "./globals.css";
 import AuthGuard from "@/components/AuthGuard";
 import ClinicMobileNavigation from "@/components/ClinicMobileNavigation";
 import PwaInstallProvider from "@/components/PwaInstallProvider";
+import ThemeBridge from "@/components/ThemeBridge";
 
 export const metadata: Metadata = {
   title: "VETRA",
@@ -17,6 +18,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <ThemeBridge />
         <PwaInstallProvider>
           <AuthGuard>{children}</AuthGuard>
           <ClinicMobileNavigation />

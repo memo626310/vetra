@@ -16,6 +16,7 @@ import {
   type MessageTemplatePair,
 } from "@/lib/clinic-message-templates";
 import { loadClinicProfile } from "@/lib/clinic-profile";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 type Client = { id: string; name: string; phone: string | null };
 type Pet = { id: string; client_id: string; name: string };
@@ -96,7 +97,7 @@ export default function MessagesPage() {
         if (!active) return;
         setClinicId(context.clinic_id);
         setClinicName(clinicProfile?.display_name || context.clinic_name || "VETRA");
-        setDoctorName(context.doctor_name || "");
+        setDoctorName(clinicProfile?.doctor_name || context.doctor_name || "");
         setClients((clientResult.data || []) as Client[]);
         setPets((petResult.data || []).filter((item) => !item.is_deceased) as Pet[]);
         setTemplates(loadedTemplates);
@@ -182,7 +183,7 @@ export default function MessagesPage() {
         <div className="flex items-center gap-2">
           <Link href="/dashboard" className={`rounded-lg border px-3 py-2 text-sm font-semibold ${input}`}>{ar ? "الرئيسية" : "Dashboard"}</Link>
           <button type="button" onClick={() => setLanguage(ar ? "en" : "ar")} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${input}`}>{ar ? "English" : "العربية"}</button>
-          <button type="button" onClick={() => { const next = !dark; setDarkMode(next); localStorage.setItem("vetra-theme", next ? "dark" : "light"); }} aria-label={dark ? "Light mode" : "Dark mode"} className={`h-10 w-10 rounded-lg border ${input}`}><span className={`mx-auto block h-4 w-4 rounded-full border-2 ${dark ? "border-amber-400 bg-amber-400" : "border-slate-500"}`} /></button>
+          <button type="button" onClick={() => { const next = !dark; setDarkMode(next); writeVetraThemeMode(next); }} aria-label={dark ? "Light mode" : "Dark mode"} className={`h-10 w-10 rounded-lg border ${input}`}><span className={`mx-auto block h-4 w-4 rounded-full border-2 ${dark ? "border-amber-400 bg-amber-400" : "border-slate-500"}`} /></button>
         </div>
       </header>
 

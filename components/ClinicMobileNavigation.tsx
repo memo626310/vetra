@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
+import { readVetraTheme, VETRA_THEME_EVENT } from "@/lib/theme";
 
 // VETRA_CLINIC_MOBILE_NAV_COMPONENT
 // VETRA_CLINIC_NAV_TEAL_POLISH_V1
@@ -31,12 +32,16 @@ export default function ClinicMobileNavigation() {
   const isPublic = PUBLIC_ROUTES.includes(pathname) || isClientPortal;
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("vetra-theme");
-    const savedDarkMode = localStorage.getItem("vetra-dark-mode");
     const savedLanguage = localStorage.getItem("vetra-language");
-    if (savedTheme === "light" || savedDarkMode === "false") setDark(false);
-    else if (savedTheme === "dark" || savedDarkMode === "true") setDark(true);
+    setDark(readVetraTheme() !== "light");
     if (savedLanguage === "en" || savedLanguage === "ar") setLanguage(savedLanguage);
+    const syncTheme = () => setDark(readVetraTheme() !== "light");
+    window.addEventListener(VETRA_THEME_EVENT, syncTheme);
+    window.addEventListener("storage", syncTheme);
+    return () => {
+      window.removeEventListener(VETRA_THEME_EVENT, syncTheme);
+      window.removeEventListener("storage", syncTheme);
+    };
   }, []);
 
   useEffect(() => {

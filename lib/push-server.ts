@@ -40,6 +40,8 @@ type ClinicPushContext = {
   clinicDb: SupabaseClient;
 };
 
+export type ClinicDbContext = ClinicPushContext;
+
 export class PushSetupError extends Error {
   constructor(message: string, public status = 400) {
     super(message);
@@ -180,13 +182,18 @@ export async function resolveClinicPushContext(request: Request): Promise<Clinic
     throw new PushSetupError("A secure clinic data session could not be created.", 403);
   }
 
+  const cleanTenantToken = tenantToken.replace(/\s+/g, "").trim();
+  if (cleanTenantToken.split(".").length !== 3) {
+    throw new PushSetupError("A valid clinic database session could not be created.", 503);
+  }
+
   return {
     clinicId: value.clinic_id,
     role: typeof value.role === "string" ? value.role : "",
     userId: userResult.user.id,
     clinicDb: createClient(value.database_url, value.database_publishable_key, {
       auth: { persistSession: false, autoRefreshToken: false },
-      accessToken: async () => tenantToken.replace(/\s+/g, "").trim(),
+      accessToken: async () => cleanTenantToken,
     }),
   };
 }

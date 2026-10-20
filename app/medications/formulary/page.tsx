@@ -372,7 +372,7 @@ export default function BSAVAFormularyPage() {
     if (savedLanguage === "ar" || savedLanguage === "en") {
       setLanguage(savedLanguage);
     }
-    if (savedTheme === "light") setDarkMode(false);
+    setDarkMode(savedTheme !== "light");
 
     fetch("/data/vetra-bsava-formulary-10e-a.json")
       .then(async (response) => {

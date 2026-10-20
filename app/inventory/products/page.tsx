@@ -171,6 +171,7 @@ export default function ProductsPage() {
 
 
   const [search, setSearch] = useState("");
+  const [stockFilter, setStockFilter] = useState<"all" | "low" | "out">("all");
 
 
   const [selectedCategory, setSelectedCategory] =
@@ -271,6 +272,8 @@ export default function ProductsPage() {
   useEffect(() => {
 
 
+    const stock = new URLSearchParams(window.location.search).get("stock");
+    if (stock === "low" || stock === "out") setStockFilter(stock);
     loadData();
 
 
@@ -1308,7 +1311,8 @@ const { error } =
             matchesSearch &&
 
 
-            matchesCategory
+            matchesCategory &&
+            (stockFilter === "all" || (stockFilter === "out" ? Number(product.quantity) <= 0 : Number(product.quantity) > 0 && Number(product.quantity) <= Number(product.reorder_level)))
 
 
           );
@@ -1330,6 +1334,7 @@ const { error } =
 
 
       selectedCategory,
+      stockFilter,
 
 
     ]);

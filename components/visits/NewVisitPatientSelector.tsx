@@ -117,7 +117,9 @@ export default function NewVisitPatientSelector({
                         }}
                         className={`w-full rounded-2xl border p-4 text-start transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
                           active
-                            ? "border-blue-500 bg-blue-50 shadow-md dark:border-blue-500 dark:bg-blue-950/40"
+                            ? darkMode
+                              ? "border-cyan-500 bg-cyan-950/40 shadow-md ring-1 ring-cyan-500/30"
+                              : "border-cyan-500 bg-cyan-50 shadow-md ring-1 ring-cyan-500/20"
                             : darkMode
                             ? "border-slate-800 bg-slate-950 hover:border-slate-700"
                             : "border-slate-200 bg-white hover:border-slate-300"
@@ -127,7 +129,9 @@ export default function NewVisitPatientSelector({
                           <div>
                             <div
                               className={`font-semibold ${
-                                darkMode
+                                active
+                                  ? darkMode ? "text-cyan-50" : "text-cyan-950"
+                                  : darkMode
                                   ? "text-white"
                                   : "text-slate-900"
                               }`}
@@ -138,7 +142,9 @@ export default function NewVisitPatientSelector({
                             {client.phone && (
                               <div
                                 className={`mt-1 text-xs ${
-                                  darkMode
+                                  active
+                                    ? darkMode ? "text-cyan-100/80" : "text-cyan-800"
+                                    : darkMode
                                     ? "text-slate-500"
                                     : "text-slate-500"
                                 }`}
@@ -149,7 +155,7 @@ export default function NewVisitPatientSelector({
                           </div>
 
                           {active && (
-                            <span className="rounded-full bg-blue-600 px-2.5 py-1 text-[10px] font-bold text-white">
+                            <span className="rounded-full bg-cyan-600 px-2.5 py-1 text-[10px] font-bold text-white">
                               ✓
                             </span>
                           )}
@@ -258,7 +264,9 @@ export default function NewVisitPatientSelector({
                         onClick={() => setSelectedPetId(pet.id)}
                         className={`w-full min-w-0 rounded-xl border p-2.5 text-start transition-colors duration-150 sm:p-3 ${
                           active
-                            ? "border-emerald-500 bg-emerald-50 shadow-md dark:border-emerald-500 dark:bg-emerald-950/40"
+                            ? darkMode
+                              ? "border-emerald-500 bg-emerald-950/40 shadow-md ring-1 ring-emerald-500/30"
+                              : "border-emerald-500 bg-emerald-50 shadow-md ring-1 ring-emerald-500/20"
                             : darkMode
                             ? "border-slate-800 bg-slate-950 hover:border-slate-700"
                             : "border-slate-200 bg-white hover:border-slate-300"
@@ -273,7 +281,9 @@ export default function NewVisitPatientSelector({
                             <div>
                               <div
                                 className={`font-semibold ${
-                                  darkMode
+                                  active
+                                    ? darkMode ? "text-emerald-50" : "text-emerald-950"
+                                    : darkMode
                                     ? "text-white"
                                     : "text-slate-900"
                                 }`}
@@ -283,7 +293,9 @@ export default function NewVisitPatientSelector({
 
                               <div
                                 className={`mt-1 text-xs ${
-                                  darkMode
+                                  active
+                                    ? darkMode ? "text-emerald-100/80" : "text-emerald-800"
+                                    : darkMode
                                     ? "text-slate-500"
                                     : "text-slate-500"
                                 }`}

@@ -337,8 +337,7 @@ export default function ClientAppointmentsPage() {
     const savedLang = localStorage.getItem("vetra-language");
     const savedTheme = localStorage.getItem("vetra-theme");
     if (savedLang === "ar" || savedLang === "en") setLang(savedLang);
-    if (savedTheme === "light") setDark(false);
-    if (savedTheme === "dark") setDark(true);
+    setDark(savedTheme !== "light");
   }, []);
 
   const load = async (withLoader = true) => {

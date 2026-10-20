@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getClientPortalDb } from "@/lib/client-portal-db";
 import PushNotificationsButton from "@/components/PushNotificationsButton";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 type Lang = "ar" | "en";
 type Client = { id: string; name: string };
@@ -298,7 +299,7 @@ export default function VaccinationsPage() {
     const l = localStorage.getItem("vetra-language");
     const th = localStorage.getItem("vetra-theme");
     if (l === "ar" || l === "en") setLang(l);
-    setDark(th === "dark");
+    setDark(th !== "light");
   }, []);
 
   useEffect(() => {
@@ -363,7 +364,7 @@ export default function VaccinationsPage() {
   function toggleTheme() {
     const nextTheme = !dark;
     setDark(nextTheme);
-    localStorage.setItem("vetra-theme", nextTheme ? "dark" : "light");
+    writeVetraThemeMode(nextTheme);
   }
 
   async function setVaccineReminder() {

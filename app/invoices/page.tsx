@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
+import { writeVetraThemeMode } from "@/lib/theme";
 
 type Invoice = {
   id: string;
@@ -87,7 +88,7 @@ export default function InvoicesPage() {
   useEffect(() => {
     if (!ready) return;
 
-    localStorage.setItem("vetra-theme", darkMode ? "dark" : "light");
+    writeVetraThemeMode(darkMode);
     localStorage.setItem("vetra-language", language);
   }, [darkMode, language, ready]);
 
