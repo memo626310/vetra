@@ -66,7 +66,6 @@ async function findStaff(db: Awaited<ReturnType<typeof resolveClinicPushContext>
 
 export async function POST(request: Request) {
   let createdUserId = "";
-  let createdDoctorId = "";
   let createdMembershipId = "";
   try {
     const body = await request.json().catch(() => null) as { staffId?: unknown; language?: unknown } | null;
@@ -163,14 +162,13 @@ export async function POST(request: Request) {
       });
       if (userError || !userData.user) throw userError || new Error("Could not create staff login.");
       createdUserId = userData.user.id;
-      createdDoctorId = userData.user.id;
 
-      const { error: doctorError } = await admin.from("doctors").insert({
+      const { error: doctorError } = await admin.from("doctors").upsert({
         id: userData.user.id,
         full_name: person.full_name,
         phone: person.phone,
         status: "active",
-      });
+      }, { onConflict: "id", ignoreDuplicates: true });
       if (doctorError) throw doctorError;
 
       const { data: member, error: memberError } = await admin.from("clinic_members").insert({
@@ -212,7 +210,6 @@ export async function POST(request: Request) {
     try {
       const admin = getCoreAdminClient();
       if (createdMembershipId) await admin.from("clinic_members").delete().eq("id", createdMembershipId);
-      if (createdDoctorId) await admin.from("doctors").delete().eq("id", createdDoctorId);
       if (createdUserId) await admin.auth.admin.deleteUser(createdUserId);
     } catch (rollbackError) {
       console.error("STAFF ACCOUNT ROLLBACK ERROR:", rollbackError);
