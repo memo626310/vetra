@@ -692,16 +692,19 @@ export default function NewVisitPage() {
       let createdInvoiceId = "";
       try {
         for (const item of attachments) {
-          const fileName = item.file.name.replace(/[^\w.-]+/g, "_");
-          const path = `${clinicContext.clinic_id}/${selectedPetId}/${visit.id}/${crypto.randomUUID()}-${fileName}`;
-          const { error: uploadError } = await db.storage.from("visit-attachments").upload(path, item.file, { contentType: item.file.type, upsert: false });
-          if (uploadError) throw uploadError;
-          uploadedAttachmentPaths.push(path);
-          const { error: metadataError } = await db.from("visit_attachments").insert({
-            clinic_id: clinicContext.clinic_id, visit_id: visit.id, client_id: selectedClientId, pet_id: selectedPetId,
-            file_name: item.file.name, storage_path: path, mime_type: item.file.type, size_bytes: item.file.size, category: item.category,
-          });
-          if (metadataError) throw metadataError;
+          const { data: sessionData } = await vetraCore.auth.getSession();
+          const token = sessionData.session?.access_token;
+          if (!token) throw new Error(language === "ar" ? "انتهت جلسة الدخول. سجّل الدخول مرة أخرى." : "Your session expired. Sign in again.");
+          const form = new FormData();
+          form.append("file", item.file);
+          form.append("visit_id", visit.id);
+          form.append("client_id", selectedClientId);
+          form.append("pet_id", selectedPetId);
+          form.append("category", item.category);
+          const response = await fetch("/api/visits/attachments", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+          const payload = await response.json().catch(() => null) as { attachment?: { storage_path?: string }; error?: string } | null;
+          if (!response.ok || !payload?.attachment?.storage_path) throw new Error(payload?.error || t.saveError);
+          uploadedAttachmentPaths.push(payload.attachment.storage_path);
         }
 
         const medicalRows = [
