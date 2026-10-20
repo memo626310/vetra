@@ -21,7 +21,7 @@ type StaffMember = {
   must_change_password: boolean;
 };
 
-type IssuedCredentials = { name: string; loginEmail: string; temporaryPassword: string };
+type IssuedCredentials = { name: string; loginIdentifiers: string[]; temporaryPassword: string };
 
 const copy = {
   ar: {
@@ -148,15 +148,17 @@ export default function StaffPage() {
   }
 
   async function issueStaffLogin(person: StaffMember) {
-    if (!person.phone) {
-      setError(t.phoneRequired);
+    const hasEmail = Boolean(person.email?.trim());
+    const hasPhone = Boolean(person.phone?.trim());
+    if (!hasEmail && !hasPhone) {
+      setError(language === "ar" ? "أضف البريد الإلكتروني أو رقم الهاتف للموظف أولًا." : "Add an email address or phone number for this staff member first.");
       return;
     }
     setAccountBusyId(person.id);
     setError("");
     setNotice("");
     setCredentials(null);
-    const whatsappTab = window.open("about:blank", "_blank");
+    const whatsappTab = hasPhone ? window.open("about:blank", "_blank") : null;
     try {
       const { data: sessionData, error: sessionError } = await vetraCore.auth.getSession();
       if (sessionError || !sessionData.session?.access_token) throw new Error(t.accountError);
@@ -165,14 +167,29 @@ export default function StaffPage() {
         headers: { Authorization: `Bearer ${sessionData.session.access_token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ staffId: person.id, language }),
       });
-      const result = await response.json().catch(() => null) as { loginEmail?: string; temporaryPassword?: string; whatsapp?: string; error?: string } | null;
-      if (!response.ok || !result?.loginEmail || !result.temporaryPassword || !result.whatsapp) throw new Error(result?.error || t.accountError);
-      if (whatsappTab) whatsappTab.location.href = result.whatsapp;
-      setCredentials({ name: person.full_name, loginEmail: result.loginEmail, temporaryPassword: result.temporaryPassword });
+      const result = await response.json().catch(() => null) as {
+        loginIdentifiers?: string[];
+        linkedEmail?: string;
+        authUserId?: string;
+        temporaryPassword?: string;
+        whatsapp?: string | null;
+        error?: string;
+      } | null;
+      if (!response.ok || !result?.loginIdentifiers?.length || !result.temporaryPassword) throw new Error(result?.error || t.accountError);
+      if (whatsappTab && result.whatsapp) whatsappTab.location.href = result.whatsapp;
+      else whatsappTab?.close();
+      setCredentials({ name: person.full_name, loginIdentifiers: result.loginIdentifiers, temporaryPassword: result.temporaryPassword });
       setStaff((current) => current.map((item) => item.id === person.id
-        ? { ...item, login_email: result.loginEmail!, must_change_password: true }
+        ? {
+            ...item,
+            auth_user_id: result.authUserId || item.auth_user_id,
+            login_email: result.linkedEmail || item.login_email,
+            must_change_password: true,
+          }
         : item));
-      setNotice(language === "ar" ? "تم تجهيز بيانات الدخول. راجع رسالة واتساب واضغط إرسال." : "Sign-in details are ready. Review WhatsApp and press Send.");
+      setNotice(result.whatsapp
+        ? (language === "ar" ? "تم تجهيز بيانات الدخول. راجع رسالة واتساب واضغط إرسال." : "Sign-in details are ready. Review WhatsApp and press Send.")
+        : (language === "ar" ? "تم إنشاء الحساب. انسخ بيانات الدخول وأرسلها للموظف بطريقة آمنة." : "The account is ready. Copy the sign-in details and share them securely with the staff member."));
     } catch (issueError) {
       whatsappTab?.close();
       setError(issueError instanceof Error ? issueError.message : t.accountError);
@@ -227,8 +244,8 @@ export default function StaffPage() {
       {notice && <p role="status" className="mb-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600">{notice}</p>}
       {credentials && <section className={`mb-5 rounded-xl border border-cyan-500/30 p-4 ${surface}`}>
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-bold">{t.credentials} · {credentials.name}</h2><p className="mt-1 text-xs text-slate-500">{t.forceChange}</p></div><button type="button" onClick={() => setCredentials(null)} aria-label={ar ? "إغلاق" : "Close"} className="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-500/10">×</button></div>
-        <dl className="mt-4 grid gap-3 sm:grid-cols-2"><div className={`rounded-lg border p-3 ${input}`}><dt className="text-xs text-slate-500">{t.username}</dt><dd className="mt-1 break-all font-mono text-sm">{credentials.loginEmail}</dd></div><div className={`rounded-lg border p-3 ${input}`}><dt className="text-xs text-slate-500">{t.tempPassword}</dt><dd className="mt-1 break-all font-mono text-sm">{credentials.temporaryPassword}</dd></div></dl>
-        <button type="button" onClick={() => void navigator.clipboard.writeText(`${credentials.loginEmail}\n${credentials.temporaryPassword}`)} className="mt-3 rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-600 hover:bg-cyan-500/10">{t.copy}</button>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2"><div className={`rounded-lg border p-3 ${input}`}><dt className="text-xs text-slate-500">{t.username}</dt><dd className="mt-1 whitespace-pre-line break-all font-mono text-sm">{credentials.loginIdentifiers.join("\n")}</dd></div><div className={`rounded-lg border p-3 ${input}`}><dt className="text-xs text-slate-500">{t.tempPassword}</dt><dd className="mt-1 break-all font-mono text-sm">{credentials.temporaryPassword}</dd></div></dl>
+        <button type="button" onClick={() => void navigator.clipboard.writeText(`${credentials.loginIdentifiers.join("\n")}\n${credentials.temporaryPassword}`)} className="mt-3 rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-600 hover:bg-cyan-500/10">{t.copy}</button>
       </section>}
 
       <section className={`mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4 ${surface}`}>

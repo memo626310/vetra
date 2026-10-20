@@ -8,7 +8,7 @@ import { vetraCore } from "@/lib/vetra-core";
 export default function LoginPage() {
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -16,100 +16,68 @@ export default function LoginPage() {
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-
     setLoading(true);
     setError("");
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const enteredIdentifier = identifier.trim();
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(enteredIdentifier);
+    const digits = enteredIdentifier.replace(/\D/g, "");
+    let normalizedPhone = "";
+    if (!isEmail) {
+      if (!/^[+\d\s().-]+$/.test(enteredIdentifier)) {
+        setError("Enter a valid email address or phone number.");
+        setLoading(false);
+        return;
+      }
+      if (enteredIdentifier.startsWith("+")) normalizedPhone = `+${digits}`;
+      else if (digits.startsWith("00")) normalizedPhone = `+${digits.slice(2)}`;
+      else if (digits.startsWith("0")) normalizedPhone = `+20${digits.slice(1)}`;
+      else if (digits.startsWith("20")) normalizedPhone = `+${digits}`;
+      else normalizedPhone = `+20${digits}`;
+      if (digits.length < 8 || digits.length > 15) {
+        setError("Enter a valid email address or phone number.");
+        setLoading(false);
+        return;
+      }
+    }
+    const normalizedEmail = enteredIdentifier.toLowerCase();
+    const credentials = isEmail
+      ? { email: normalizedEmail, password }
+      : { phone: normalizedPhone, password };
 
-    // ==========================================
-    // 1. Authenticate through VETRA Core
-    // ==========================================
-
-    const { error: coreError } =
-      await vetraCore.auth.signInWithPassword({
-        email: normalizedEmail,
-        password,
-      });
-
+    const { error: coreError } = await vetraCore.auth.signInWithPassword(credentials);
     if (coreError) {
-      setError("Invalid email or password.");
+      const phoneLoginDisabled = !isEmail && /phone.*disabled|phone.*not enabled|phone provider/i.test(coreError.message);
+      setError(phoneLoginDisabled
+        ? "Phone login is not enabled in VETRA CORE Auth settings."
+        : "Invalid email/phone or password.");
       setLoading(false);
       return;
     }
 
-    // ==========================================
-    // 2. Keep the existing clinic session alive
-    //    during the Core migration
-    // ==========================================
-
-    const { error: clinicError } =
-      await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password,
-      });
-
-    // The legacy project session remains useful for older accounts, but staff
-    // accounts are provisioned in VETRA Core only.
+    const legacyCredentials = isEmail
+      ? { email: normalizedEmail, password }
+      : { phone: normalizedPhone, password };
+    const { error: clinicError } = await supabase.auth.signInWithPassword(legacyCredentials);
     if (clinicError) console.info("Legacy clinic session unavailable; continuing with Core clinic access.");
 
-    // ==========================================
-    // 3. Check clinic BEFORE entering Dashboard
-    // ==========================================
-
-    const {
-      data: clinicData,
-      error: clinicContextError,
-    } = await vetraCore.rpc(
-      "get_my_clinic_context"
-    );
-
+    const { data: clinicData, error: clinicContextError } = await vetraCore.rpc("get_my_clinic_context");
     if (clinicContextError) {
-      console.error(
-        "VETRA CORE CLINIC CONTEXT ERROR:",
-        clinicContextError
-      );
-
-      await Promise.all([
-        vetraCore.auth.signOut(),
-        supabase.auth.signOut(),
-      ]);
-
-      setError(
-        "We could not verify your clinic. Please try again."
-      );
-
+      console.error("VETRA CORE CLINIC CONTEXT ERROR:", clinicContextError);
+      await Promise.all([vetraCore.auth.signOut(), supabase.auth.signOut()]);
+      setError("We could not verify your clinic. Please try again.");
       setLoading(false);
       return;
     }
 
-    const clinicContext = Array.isArray(clinicData)
-      ? clinicData[0] ?? null
-      : null;
+    const clinicContext = Array.isArray(clinicData) ? clinicData[0] ?? null : null;
+    console.log("LOGIN CLINIC CHECK:", clinicContext);
 
-    console.log(
-      "LOGIN CLINIC CHECK:",
-      clinicContext
-    );
-
-    // ==========================================
-    // 4. No active clinic → Clinic Setup
-    // ==========================================
-
-    if (
-      !clinicContext ||
-      !clinicContext.clinic_id ||
-      clinicContext.clinic_status !== "active" ||
-      clinicContext.member_status !== "active"
-    ) {
+    if (!clinicContext || !clinicContext.clinic_id || clinicContext.clinic_status !== "active" || clinicContext.member_status !== "active") {
       router.replace("/clinic-setup");
       router.refresh();
       return;
     }
-
-    // ==========================================
-    // 5. Active clinic → Dashboard
-    // ==========================================
 
     const { data: sessionData } = await vetraCore.auth.getSession();
     const staffStateResponse = await fetch("/api/staff/auth-state", {
@@ -160,17 +128,18 @@ export default function LoginPage() {
 
             <div>
               <label className="mb-2 block text-sm font-medium">
-                Email
+                Email or phone number
               </label>
 
               <input
-                type="email"
-                value={email}
+                type="text"
+                value={identifier}
                 onChange={(e) =>
-                  setEmail(e.target.value)
+                  setIdentifier(e.target.value)
                 }
-                placeholder="doctor@vetra.top"
-                autoComplete="email"
+                placeholder="doctor@vetra.top or 01012345678"
+                autoComplete="username"
+                inputMode="text"
                 required
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:focus:border-slate-500 dark:focus:ring-slate-700"
               />
