@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
+import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
+import { loadClinicProfile } from "@/lib/clinic-profile";
 
 type Language = "ar" | "en";
 type Status =
@@ -299,6 +301,7 @@ export default function AppointmentsPage() {
   const [pets, setPets] = useState<Pet[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [clinicName, setClinicName] = useState("");
+  const [clinicId, setClinicId] = useState("");
 
   const [tab, setTab] = useState<"today" | "upcoming" | "all">("today");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -350,8 +353,11 @@ export default function AppointmentsPage() {
     try {
       const context = await getClinicContext();
       setClinicName(context.clinic_name);
+      setClinicId(context.clinic_id);
 
       const db = await getClinicDb();
+      const clinicProfile = await loadClinicProfile(db, context.clinic_id);
+      setClinicName(clinicProfile?.display_name || context.clinic_name);
 
       const [aResult, cResult, pResult, sResult] = await Promise.all([
         db
@@ -571,6 +577,32 @@ export default function AppointmentsPage() {
     } catch {
       // Appointment status changes remain saved if push delivery is unavailable.
     }
+  }
+
+  async function shareAppointmentWhatsApp(appointment: Appointment) {
+    const reasonText = (appointment.reason || "").toLowerCase();
+    const key = /surg|جراح/.test(reasonText)
+      ? "surgery_reminder"
+      : /follow.?up|متابع/.test(reasonText)
+        ? "followup_reminder"
+        : "appointment_reminder";
+    const opened = await openWhatsAppTemplate(
+      appointment.client?.phone,
+      key,
+      language,
+      {
+        customer_name: appointment.client?.name || "",
+        pet_name: appointment.pet?.name || "",
+        appointment_date: dayLabel(appointment.appointment_date, language),
+        appointment_time: timeLabel(appointment, language),
+        follow_up_date: dayLabel(appointment.appointment_date, language),
+        notes: appointment.notes || "",
+        doctor_name: "",
+        brand_name: clinicName || "VETRA",
+      },
+      clinicId,
+    );
+    if (!opened) setError(appointment.client?.phone ? (language === "ar" ? "اسمح بفتح واتساب للمتابعة." : "Allow WhatsApp to open to continue.") : (language === "ar" ? "لا يوجد رقم هاتف محفوظ للعميل." : "No customer phone number is saved."));
   }
 
   async function saveAppointment() {
@@ -1051,6 +1083,7 @@ export default function AppointmentsPage() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex flex-wrap gap-2">
+                          {a.client?.phone && !["cancelled", "no_show"].includes(a.status) && <button onClick={() => void shareAppointmentWhatsApp(a)} className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-400">{language === "ar" ? "واتساب" : "WhatsApp"}</button>}
                           {(a.status === "pending" || a.status === "confirmed" || computed === "late") && (
                             <button onClick={() => void updateStatus(a, "arrived")} className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-400">{t.arrivedAction}</button>
                           )}

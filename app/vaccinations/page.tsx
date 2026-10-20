@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
+import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
+import { loadClinicProfile } from "@/lib/clinic-profile";
 
 type Lang = "ar" | "en";
 type Status = "not_due" | "current" | "grace" | "overdue" | "due" | "no_repeat";
@@ -119,6 +121,7 @@ const T = {
     language: "English",
     theme: "الوضع",
     notifyOwner: "إشعار المالك",
+    whatsapp: "واتساب",
     notificationNotes: "ملاحظات اختيارية تظهر للمالك",
     sendReminder: "إرسال التذكير",
     cancel: "إلغاء",
@@ -185,6 +188,7 @@ const T = {
     language: "العربية",
     theme: "Theme",
     notifyOwner: "Notify owner",
+    whatsapp: "WhatsApp",
     notificationNotes: "Optional notes visible to the owner",
     sendReminder: "Send reminder",
     cancel: "Cancel",
@@ -778,6 +782,23 @@ export default function ClinicVaccinationsPage() {
     }
   }
 
+  async function shareVaccineWhatsApp(item: DueItem) {
+    const overdue = item.status === "overdue" || (item.days !== null && item.days < 0);
+    const opened = await openWhatsAppTemplate(
+      item.pet.client?.phone,
+      overdue ? "vaccination_overdue" : "vaccination_due",
+      lang,
+      {
+        customer_name: item.pet.client?.name || "",
+        pet_name: item.pet.name,
+        vaccine_name: item.vaccine,
+        due_date: item.due ? dateText(item.due, lang) : (lang === "ar" ? "مستحق الآن" : "Due now"),
+        brand_name: clinicName,
+      },
+    );
+    if (!opened) setNotifyMessage(item.pet.client?.phone ? (lang === "ar" ? "اسمح بفتح واتساب للمتابعة." : "Allow WhatsApp to open to continue.") : (lang === "ar" ? "لا يوجد رقم هاتف محفوظ للعميل." : "No customer phone number is saved."));
+  }
+
   useEffect(() => {
     const savedLang =
       localStorage.getItem("vetra-language");
@@ -832,6 +853,7 @@ export default function ClinicVaccinationsPage() {
       );
 
       const db = await getClinicDb();
+      const clinicProfile = await loadClinicProfile(db, context.clinic_id);
 
       const [petsResult, vaccinesResult] = await Promise.all([
         db
@@ -872,6 +894,7 @@ export default function ClinicVaccinationsPage() {
 
       if (petsResult.error) throw petsResult.error;
       if (vaccinesResult.error) throw vaccinesResult.error;
+      setClinicName(clinicProfile?.display_name || context.clinic_name || "VETRA");
 
       const rawPets = (petsResult.data || []) as Array<Omit<Pet, "client">>;
       const clientIds = Array.from(
@@ -1477,6 +1500,7 @@ export default function ClinicVaccinationsPage() {
                     <div className="mt-4 flex flex-wrap gap-2">
                       <Link href={`/pets/${item.pet.id}`} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold">{T[lang].openPet}</Link>
                       {item.pet.client_id && <button type="button" onClick={() => { setNotifyMessage(""); setNotifyNotes(""); setNotifyKey(notifyKey === key ? "" : key); }} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950">{T[lang].notifyOwner}</button>}
+                      {item.pet.client_id && <button type="button" onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-300">{T[lang].whatsapp}</button>}
                     </div>
                     {notifyKey === key && (
                       <div className="mt-3 space-y-2">
@@ -1546,6 +1570,7 @@ export default function ClinicVaccinationsPage() {
                       <Link href={`/pets/${item.pet.id}`} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold">{T[lang].openPet}</Link>
                       <Link href={`/visits/new?pet=${encodeURIComponent(item.pet.id)}`} className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300">{T[lang].newVisit}</Link>
                       {(item.due || item.status === "due") && item.pet.client_id && <button type="button" onClick={() => { setNotifyMessage(""); setNotifyNotes(""); setNotifyKey(notifyKey === key ? "" : key); }} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950">{T[lang].notifyOwner}</button>}
+                      {(item.due || item.status === "due") && item.pet.client_id && <button type="button" onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-300">{T[lang].whatsapp}</button>}
                     </div>
                     {notifyKey === key && (
                       <div className="mt-3 space-y-2">
@@ -1728,6 +1753,7 @@ export default function ClinicVaccinationsPage() {
                                 {T[lang].notifyOwner}
                               </button>
                             )}
+                            {(item.due || item.status === "due") && item.pet.client_id && <button type="button" onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300">{T[lang].whatsapp}</button>}
                           </div>
                           {notifyKey === `${item.pet.id}-${item.vaccineType}` && (
                             <div className="mt-3 min-w-64 space-y-2">

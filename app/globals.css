@@ -142,3 +142,26 @@ body {
     padding-bottom: calc(5rem + env(safe-area-inset-bottom));
   }
 }
+
+/* Visit workspace palette follows the clinic dashboard in both themes. */
+[data-vetra-visit-theme="dark"] {
+  color-scheme: dark;
+}
+
+[data-vetra-visit-theme="dark"] [class~="bg-slate-900"] { background-color: #181b21 !important; }
+[data-vetra-visit-theme="dark"] [class~="bg-slate-950"] { background-color: #111419 !important; }
+[data-vetra-visit-theme="dark"] [class~="bg-slate-800"] { background-color: #20242a !important; }
+[data-vetra-visit-theme="dark"] [class~="border-slate-800"],
+[data-vetra-visit-theme="dark"] [class~="border-slate-700"] { border-color: rgb(255 255 255 / 8%) !important; }
+[data-vetra-visit-theme="dark"] [class~="text-slate-500"] { color: #8b949e !important; }
+[data-vetra-visit-theme="dark"] [class~="text-slate-400"] { color: #a0a9b3 !important; }
+[data-vetra-visit-theme="dark"] [class~="text-slate-300"],
+[data-vetra-visit-theme="dark"] [class~="text-slate-200"] { color: #d2d7dc !important; }
+[data-vetra-visit-theme="dark"] [class~="text-slate-100"] { color: #f1f4f6 !important; }
+
+[data-vetra-visit-theme] [class~="bg-blue-600"] { background-color: #0d9488 !important; }
+[data-vetra-visit-theme] [class~="hover:bg-blue-700"]:hover { background-color: #0f766e !important; }
+[data-vetra-visit-theme] [class~="border-blue-500"] { border-color: #14b8a6 !important; }
+[data-vetra-visit-theme] [class~="focus:border-blue-500"]:focus { border-color: #14b8a6 !important; }
+[data-vetra-visit-theme] select option { background: #fff; color: #111827; }
+[data-vetra-visit-theme="dark"] select option { background: #181b21; color: #f1f4f6; }

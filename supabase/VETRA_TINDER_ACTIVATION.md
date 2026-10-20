@@ -1,6 +1,6 @@
 # VETRA Tinder activation
 
-The application code now supports independent verified-email accounts, separate pet profiles, pending listing submissions, moderation, adoption inquiries, mutual breeding interest, in-app messages, notifications, reports, blocks, and self-service deletion. The database and email-provider steps below must be completed before these flows can run against production.
+The application code now supports independent verified-email accounts, separate pet profiles, pending listing submissions, moderation, adoption inquiries, mutual breeding interest, in-app messages, notifications, reports, blocks, social profiles, community posts, image attachments, follows, likes, comments, saves, and self-service deletion. The database and email-provider steps below must be completed before these flows can run against production.
 
 ## 1. Apply Core database migrations
 
@@ -8,8 +8,9 @@ In the **VETRA CORE** Supabase project, run these files in order from the SQL Ed
 
 1. `migrations/20261018_vetra_adoption_listings.sql`
 2. `migrations/20261019_vetra_match_workflows.sql`
+3. `migrations/20261020_vetra_match_social.sql`
 
-The second migration adds the isolated account/profile tables, secure interaction and moderation tables, updated breeding safety policy, limited public profile-column access, and the `vetra-match-pets` image bucket. It does not modify clinic pet or medical records.
+The workflow migrations add the isolated account/profile tables, secure interaction and moderation tables, updated breeding safety policy, limited public profile-column access, and the `vetra-match-pets` image bucket. The social migration adds the community feed and its profile, follow, post, like, comment, save, and notification data. It does not modify clinic pet or medical records.
 
 ## 2. Enable verified email sign-in
 

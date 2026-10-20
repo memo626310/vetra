@@ -10,14 +10,13 @@ type Props = {
 };
 
 export default function NewVisitDetailsModal({ selectedOldVisit, onClose, darkMode, language, t }: Props) {
-  const setSelectedOldVisit = (_visit: Visit | null) => onClose();
   return (
     <>
         {/* OLD VISIT MODAL */}
         {selectedOldVisit && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
-            onClick={() => setSelectedOldVisit(null)}
+            onClick={onClose}
           >
             <div
               onClick={(e) => e.stopPropagation()}
@@ -34,7 +33,7 @@ export default function NewVisitDetailsModal({ selectedOldVisit, onClose, darkMo
                       darkMode ? "text-white" : "text-slate-900"
                     }`}
                   >
-                    🩺 {t.visitDetails}
+                    {t.visitDetails}
                   </h2>
 
                   <p
@@ -58,7 +57,7 @@ export default function NewVisitDetailsModal({ selectedOldVisit, onClose, darkMo
 
                 <button
                   type="button"
-                  onClick={() => setSelectedOldVisit(null)}
+                  onClick={onClose}
                   className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 hover:scale-105 ${
                     darkMode
                       ? "bg-slate-800 text-slate-300 hover:bg-slate-700"
@@ -283,7 +282,7 @@ export default function NewVisitDetailsModal({ selectedOldVisit, onClose, darkMo
               <div className="mt-6 flex justify-end">
                 <button
                   type="button"
-                  onClick={() => setSelectedOldVisit(null)}
+                  onClick={onClose}
                   className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
                     darkMode
                       ? "bg-slate-800 text-slate-200 hover:bg-slate-700"

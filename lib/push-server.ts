@@ -35,6 +35,8 @@ type OwnerAccess = {
 
 type ClinicPushContext = {
   clinicId: string;
+  role: string;
+  userId: string;
   clinicDb: SupabaseClient;
 };
 
@@ -165,7 +167,7 @@ export async function resolveClinicPushContext(request: Request): Promise<Clinic
   const { data, error } = await clinicClient.rpc("get_my_clinic_context");
   const context = Array.isArray(data) ? data[0] : data;
   const value = context && typeof context === "object"
-    ? context as { clinic_id?: unknown; database_url?: unknown; database_publishable_key?: unknown; database_status?: unknown }
+    ? context as { clinic_id?: unknown; role?: unknown; database_url?: unknown; database_publishable_key?: unknown; database_status?: unknown }
     : null;
   if (error || typeof value?.clinic_id !== "string" || !value.clinic_id) {
     throw new PushSetupError("No active clinic was found for this account.", 403);
@@ -180,6 +182,8 @@ export async function resolveClinicPushContext(request: Request): Promise<Clinic
 
   return {
     clinicId: value.clinic_id,
+    role: typeof value.role === "string" ? value.role : "",
+    userId: userResult.user.id,
     clinicDb: createClient(value.database_url, value.database_publishable_key, {
       auth: { persistSession: false, autoRefreshToken: false },
       accessToken: async () => tenantToken.replace(/\s+/g, "").trim(),

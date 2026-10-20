@@ -44,21 +44,16 @@ export default function NewVisitPatientOverview({
   return (<>
             {/* PATIENT HEADER */}
             <section
-              className={`overflow-hidden rounded-3xl border shadow-sm transition-all duration-300 ${
+              className={`overflow-hidden rounded-2xl border shadow-sm transition-colors duration-200 ${
                 darkMode
-                  ? "border-slate-800 bg-slate-900"
+                  ? "border-white/[0.07] bg-[#181B21]"
                   : "border-slate-200 bg-white"
               }`}
             >
               <div className="flex flex-col gap-5 p-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-3xl text-white shadow-lg shadow-blue-500/20">
-                    {petDetails.species?.toLowerCase() === "cat"
-                      ? "🐱"
-                      : petDetails.species?.toLowerCase() ===
-                        "dog"
-                      ? "🐶"
-                      : "🐾"}
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10 text-sm font-bold text-cyan-700 dark:text-cyan-300">
+                    {petDetails.species?.slice(0, 1).toUpperCase() || "P"}
                   </div>
 
                   <div>
@@ -137,7 +132,7 @@ export default function NewVisitPatientOverview({
                       : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="mb-1 text-base sm:mb-3 sm:text-xl">👤</div>
+                  <div className="mb-1 flex h-7 w-7 items-center justify-center rounded-md bg-cyan-500/10 text-xs font-bold text-cyan-700 dark:text-cyan-300">O</div>
 
                   <div
                     className={`text-xs ${
@@ -177,7 +172,7 @@ export default function NewVisitPatientOverview({
                       : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="mb-1 text-base sm:mb-3 sm:text-xl">🐾</div>
+                  <div className="mb-1 flex h-7 w-7 items-center justify-center rounded-md bg-cyan-500/10 text-xs font-bold text-cyan-700 dark:text-cyan-300">P</div>
 
                   <div
                     className={`text-xs ${
@@ -205,7 +200,7 @@ export default function NewVisitPatientOverview({
                       : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="mb-1 text-base sm:mb-3 sm:text-xl">🎂</div>
+                  <div className="mb-1 flex h-7 w-7 items-center justify-center rounded-md bg-cyan-500/10 text-xs font-bold text-cyan-700 dark:text-cyan-300">A</div>
 
                   <div
                     className={`text-xs ${
@@ -253,7 +248,7 @@ export default function NewVisitPatientOverview({
                       : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="mb-1 text-base sm:mb-3 sm:text-xl">🆔</div>
+                  <div className="mb-1 text-xs font-bold uppercase text-cyan-600 sm:mb-3">ID</div>
 
                   <div
                     className={`text-xs ${
@@ -285,7 +280,7 @@ export default function NewVisitPatientOverview({
               }`}
             >
               <div className="flex items-start gap-3">
-                <div className="text-xl">⚠️</div>
+                <div className="text-xs font-bold uppercase">!</div>
 
                 <div>
                   <h3
@@ -321,7 +316,7 @@ export default function NewVisitPatientOverview({
                 }`}
               >
                 <div className="mb-1 flex items-center gap-2 sm:mb-3">
-                  <span>📅</span>
+                  <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">DATE</span>
 
                   <h3
                     className={`font-bold ${
@@ -356,7 +351,7 @@ export default function NewVisitPatientOverview({
                 }`}
               >
                 <div className="mb-1 flex items-center gap-2 sm:mb-3">
-                  <span>🩺</span>
+                  <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">DX</span>
 
                   <h3
                     className={`font-bold ${
@@ -387,7 +382,7 @@ export default function NewVisitPatientOverview({
                 }`}
               >
                 <div className="mb-1 flex items-center gap-2 sm:mb-3">
-                  <span>💊</span>
+                  <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">RX</span>
 
                   <h3
                     className={`font-bold ${
@@ -419,7 +414,7 @@ export default function NewVisitPatientOverview({
                     darkMode ? "text-white" : "text-slate-900"
                   }`}
                 >
-                  📈 {t.trends}
+                  {t.trends}
                 </h2>
 
                 <p
@@ -436,7 +431,7 @@ export default function NewVisitPatientOverview({
               <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-4">
                 <VitalCard
                   title={t.weight}
-                  icon="⚖️"
+                  icon="KG"
                   latest={latestWeight}
                   previous={previousWeight}
                   unit={t.kg}
@@ -449,7 +444,7 @@ export default function NewVisitPatientOverview({
 
                 <VitalCard
                   title={t.temperature}
-                  icon="🌡️"
+                  icon="°C"
                   latest={latestTemperature}
                   previous={previousTemperature}
                   unit={t.celsius}
@@ -462,7 +457,7 @@ export default function NewVisitPatientOverview({
 
                 <VitalCard
                   title={t.heartRate}
-                  icon="❤️"
+                  icon="HR"
                   latest={latestHeartRate}
                   previous={previousHeartRate}
                   unit={t.bpm}
@@ -475,7 +470,7 @@ export default function NewVisitPatientOverview({
 
                 <VitalCard
                   title={t.respiratoryRate}
-                  icon="🫁"
+                  icon="RR"
                   latest={latestRespiratoryRate}
                   previous={previousRespiratoryRate}
                   unit={t.rpm}

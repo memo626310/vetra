@@ -108,6 +108,12 @@ export async function DELETE(request: Request) {
       admin.from("vetra_match_notifications").delete().or(`recipient_key.eq.${key},actor_key.eq.${key}`),
       admin.from("vetra_match_blocks").delete().or(`owner_key.eq.${key},blocked_owner_key.eq.${key}`),
       admin.from("vetra_match_threads").delete().or(`requester_key.eq.${key},listing_owner_key.eq.${key}`),
+      admin.from("vetra_match_follows").delete().or(`follower_key.eq.${key},following_key.eq.${key}`),
+      admin.from("vetra_match_posts").delete().eq("author_key", key),
+      admin.from("vetra_match_post_likes").delete().eq("actor_key", key),
+      admin.from("vetra_match_saved_posts").delete().eq("actor_key", key),
+      admin.from("vetra_match_post_comments").delete().eq("author_key", key),
+      admin.from("vetra_match_social_profiles").delete().eq("owner_key", key),
     ]);
     const failure = cleanup.find((result) => result.error)?.error;
     if (failure) throw failure;

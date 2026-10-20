@@ -20,7 +20,7 @@ export default function NewVisitHistory({ visits, darkMode, language, t, onSelec
                     darkMode ? "text-white" : "text-slate-900"
                   }`}
                 >
-                  📋 {t.visitHistory}
+                  {t.visitHistory}
                 </h2>
               </div>
 
@@ -109,7 +109,7 @@ export default function NewVisitHistory({ visits, darkMode, language, t, onSelec
                                   : "bg-blue-50 text-blue-700"
                               }`}
                             >
-                              ⚖️ {visit.weight} {t.kg}
+                              {visit.weight} {t.kg}
                             </span>
                           )}
 
@@ -121,7 +121,7 @@ export default function NewVisitHistory({ visits, darkMode, language, t, onSelec
                                   : "bg-orange-50 text-orange-700"
                               }`}
                             >
-                              🌡️ {visit.temperature}
+                              {visit.temperature}
                               {t.celsius}
                             </span>
                           )}
@@ -134,7 +134,7 @@ export default function NewVisitHistory({ visits, darkMode, language, t, onSelec
                                   : "bg-rose-50 text-rose-700"
                               }`}
                             >
-                              ❤️ {visit.heart_rate} {t.bpm}
+                              {visit.heart_rate} {t.bpm}
                             </span>
                           )}
 

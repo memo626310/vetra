@@ -49,18 +49,9 @@ export default function LoginPage() {
         password,
       });
 
-    if (clinicError) {
-      // Do not leave the Core session active
-      // if the clinic session could not be created.
-      await vetraCore.auth.signOut();
-
-      setError(
-        "Your VETRA Core account is valid, but clinic access is not linked yet."
-      );
-
-      setLoading(false);
-      return;
-    }
+    // The legacy project session remains useful for older accounts, but staff
+    // accounts are provisioned in VETRA Core only.
+    if (clinicError) console.info("Legacy clinic session unavailable; continuing with Core clinic access.");
 
     // ==========================================
     // 3. Check clinic BEFORE entering Dashboard
@@ -120,7 +111,20 @@ export default function LoginPage() {
     // 5. Active clinic → Dashboard
     // ==========================================
 
-    router.replace("/dashboard");
+    const { data: sessionData } = await vetraCore.auth.getSession();
+    const staffStateResponse = await fetch("/api/staff/auth-state", {
+      headers: { Authorization: `Bearer ${sessionData.session?.access_token || ""}` },
+      cache: "no-store",
+    });
+    const staffState = await staffStateResponse.json().catch(() => null) as { mustChangePassword?: boolean } | null;
+    if (!staffStateResponse.ok || !staffState) {
+      await Promise.all([vetraCore.auth.signOut(), supabase.auth.signOut()]);
+      setError("We could not verify your account security status. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    router.replace(staffState.mustChangePassword ? "/change-password" : "/dashboard");
     router.refresh();
   }
 

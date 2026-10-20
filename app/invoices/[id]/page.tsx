@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
+import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
 
 type Client = {
   id: string;
@@ -638,17 +639,15 @@ export default function InvoiceDetailsPage() {
       return;
     }
 
-    const phone = invoice.client.phone.replace(/\D/g, "");
-
-    const message = isAr
-      ? `مرحبًا ${invoice.client.name}،\nفاتورة VETRA رقم #${invoice.invoice_number}\nالإجمالي: ${money(invoice.total)}\nالمدفوع: ${money(invoice.paid_amount)}\nالمتبقي: ${money(remaining)}`
-      : `Hello ${invoice.client.name},\nVETRA invoice #${invoice.invoice_number}\nTotal: ${money(invoice.total)}\nPaid: ${money(invoice.paid_amount)}\nRemaining: ${money(remaining)}`;
-
-    window.open(
-      `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
-      "_blank",
-      "noopener,noreferrer"
-    );
+    void openWhatsAppTemplate(invoice.client.phone, "invoice_sharing", isAr ? "ar" : "en", {
+      customer_name: invoice.client.name,
+      pet_name: invoice.pet?.name || (isAr ? "الحيوان الأليف" : "your pet"),
+      invoice_number: invoice.invoice_number,
+      total: money(invoice.total),
+      paid: money(invoice.paid_amount),
+      balance: money(remaining),
+      brand_name: "VETRA",
+    });
   }
 
   if (loading) {
@@ -713,6 +712,13 @@ export default function InvoiceDetailsPage() {
           </button>
 
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="rounded-2xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm hover:bg-cyan-400"
+            >
+              {isAr ? "الداشبورد" : "Dashboard"}
+            </button>
+
             <button
               onClick={() => setLanguage(language === "en" ? "ar" : "en")}
               className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold dark:border-slate-800 dark:bg-slate-900"

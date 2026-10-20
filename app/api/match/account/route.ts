@@ -17,6 +17,12 @@ export async function POST(request: Request) {
       admin.from("vetra_match_notifications").delete().or(`recipient_key.eq.${actor.key},actor_key.eq.${actor.key}`),
       admin.from("vetra_match_blocks").delete().or(`owner_key.eq.${actor.key},blocked_owner_key.eq.${actor.key}`),
       admin.from("vetra_match_threads").delete().or(`requester_key.eq.${actor.key},listing_owner_key.eq.${actor.key}`),
+      admin.from("vetra_match_follows").delete().or(`follower_key.eq.${actor.key},following_key.eq.${actor.key}`),
+      admin.from("vetra_match_posts").delete().eq("author_key", actor.key),
+      admin.from("vetra_match_post_likes").delete().eq("actor_key", actor.key),
+      admin.from("vetra_match_saved_posts").delete().eq("actor_key", actor.key),
+      admin.from("vetra_match_post_comments").delete().eq("author_key", actor.key),
+      admin.from("vetra_match_social_profiles").delete().eq("owner_key", actor.key),
     ]);
     const failed = work.find((result) => result.error)?.error;
     if (failed) throw failed;

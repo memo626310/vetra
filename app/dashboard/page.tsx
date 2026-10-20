@@ -1,8 +1,10 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
+import { getClinicDb } from "@/lib/clinic-db";
 import PushNotificationsButton from "@/components/PushNotificationsButton";
 // VETRA_DASHBOARD_CURRENT_DESIGN_POLISH_V1
 
@@ -87,6 +89,8 @@ const translations = {
       finance: "المالية",
       reports: "التقارير",
       settings: "الإعدادات",
+      messages: "رسائل واتساب",
+      staff: "فريق العيادة",
     },
 
     cards: [
@@ -101,6 +105,8 @@ const translations = {
       ["المالية", "الدخل والمصروفات", "💰"],
       ["التقارير", "ملخص العيادة", "📊"],
       ["سجل الزيارات", "عرض وتعديل الكشوفات السابقة", "📋"],
+      ["رسائل واتساب", "قوالب الرسائل ومشاركتها", "💬"],
+      ["فريق العيادة", "الأطباء والمساعدون والاستقبال", "👩‍⚕️"],
     ],
 
     open: "فتح",
@@ -116,6 +122,8 @@ const translations = {
     workspace: "مساحة عملك",
     shortcutsTitle: "اختصارات العيادة",
     shortcutsSubtitle: "كل أدواتك اليومية في مكان واحد",
+    todayStatsTitle: "إحصائيات اليوم",
+    todayStats: ["مواعيد اليوم", "تطعيمات اليوم", "كمية قليلة", "نفد من الكمية"],
     theme: "المظهر",
 
     encouragement: [
@@ -144,6 +152,8 @@ const translations = {
       finance: "Finance",
       reports: "Reports",
       settings: "Settings",
+      messages: "WhatsApp messages",
+      staff: "Clinic staff",
     },
 
     cards: [
@@ -158,6 +168,8 @@ const translations = {
       ["Finance", "Income and expenses", "💰"],
       ["Reports", "Clinic summary", "📊"],
       ["Visit History", "Review and edit previous visits", "📋"],
+      ["WhatsApp Messages", "Templates and customer sharing", "💬"],
+      ["Clinic Staff", "Doctors, assistants, and front desk", "👩‍⚕️"],
     ],
 
     open: "Open",
@@ -173,6 +185,8 @@ const translations = {
     workspace: "Your workspace",
     shortcutsTitle: "Clinic shortcuts",
     shortcutsSubtitle: "Your daily tools, all in one place",
+    todayStatsTitle: "Today's statistics",
+    todayStats: ["Today's appointments", "Today's vaccinations", "Low stock", "Out of stock"],
     theme: "Theme",
 
     encouragement: [
@@ -235,6 +249,7 @@ const cardColors = [
 ];
 
 export default function Home() {
+  const router = useRouter();
   const [theme, setTheme] = useState<DashboardTheme>("midnight");
   const [lastDarkTheme, setLastDarkTheme] = useState<DashboardTheme>("midnight");
   const [language, setLanguage] = useState<Language>("ar");
@@ -245,6 +260,7 @@ export default function Home() {
     useState<ClinicContext | null>(null);
 
   const [clinicLoading, setClinicLoading] = useState(true);
+  const [todayStats, setTodayStats] = useState<Array<number | null>>([null, null, null, null]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
@@ -329,7 +345,7 @@ export default function Home() {
         if (mounted) {
           setClinicContext(null);
           setClinicLoading(false);
-          window.location.replace("/clinic-setup");
+          router.replace("/clinic-setup");
         }
 
         return;
@@ -346,7 +362,54 @@ export default function Home() {
     return () => {
       mounted = false;
     };
-  }, [ready]);
+  }, [ready, router]);
+
+  useEffect(() => {
+    const clinicId = clinicContext?.clinic_id;
+    if (!ready || !clinicId) return;
+
+    let mounted = true;
+
+    async function loadTodayStats() {
+      try {
+        const db = await getClinicDb();
+        const today = new Date();
+        const dateKey = [
+          today.getFullYear(),
+          String(today.getMonth() + 1).padStart(2, "0"),
+          String(today.getDate()).padStart(2, "0"),
+        ].join("-");
+
+        const [appointmentsResult, vaccinesResult, productsResult] = await Promise.all([
+          db.from("appointments").select("id, status").eq("clinic_id", clinicId).eq("appointment_date", dateKey),
+          db.from("vaccinations").select("next_dose_at").eq("clinic_id", clinicId).not("next_dose_at", "is", null),
+          db.from("products").select("quantity, reorder_level").eq("clinic_id", clinicId).eq("is_active", true),
+        ]);
+
+        if (appointmentsResult.error) throw appointmentsResult.error;
+        if (vaccinesResult.error) throw vaccinesResult.error;
+        if (productsResult.error) throw productsResult.error;
+
+        const vaccinationsToday = (vaccinesResult.data || []).filter((item) => {
+          const value = String(item.next_dose_at || "");
+          return value.slice(0, 10) === dateKey;
+        }).length;
+        const lowStock = (productsResult.data || []).filter((item) => Number(item.quantity) > 0 && Number(item.quantity) <= Number(item.reorder_level)).length;
+        const outOfStock = (productsResult.data || []).filter((item) => Number(item.quantity) <= 0).length;
+        const appointmentsToday = (appointmentsResult.data || []).filter((item) => !["cancelled", "no_show"].includes(String(item.status))).length;
+
+        if (mounted) setTodayStats([appointmentsToday, vaccinationsToday, lowStock, outOfStock]);
+      } catch (error) {
+        console.error("VETRA DASHBOARD STATS ERROR:", error);
+        if (mounted) setTodayStats([null, null, null, null]);
+      }
+    }
+
+    void loadTodayStats();
+    return () => {
+      mounted = false;
+    };
+  }, [clinicContext?.clinic_id, ready]);
 
   const t = translations[language];
   const isArabic = language === "ar";
@@ -403,7 +466,7 @@ export default function Home() {
 
   const goTo = (href: string) => {
     if (href !== "#") {
-      window.location.href = href;
+      router.push(href);
     }
   };
 
@@ -415,7 +478,7 @@ export default function Home() {
       supabase.auth.signOut(),
     ]);
 
-    window.location.href = "/login";
+    router.replace("/login");
   };
 
   const navItems = [
@@ -425,6 +488,8 @@ export default function Home() {
   ["📅", t.nav.appointments, "/appointments"],
   ["🩺", t.nav.visits, "/dashboard/visits"],
   ["💉", t.nav.vaccines, "/vaccinations"],
+  ["💬", t.nav.messages, "/messages"],
+  ["👩‍⚕️", t.nav.staff, "/staff"],
   ["📦", t.nav.inventory, "/inventory/products"],
   ["💰", t.nav.finance, "/finance"],
   ["📊", t.nav.reports, "/reports"],
@@ -859,6 +924,12 @@ export default function Home() {
                       case 10:
                         goTo("/dashboard/visits");
                         break;
+                      case 11:
+                        goTo("/messages");
+                        break;
+                      case 12:
+                        goTo("/staff");
+                        break;
                       default:
                         goTo("/dashboard");
                     }
@@ -925,6 +996,32 @@ export default function Home() {
             })}
 
           </div>
+
+          <section className="mt-8">
+            <div className="mb-4">
+              <h3 className="text-lg font-black tracking-tight sm:text-xl">{t.todayStatsTitle}</h3>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {[
+                ["📅", t.todayStats[0], "text-blue-400", "bg-blue-500/10"],
+                ["💉", t.todayStats[1], "text-emerald-400", "bg-emerald-500/10"],
+                ["📦", t.todayStats[2], "text-amber-400", "bg-amber-500/10"],
+                ["⚠️", t.todayStats[3], "text-rose-400", "bg-rose-500/10"],
+              ].map(([icon, label, accent, iconBg], index) => (
+                <div
+                  key={label}
+                  className={`min-h-[132px] rounded-2xl border p-4 sm:p-5 ${darkMode ? "border-white/[0.06] bg-[#181B21]" : "border-slate-100 bg-white shadow-sm"}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className={`flex h-10 w-10 items-center justify-center rounded-xl text-xl ${iconBg}`}>{icon}</span>
+                    <span className={`text-3xl font-black ${accent}`}>{todayStats[index] ?? "—"}</span>
+                  </div>
+                  <p className={`mt-4 text-sm font-bold ${darkMode ? "text-slate-300" : "text-slate-600"}`}>{label}</p>
+                </div>
+              ))}
+            </div>
+          </section>
 
           </div>
         </section>
