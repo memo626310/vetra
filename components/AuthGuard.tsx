@@ -58,7 +58,8 @@ export default function AuthGuard({
       }
 
       const cached = verifiedState.current;
-      if (cached?.userId === session.user.id && Date.now() - cached.verifiedAt < 30_000) {
+      // Keep route changes fast while still re-checking staff security periodically.
+      if (cached?.userId === session.user.id && Date.now() - cached.verifiedAt < 5 * 60_000) {
         if (cached.mustChangePassword && pathname !== "/change-password") {
           router.replace("/change-password");
           return;

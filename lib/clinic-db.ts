@@ -28,8 +28,27 @@ type CachedClinicToken = {
 
 let clinicDbPromise: Promise<SupabaseClient> | null = null;
 let clinicTokenPromise: Promise<CachedClinicToken> | null = null;
+let clinicContextPromise: Promise<ClinicContext> | null = null;
+let clinicContextCachedAt = 0;
+const CLINIC_CONTEXT_TTL = 60_000;
 
 export async function getClinicContext(): Promise<ClinicContext> {
+  if (clinicContextPromise && Date.now() - clinicContextCachedAt < CLINIC_CONTEXT_TTL) {
+    return clinicContextPromise;
+  }
+
+  clinicContextPromise = loadClinicContext();
+  clinicContextCachedAt = Date.now();
+  try {
+    return await clinicContextPromise;
+  } catch (error) {
+    clinicContextPromise = null;
+    clinicContextCachedAt = 0;
+    throw error;
+  }
+}
+
+async function loadClinicContext(): Promise<ClinicContext> {
   let result = await vetraCore.rpc("get_my_clinic_context");
 
   // A stale browser session can surface as a generic fetch failure from the
@@ -184,4 +203,6 @@ export async function getClinicDb(): Promise<SupabaseClient> {
 export function resetClinicDbConnection() {
   clinicDbPromise = null;
   clinicTokenPromise = null;
+  clinicContextPromise = null;
+  clinicContextCachedAt = 0;
 }
