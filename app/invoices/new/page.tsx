@@ -20,6 +20,8 @@ type Pet = {
   species: string;
 };
 
+type ProductCategory = { id: string; name: string };
+
 type Product = {
   id: string;
   name: string;
@@ -86,6 +88,7 @@ export default function NewInvoicePage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
   const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>([]);
   const [financialAccountId, setFinancialAccountId] = useState("");
   const [openRegisterAccountIds, setOpenRegisterAccountIds] = useState<string[]>([]);
@@ -93,6 +96,11 @@ export default function NewInvoicePage() {
   const [clientId, setClientId] = useState("");
   const [petId, setPetId] = useState("");
   const [productSearch, setProductSearch] = useState("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
+  const [showNewClient, setShowNewClient] = useState(false);
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientPhone, setNewClientPhone] = useState("");
   const [lines, setLines] = useState<InvoiceLine[]>([]);
 
   const [discount, setDiscount] = useState("0");
@@ -156,7 +164,7 @@ export default function NewInvoicePage() {
 
     setAuthorized(true);
 
-    const [clientsResult, productsResult, settingsResult, accountsResult, sessionsResult] =
+    const [clientsResult, productsResult, categoriesResult, settingsResult, accountsResult, sessionsResult] =
       await Promise.all([
         db
           .from("clients")
@@ -172,8 +180,14 @@ export default function NewInvoicePage() {
             unit,
             quantity,
             retail_price,
+            category_id,
             category:product_categories(name)
           `)
+          .eq("clinic_id", context.clinic_id)
+          .order("name"),
+        db
+          .from("product_categories")
+          .select("id, name")
           .eq("clinic_id", context.clinic_id)
           .order("name"),
         db
@@ -205,6 +219,11 @@ export default function NewInvoicePage() {
       setMessage(productsResult.error.message);
     } else {
       setProducts((productsResult.data || []) as unknown as Product[]);
+    }
+    if (categoriesResult.error) {
+      console.error("LOAD PRODUCT CATEGORIES ERROR:", categoriesResult.error);
+    } else {
+      setProductCategories((categoriesResult.data || []) as ProductCategory[]);
     }
 
     if (settingsResult.data?.consultation_fee != null) {
@@ -354,19 +373,53 @@ export default function NewInvoicePage() {
   }, [clientId]);
 
   const selectedClient = clients.find((client) => client.id === clientId);
+  const filteredClients = useMemo(() => {
+    const query = clientSearch.trim().toLocaleLowerCase();
+    if (!query) return clients.slice(0, 8);
+    return clients.filter((client) => `${client.name} ${client.phone || ""}`.toLocaleLowerCase().includes(query)).slice(0, 8);
+  }, [clients, clientSearch]);
 
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase();
-    if (!query) return products.slice(0, 12);
+    const categoryProducts = selectedCategoryId
+      ? products.filter((product) => (product as Product & { category_id?: string | null }).category_id === selectedCategoryId)
+      : products;
+    if (!query) return categoryProducts.slice(0, 12);
 
-    return products
+    return categoryProducts
       .filter(
         (product) =>
           product.name.toLowerCase().includes(query) ||
           (product.barcode || "").toLowerCase().includes(query)
       )
       .slice(0, 12);
-  }, [products, productSearch]);
+  }, [products, productSearch, selectedCategoryId]);
+
+  async function createQuickSaleClient() {
+    if (!newClientName.trim()) {
+      setMessage(language === "ar" ? "اكتب اسم العميل." : "Enter the client's name.");
+      return;
+    }
+    try {
+      const db = await getClinicDb();
+      const { data, error } = await db.from("clients").insert({
+        name: newClientName.trim(),
+        phone: newClientPhone.trim() || null,
+      }).select("id, name, phone").single();
+      if (error) throw error;
+      const client = data as Client;
+      setClients((current) => [...current, client].sort((a, b) => a.name.localeCompare(b.name)));
+      setClientId(client.id);
+      setClientSearch(client.name);
+      setPetId("");
+      setShowNewClient(false);
+      setNewClientName("");
+      setNewClientPhone("");
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : (language === "ar" ? "تعذر إضافة العميل." : "Could not add client."));
+    }
+  }
 
   const subtotal = useMemo(
     () =>
@@ -393,11 +446,11 @@ export default function NewInvoicePage() {
     setSuccess("");
 
     if (Number(product.quantity) <= 0) {
-      setMessage(
-        language === "ar"
-          ? "المنتج ده رصيده الحالي صفر."
-          : "This product is currently out of stock."
-      );
+      const notice = language === "ar"
+        ? `المنتج «${product.name}» خلصان ومش متاح للبيع.`
+        : `${product.name} is out of stock and cannot be sold.`;
+      setMessage(notice);
+      window.alert(notice);
       return;
     }
 
@@ -927,27 +980,25 @@ setSuccess(
               <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-500">
-                    {language === "ar" ? "العميل *" : "Client *"}
+                    {language === "ar" ? "بحث عن المالك *" : "Search owner *"}
                   </label>
-                  <select
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
-                    className={`w-full rounded-2xl border px-4 py-3.5 outline-none focus:border-blue-500 ${
-                      darkMode
-                        ? "border-white/[0.07] bg-[#0F1115]"
-                        : "border-slate-200 bg-slate-50"
-                    }`}
-                  >
-                    <option value="">
-                      {language === "ar" ? "اختار العميل" : "Select client"}
-                    </option>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
-                        {client.phone ? ` — ${client.phone}` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <input
+                      value={clientSearch}
+                      onChange={(event) => { setClientSearch(event.target.value); if (!event.target.value) { setClientId(""); setPetId(""); } }}
+                      placeholder={language === "ar" ? "ابحث بالاسم أو رقم الهاتف..." : "Search name or phone..."}
+                      className={`w-full rounded-2xl border px-4 py-3.5 outline-none focus:border-blue-500 ${darkMode ? "border-white/[0.07] bg-[#0F1115]" : "border-slate-200 bg-slate-50"}`}
+                    />
+                    {clientSearch && !selectedClient && (
+                      <div className={`absolute inset-x-0 top-full z-30 mt-1 max-h-60 overflow-y-auto rounded-xl border shadow-xl ${darkMode ? "border-white/10 bg-[#171A20]" : "border-slate-200 bg-white"}`}>
+                        {filteredClients.map((client) => <button key={client.id} type="button" onClick={() => { setClientId(client.id); setClientSearch(client.name); setPetId(""); }} className={`block w-full border-b px-4 py-3 text-start last:border-0 ${darkMode ? "border-white/5 hover:bg-white/5" : "border-slate-100 hover:bg-slate-50"}`}>
+                          <span className="block text-sm font-semibold">{client.name}</span><span className="text-xs text-slate-500">{client.phone || (language === "ar" ? "بدون رقم هاتف" : "No phone")}</span>
+                        </button>)}
+                        {filteredClients.length === 0 && <p className="px-4 py-3 text-sm text-slate-500">{language === "ar" ? "لا يوجد عميل مطابق." : "No matching owner."}</p>}
+                      </div>
+                    )}
+                  </div>
+                  <button type="button" onClick={() => { setNewClientName(clientSearch); setShowNewClient(true); }} className="mt-2 text-xs font-bold text-blue-500 hover:text-blue-600">+ {language === "ar" ? "إضافة عميل جديد" : "Add new client"}</button>
                 </div>
 
                 <div>
@@ -982,6 +1033,12 @@ setSuccess(
                   {selectedClient.phone ? ` — ${selectedClient.phone}` : ""}
                 </div>
               )}
+              {showNewClient && <div className={`mt-4 grid gap-3 rounded-xl border p-4 sm:grid-cols-2 ${darkMode ? "border-white/10 bg-[#0F1115]" : "border-slate-200 bg-slate-50"}`}>
+                <h3 className="font-bold sm:col-span-2">{language === "ar" ? "عميل جديد" : "New owner"}</h3>
+                <input autoFocus value={newClientName} onChange={(event) => setNewClientName(event.target.value)} placeholder={language === "ar" ? "اسم العميل *" : "Owner name *"} className={`rounded-xl border px-3 py-2.5 text-sm ${darkMode ? "border-white/10 bg-[#171A20]" : "border-slate-200 bg-white"}`} />
+                <input value={newClientPhone} onChange={(event) => setNewClientPhone(event.target.value)} placeholder={language === "ar" ? "رقم الهاتف" : "Phone number"} dir="ltr" className={`rounded-xl border px-3 py-2.5 text-sm ${darkMode ? "border-white/10 bg-[#171A20]" : "border-slate-200 bg-white"}`} />
+                <div className="flex gap-2 sm:col-span-2"><button type="button" onClick={() => void createQuickSaleClient()} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white">{language === "ar" ? "حفظ واختيار العميل" : "Save and select"}</button><button type="button" onClick={() => setShowNewClient(false)} className={`rounded-lg border px-4 py-2 text-sm ${darkMode ? "border-white/10" : "border-slate-200"}`}>{language === "ar" ? "إلغاء" : "Cancel"}</button></div>
+              </div>}
             </section>
 
             <section
@@ -1051,12 +1108,21 @@ setSuccess(
                 />
               </div>
 
+              <div className="mb-4 flex flex-wrap gap-2" aria-label={language === "ar" ? "تصنيفات المنتجات" : "Product categories"}>
+                <button type="button" onClick={() => setSelectedCategoryId("")} aria-pressed={!selectedCategoryId} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${!selectedCategoryId ? "border-blue-500 bg-blue-600 text-white" : darkMode ? "border-white/10 text-slate-300" : "border-slate-200 text-slate-600"}`}>{language === "ar" ? "الكل" : "All"}</button>
+                {productCategories.map((category) => <button key={category.id} type="button" onClick={() => setSelectedCategoryId((current) => current === category.id ? "" : category.id)} aria-pressed={selectedCategoryId === category.id} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${selectedCategoryId === category.id ? "border-blue-500 bg-blue-600 text-white" : darkMode ? "border-white/10 text-slate-300 hover:bg-white/5" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>{category.name}</button>)}
+              </div>
+
               <div className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
                 {filteredProducts.map((product) => (
                   <button
                     key={product.id}
+                    type="button"
                     onClick={() => addProduct(product)}
-                    className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 text-right transition sm:p-4 sm:hover:-translate-y-0.5 ${
+                    aria-label={Number(product.quantity) <= 0
+                      ? `${product.name}: ${language === "ar" ? "نفد المخزون" : "Out of stock"}`
+                      : `${product.name}: ${money(Number(product.retail_price))} EGP`}
+                    className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 text-right transition sm:p-4 ${Number(product.quantity) <= 0 ? "cursor-not-allowed opacity-70" : "sm:hover:-translate-y-0.5"} ${
                       darkMode
                         ? "border-white/[0.06] bg-[#0F1115] hover:bg-[#171A20]"
                         : "border-slate-100 bg-slate-50 hover:bg-white hover:shadow-sm"
@@ -1066,11 +1132,15 @@ setSuccess(
                       <p className="font-bold">{product.name}</p>
                       <p className="mt-1 text-xs text-slate-500">
                         {product.barcode || "No barcode"} · {product.unit} ·{" "}
-                        {product.quantity} available
+                        {Number(product.quantity) <= 0
+                          ? (language === "ar" ? "نفد المخزون" : "Out of stock")
+                          : `${product.quantity} ${language === "ar" ? "متاح" : "available"}`}
                       </p>
                     </div>
-                    <span className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">
-                      + {money(Number(product.retail_price))}
+                    <span className={`rounded-xl px-3 py-2 text-xs font-bold ${Number(product.quantity) <= 0 ? "bg-rose-500/10 text-rose-600 dark:text-rose-300" : "bg-blue-600 text-white"}`}>
+                      {Number(product.quantity) <= 0
+                        ? (language === "ar" ? "خلصان" : "Out of stock")
+                        : `+ ${money(Number(product.retail_price))}`}
                     </span>
                   </button>
                 ))}

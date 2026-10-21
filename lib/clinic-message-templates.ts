@@ -66,13 +66,13 @@ export const TEMPLATE_LABELS: Record<MessageTemplateKey, Record<MessageLanguage,
 };
 
 export const TEMPLATE_PLACEHOLDERS: Record<MessageTemplateKey, string[]> = {
-  appointment_reminder: ["customer_name", "pet_name", "appointment_date", "appointment_time", "doctor_name", "brand_name"],
-  surgery_reminder: ["customer_name", "pet_name", "appointment_date", "appointment_time", "doctor_name", "brand_name"],
-  followup_reminder: ["customer_name", "pet_name", "follow_up_date", "notes", "brand_name"],
-  prescription_sharing: ["customer_name", "pet_name", "share_url", "prescription_summary", "brand_name"],
-  vaccination_due: ["customer_name", "pet_name", "vaccine_name", "due_date", "brand_name"],
-  vaccination_overdue: ["customer_name", "pet_name", "vaccine_name", "due_date", "brand_name"],
-  invoice_sharing: ["customer_name", "pet_name", "invoice_number", "total", "paid", "balance", "share_url", "brand_name"],
+  appointment_reminder: ["customer_name", "phone_number", "client_id", "pet_name", "appointment_date", "appointment_time", "doctor_name", "brand_name"],
+  surgery_reminder: ["customer_name", "phone_number", "client_id", "pet_name", "appointment_date", "appointment_time", "doctor_name", "brand_name"],
+  followup_reminder: ["customer_name", "phone_number", "client_id", "pet_name", "follow_up_date", "notes", "brand_name"],
+  prescription_sharing: ["customer_name", "phone_number", "client_id", "pet_name", "share_url", "prescription_summary", "brand_name"],
+  vaccination_due: ["customer_name", "phone_number", "client_id", "pet_name", "vaccine_name", "due_date", "brand_name"],
+  vaccination_overdue: ["customer_name", "phone_number", "client_id", "pet_name", "vaccine_name", "due_date", "brand_name"],
+  invoice_sharing: ["customer_name", "phone_number", "client_id", "pet_name", "invoice_number", "total", "paid", "balance", "share_url", "brand_name"],
 };
 
 export function renderMessageTemplate(template: string, variables: MessageVariables) {
@@ -132,21 +132,32 @@ export async function openWhatsAppTemplate(
   tab.opener = null;
 
   let template = DEFAULT_MESSAGE_TEMPLATES[key][language];
+  let clientCode = variables.client_id;
   try {
     const [db, context] = await Promise.all([getClinicDb(), knownClinicId ? null : getClinicContext()]);
     const clinicId = knownClinicId || context?.clinic_id;
     if (!clinicId) throw new Error("No active clinic");
-    const { data } = await db.from("clinic_message_templates")
-      .select("message")
-      .eq("clinic_id", clinicId)
-      .eq("template_key", key)
-      .eq("language", language)
-      .maybeSingle();
-    if (typeof data?.message === "string") template = data.message;
+    const [templateResult, clientResult] = await Promise.all([
+      db.from("clinic_message_templates")
+        .select("message")
+        .eq("clinic_id", clinicId)
+        .eq("template_key", key)
+        .eq("language", language)
+        .maybeSingle(),
+      clientCode == null
+        ? db.from("clients").select("client_code").eq("clinic_id", clinicId).eq("phone", phone).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    if (typeof templateResult.data?.message === "string") template = templateResult.data.message;
+    clientCode ??= clientResult.data?.client_code;
   } catch {
     // Keep the built-in message available before tenant template SQL is installed.
   }
 
-  tab.location.href = `https://wa.me/${digits}?text=${encodeURIComponent(renderMessageTemplate(template, variables))}`;
+  tab.location.href = `https://wa.me/${digits}?text=${encodeURIComponent(renderMessageTemplate(template, {
+    ...variables,
+    phone_number: variables.phone_number ?? phone,
+    client_id: clientCode,
+  }))}`;
   return true;
 }

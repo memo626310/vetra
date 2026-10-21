@@ -18,13 +18,15 @@ import {
 import { loadClinicProfile } from "@/lib/clinic-profile";
 import { writeVetraThemeMode } from "@/lib/theme";
 
-type Client = { id: string; name: string; phone: string | null };
+type Client = { id: string; client_code: string | null; name: string; phone: string | null };
 type Pet = { id: string; client_id: string; name: string };
 type TemplateRecord = Record<MessageTemplateKey, MessageTemplatePair>;
 type Tab = "compose" | "templates";
 
 const examples: Record<string, string> = {
   customer_name: "Mona",
+  phone_number: "01000000000",
+  client_id: "010001",
   pet_name: "Luna",
   appointment_date: "28 Aug 2026",
   appointment_time: "6:30 PM",
@@ -57,6 +59,7 @@ export default function MessagesPage() {
   const [pets, setPets] = useState<Pet[]>([]);
   const [templates, setTemplates] = useState<TemplateRecord>(DEFAULT_MESSAGE_TEMPLATES);
   const [clientId, setClientId] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
   const [petId, setPetId] = useState("");
   const [templateKey, setTemplateKey] = useState<MessageTemplateKey | "custom">("custom");
   const [customMessage, setCustomMessage] = useState("");
@@ -70,11 +73,18 @@ export default function MessagesPage() {
   const previewVariables = useMemo(() => ({
     ...examples,
     customer_name: client?.name || "",
+    phone_number: client?.phone || "",
+    client_id: client?.client_code || "",
     pet_name: pet?.name || (clientPets.length ? clientPets.map((item) => item.name).join(", ") : ""),
     brand_name: clinicName,
     doctor_name: doctorName,
     ...variables,
-  }), [client?.name, clientPets, clinicName, doctorName, pet?.name, variables]);
+  }), [client?.client_code, client?.name, client?.phone, clientPets, clinicName, doctorName, pet?.name, variables]);
+  const filteredClients = useMemo(() => {
+    const query = clientSearch.trim().toLocaleLowerCase();
+    if (!query) return clients.slice(0, 8);
+    return clients.filter((item) => `${item.name} ${item.phone || ""} ${item.client_code || ""}`.toLocaleLowerCase().includes(query)).slice(0, 8);
+  }, [clientSearch, clients]);
   const composedText = templateKey === "custom"
     ? customMessage
     : renderMessageTemplate(templates[templateKey][language], previewVariables);
@@ -87,7 +97,7 @@ export default function MessagesPage() {
         const context = await getClinicContext();
         const db = await getClinicDb();
         const [clientResult, petResult, loadedTemplates, clinicProfile] = await Promise.all([
-          db.from("clients").select("id,name,phone").order("name"),
+          db.from("clients").select("id,client_code,name,phone").order("name"),
           db.from("pets").select("id,client_id,name,is_deceased").order("name"),
           loadClinicMessageTemplates(db, context.clinic_id),
           loadClinicProfile(db, context.clinic_id),
@@ -196,11 +206,14 @@ export default function MessagesPage() {
       {loading ? <section className={`rounded-xl border p-10 text-center text-sm text-slate-500 ${surface}`}>{ar ? "جاري تحميل الرسائل..." : "Loading messages..."}</section> : tab === "compose" ? (
         <section className={`rounded-xl border p-4 sm:p-6 ${surface}`}>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="text-sm font-semibold">{ar ? "العميل" : "Customer"}
-              <select value={clientId} onChange={(event) => { setClientId(event.target.value); setPetId(""); }} className={`mt-2 w-full rounded-lg border px-3 py-3 ${input}`}>
-                <option value="">{ar ? "اختر العميل" : "Select a customer"}</option>
-                {clients.map((item) => <option key={item.id} value={item.id}>{item.name}{item.phone ? ` · ${item.phone}` : ""}</option>)}
-              </select>
+            <label className="relative text-sm font-semibold">{ar ? "بحث عن العميل" : "Search customer"}
+              <input value={clientSearch} onChange={(event) => { const value = event.target.value; setClientSearch(value); setClientId(""); setPetId(""); if (!value.trim()) setError(""); }} autoComplete="off" placeholder={ar ? "ابحث بالاسم أو الهاتف أو Client ID..." : "Search name, phone, or Client ID..."} className={`mt-2 w-full rounded-lg border px-3 py-3 ${input}`} />
+              {clientSearch && !client && <div className={`absolute inset-x-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-lg border shadow-xl ${dark ? "border-white/10 bg-[#181B21]" : "border-slate-200 bg-white"}`}>
+                {filteredClients.length ? filteredClients.map((item) => <button key={item.id} type="button" onClick={() => { setClientId(item.id); setClientSearch(item.name); setPetId(""); setError(""); }} className={`block w-full border-b px-3 py-3 text-start last:border-0 ${dark ? "border-white/5 hover:bg-white/5" : "border-slate-100 hover:bg-slate-50"}`}>
+                  <span className="block font-semibold">{item.name}</span><span className="mt-1 flex flex-wrap gap-x-3 text-xs text-slate-500"><span dir="ltr">{item.phone || (ar ? "لا يوجد هاتف" : "No phone")}</span><span dir="ltr">{ar ? "Client ID" : "Client ID"}: {item.client_code || "—"}</span></span>
+                </button>) : <p className="px-3 py-3 text-sm text-slate-500">{ar ? "لا يوجد عميل مطابق." : "No matching customer."}</p>}
+              </div>}
+              {client && <p className="mt-2 text-xs text-slate-500"><span dir="ltr">{client.phone || (ar ? "لا يوجد هاتف محفوظ" : "No saved phone")}</span> · <span dir="ltr">Client ID: {client.client_code || "—"}</span><button type="button" onClick={() => { setClientId(""); setClientSearch(""); setPetId(""); }} className="ms-2 font-semibold text-cyan-600">{ar ? "تغيير" : "Change"}</button></p>}
             </label>
             <label className="text-sm font-semibold">{ar ? "الحيوان" : "Pet"}
               <select value={petId} onChange={(event) => setPetId(event.target.value)} disabled={!clientId} className={`mt-2 w-full rounded-lg border px-3 py-3 disabled:opacity-50 ${input}`}>
@@ -217,7 +230,7 @@ export default function MessagesPage() {
           </div>
 
           {templateKey !== "custom" && <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {TEMPLATE_PLACEHOLDERS[templateKey].filter((key) => !["customer_name", "pet_name", "brand_name", "doctor_name"].includes(key)).map((key) => <label key={key} className="text-xs font-semibold text-slate-500">{`{${key}}`}
+            {TEMPLATE_PLACEHOLDERS[templateKey].filter((key) => !["customer_name", "phone_number", "client_id", "pet_name", "brand_name", "doctor_name"].includes(key)).map((key) => <label key={key} className="text-xs font-semibold text-slate-500">{`{${key}}`}
               <input value={variables[key] || ""} onChange={(event) => setVariables((current) => ({ ...current, [key]: event.target.value }))} placeholder={key.replaceAll("_", " ")} className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm ${input}`} />
             </label>)}
           </div>}

@@ -251,6 +251,9 @@ export default function ProductsPage() {
 
     useState("");
 
+  const [manageCategoryId, setManageCategoryId] = useState("");
+  const [categoryDestinationId, setCategoryDestinationId] = useState("");
+
 
 
 
@@ -1216,6 +1219,79 @@ const { error } =
 
   }
 
+  async function moveCategoryProducts() {
+    if (!manageCategoryId || !categoryDestinationId || manageCategoryId === categoryDestinationId) return;
+    const source = categories.find((category) => category.id === manageCategoryId);
+    const destination = categories.find((category) => category.id === categoryDestinationId);
+    const count = products.filter((product) => product.category_id === manageCategoryId).length;
+    if (!window.confirm(`نقل ${count} منتج من «${source?.name}» إلى «${destination?.name}»؟`)) return;
+
+    setSaving(true);
+    setMessage("");
+    try {
+      const context = await getClinicContext();
+      const db = await getClinicDb();
+      const { error } = await db
+        .from("products")
+        .update({ category_id: categoryDestinationId })
+        .eq("clinic_id", context.clinic_id)
+        .eq("category_id", manageCategoryId);
+      if (error) throw error;
+      await loadData();
+      setMessage(`تم نقل ${count} منتج إلى «${destination?.name}».`);
+    } catch (error) {
+      console.error("MOVE CATEGORY PRODUCTS ERROR:", error);
+      setMessage(error instanceof Error ? error.message : "تعذر نقل المنتجات.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteCategory() {
+    if (!manageCategoryId) return;
+    const source = categories.find((category) => category.id === manageCategoryId);
+    const destination = categoryDestinationId
+      ? categories.find((category) => category.id === categoryDestinationId)
+      : null;
+    if (categoryDestinationId === manageCategoryId) {
+      setMessage("اختار تصنيفًا مختلفًا أو «بدون تصنيف».");
+      return;
+    }
+    const count = products.filter((product) => product.category_id === manageCategoryId).length;
+    const destinationText = destination ? `«${destination.name}»` : "بدون تصنيف";
+    if (!window.confirm(`حذف تصنيف «${source?.name}» ونقل ${count} منتج إلى ${destinationText}؟\n\nلن يتم حذف المنتجات.`)) return;
+
+    setSaving(true);
+    setMessage("");
+    try {
+      const context = await getClinicContext();
+      const db = await getClinicDb();
+      const { error: productsError } = await db
+        .from("products")
+        .update({ category_id: categoryDestinationId || null })
+        .eq("clinic_id", context.clinic_id)
+        .eq("category_id", manageCategoryId);
+      if (productsError) throw productsError;
+      const { error: categoryError } = await db
+        .from("product_categories")
+        .delete()
+        .eq("clinic_id", context.clinic_id)
+        .eq("id", manageCategoryId);
+      if (categoryError) throw categoryError;
+      setManageCategoryId("");
+      setCategoryDestinationId("");
+      if (selectedCategory === manageCategoryId) setSelectedCategory("all");
+      await loadData();
+      setMessage(`تم حذف التصنيف ونقل ${count} منتج إلى ${destinationText}.`);
+    } catch (error) {
+      console.error("DELETE CATEGORY ERROR:", error);
+      setMessage(error instanceof Error ? error.message : "تعذر حذف التصنيف.");
+      await loadData();
+    } finally {
+      setSaving(false);
+    }
+  }
+
 
 
 
@@ -1568,6 +1644,38 @@ const { error } =
 
 
 
+
+        <section className="mb-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-bold">إدارة التصنيفات</h2>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">انقل منتجات تصنيف إلى تصنيف آخر، أو احذف التصنيف مع الاحتفاظ بمنتجاته.</p>
+            </div>
+            <span className="text-sm text-gray-500 dark:text-gray-400">{categories.length} تصنيف</span>
+          </div>
+          {categories.length === 0 ? (
+            <p className="mt-4 text-sm text-gray-500">لا توجد تصنيفات لإدارتها.</p>
+          ) : (
+            <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
+              <label className="text-sm font-medium">
+                التصنيف
+                <select value={manageCategoryId} onChange={(event) => { setManageCategoryId(event.target.value); setCategoryDestinationId(""); }} className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-950">
+                  <option value="">اختار تصنيفًا</option>
+                  {categories.map((category) => <option key={category.id} value={category.id}>{category.name} ({products.filter((product) => product.category_id === category.id).length})</option>)}
+                </select>
+              </label>
+              <label className="text-sm font-medium">
+                نقل المنتجات إلى
+                <select value={categoryDestinationId} onChange={(event) => setCategoryDestinationId(event.target.value)} disabled={!manageCategoryId} className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950">
+                  <option value="">بدون تصنيف</option>
+                  {categories.filter((category) => category.id !== manageCategoryId).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                </select>
+              </label>
+              <button type="button" disabled={saving || !manageCategoryId || !categoryDestinationId} onClick={() => void moveCategoryProducts()} className="self-end rounded-xl bg-blue-600 px-4 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">نقل المنتجات</button>
+              <button type="button" disabled={saving || !manageCategoryId} onClick={() => void deleteCategory()} className="self-end rounded-xl border border-red-200 px-4 py-2.5 font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:text-red-300">حذف التصنيف</button>
+            </div>
+          )}
+        </section>
 
         {/* FILTERS */}
 
