@@ -28,6 +28,13 @@ type Invoice = {
   created_at: string;
   client?: { name?: string; phone?: string | null } | null;
 };
+type CustomerBalance = {
+  key: string;
+  name: string;
+  phone: string | null;
+  due: number;
+  invoices: Invoice[];
+};
 type Transaction = {
   id: string;
   account_id: string;
@@ -104,6 +111,9 @@ export default function FinancePage() {
   const [method, setMethod] = useState("cash");
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
+  const [customerPayKey, setCustomerPayKey] = useState("");
+  const [customerPayAmount, setCustomerPayAmount] = useState("");
+  const [activeTab, setActiveTab] = useState<"overview" | "collections" | "accounts" | "activity">("overview");
 
   const isAr = lang === "ar";
   const activeInvoices = useMemo(() => invoices.filter((x) =>
@@ -112,6 +122,19 @@ export default function FinancePage() {
   const receivableInvoices = useMemo(() => activeInvoices.filter((x) =>
     Number(x.total || 0) - Number(x.paid_amount || 0) > 0.009
   ), [activeInvoices]);
+  const customerBalances = useMemo<CustomerBalance[]>(() => {
+    const grouped = new Map<string, CustomerBalance>();
+    for (const invoice of receivableInvoices) {
+      const name = invoice.client?.name || (isAr ? "عميل غير محدد" : "Unknown client");
+      const phone = invoice.client?.phone || null;
+      const key = `${name}|${phone || ""}`;
+      const current = grouped.get(key) || { key, name, phone, due: 0, invoices: [] };
+      current.due += Math.max(Number(invoice.total || 0) - Number(invoice.paid_amount || 0), 0);
+      current.invoices.push(invoice);
+      grouped.set(key, current);
+    }
+    return [...grouped.values()].sort((a, b) => b.due - a.due);
+  }, [receivableInvoices, isAr]);
   const selectedInvoice = receivableInvoices.find((x) => x.id === invoiceId) || null;
   const selectedAccount = accounts.find((x) => x.id === accountId) || null;
   const today = new Date();
@@ -203,6 +226,16 @@ export default function FinancePage() {
     setMethod(typeToMethod[selectedAccount.account_type]);
   }, [accountId, selectedAccount]);
 
+  async function ensureCashRegisterOpen(selectedAccountId: string) {
+    const account = accounts.find((item) => item.id === selectedAccountId);
+    if (!account?.requires_session) return;
+    const db = await getClinicDb();
+    const { error: sessionError } = await db.rpc("vetra_ensure_cash_register_open", {
+      p_account_id: selectedAccountId,
+    });
+    if (sessionError) throw sessionError;
+  }
+
   async function recordPayment() {
     setError("");
     setNotice("");
@@ -218,6 +251,7 @@ export default function FinancePage() {
     }
     setSavingPayment(true);
     try {
+      await ensureCashRegisterOpen(accountId);
       const db = await getClinicDb();
       const { error: paymentError } = await db.rpc("vetra_record_invoice_payment", {
         p_invoice_id: invoiceId,
@@ -238,6 +272,71 @@ export default function FinancePage() {
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : (isAr ? "تعذر تسجيل التحصيل." : "Could not record payment."));
+    } finally {
+      setSavingPayment(false);
+    }
+  }
+
+  function openCustomerPayment(customer: CustomerBalance, payAll: boolean) {
+    setCustomerPayKey(customer.key);
+    setCustomerPayAmount(payAll ? customer.due.toFixed(2) : "");
+    setError("");
+    setNotice("");
+  }
+
+  async function recordCustomerPayment(customer: CustomerBalance) {
+    setError("");
+    setNotice("");
+    const value = Number(customerPayAmount);
+    if (!accountId) {
+      setError(isAr ? "اختار الحساب المالي أولًا." : "Choose a financial account first.");
+      return;
+    }
+    if (!Number.isFinite(value) || value <= 0 || value > customer.due + 0.001) {
+      setError(isAr ? `اكتب مبلغًا صحيحًا لا يتجاوز إجمالي المستحق ${money(customer.due, lang)}.` : `Enter a valid amount up to the total due of ${money(customer.due, lang)}.`);
+      return;
+    }
+
+    setSavingPayment(true);
+    let applied = 0;
+    try {
+      await ensureCashRegisterOpen(accountId);
+      const db = await getClinicDb();
+      let remaining = Math.round(value * 100) / 100;
+      const oldestFirst = [...customer.invoices].sort((a, b) => new Date(a.issued_at || a.created_at).getTime() - new Date(b.issued_at || b.created_at).getTime());
+
+      for (const invoice of oldestFirst) {
+        if (remaining < 0.01) break;
+        const due = Math.max(Number(invoice.total || 0) - Number(invoice.paid_amount || 0), 0);
+        const installment = Math.min(remaining, Math.round(due * 100) / 100);
+        if (installment < 0.01) continue;
+
+        const { error: paymentError } = await db.rpc("vetra_record_invoice_payment", {
+          p_invoice_id: invoice.id,
+          p_account_id: accountId,
+          p_amount: installment,
+          p_payment_method: method,
+          p_reference: reference.trim() || null,
+          p_notes: notes.trim() || (isAr ? "تحصيل مجمّع من مستحقات العميل" : "Bulk collection from customer balances"),
+          p_session_id: null,
+          p_idempotency_key: crypto.randomUUID(),
+        });
+        if (paymentError) throw paymentError;
+        applied += installment;
+        remaining = Math.round((remaining - installment) * 100) / 100;
+      }
+
+      setCustomerPayKey("");
+      setCustomerPayAmount("");
+      setReference("");
+      setNotes("");
+      setNotice(isAr ? `تم توزيع وتسجيل ${money(applied, lang)} على فواتير العميل.` : `${money(applied, lang)} was allocated across the customer's invoices.`);
+      await loadData();
+    } catch (err) {
+      setError(applied > 0
+        ? (isAr ? `تم تسجيل ${money(applied, lang)} قبل حدوث خطأ. حدّثنا البيانات؛ راجع الرصيد المتبقي قبل إعادة المحاولة.` : `${money(applied, lang)} was recorded before an error. Data has been refreshed; review the remaining balance before retrying.`)
+        : err instanceof Error ? err.message : (isAr ? "تعذر تسجيل التحصيل المجمع." : "Could not record the bulk collection."));
+      if (applied > 0) await loadData();
     } finally {
       setSavingPayment(false);
     }
@@ -270,10 +369,10 @@ export default function FinancePage() {
         {error && <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
         {notice && <div className="rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">{notice}</div>}
 
-        <div className="rounded-2xl border border-amber-300/60 bg-amber-50 p-4 text-sm leading-7 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+        {activeTab === "overview" && <div className="rounded-2xl border border-amber-300/60 bg-amber-50 p-4 text-sm leading-7 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
           <strong>{isAr ? "ملاحظة على التحصيلات القديمة: " : "Legacy payments: "}</strong>
           {isAr ? "المدفوع المسجل داخل الفواتير القديمة يظل ظاهرًا كمدفوع/متبقي، لكنه لن يُنشئ حركة خزنة بأثر رجعي تلقائيًا حتى لا نكرر التحصيل. الحركات الجديدة فقط تُسجل في دفتر الخزنة من تاريخ تفعيل هذا التحديث." : "Amounts stored on existing invoices remain visible as paid/outstanding, but they are not automatically replayed into the cash ledger. This avoids duplicating collections; new receipts are posted to the ledger from this update onward."}
-        </div>
+        </div>}
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className={cardClass}><p className="text-sm text-slate-500">{isAr ? "مبيعات اليوم" : "Today's sales"}</p><p className="mt-3 text-2xl font-black">{money(dailySales, lang)}</p><p className="mt-2 text-xs text-slate-500">{isAr ? "الفواتير الصادرة غير الملغاة" : "Issued, non-cancelled invoices"}</p></div>
@@ -282,16 +381,40 @@ export default function FinancePage() {
           <div className={cardClass}><p className="text-sm text-slate-500">{isAr ? "أرصدة الحسابات المالية" : "Financial account balances"}</p><p className="mt-3 text-2xl font-black">{money(balances, lang)}</p><p className="mt-2 text-xs text-slate-500">{isAr ? "الرصيد الافتتاحي + الحركات المسجلة" : "Opening balances + posted movements"}</p></div>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1.05fr_1.4fr]">
-          <div className={cardClass}>
+        <nav className={`flex flex-wrap gap-2 rounded-2xl border p-2 ${dark ? "border-white/[0.07] bg-[#13161B]" : "border-slate-100 bg-white shadow-sm"}`} aria-label={isAr ? "أقسام المالية" : "Finance sections"}>
+          {([
+            ["overview", isAr ? "نظرة عامة" : "Overview"],
+            ["collections", isAr ? "تحصيل العملاء" : "Customer collections"],
+            ["accounts", isAr ? "الحسابات والخزن" : "Accounts & registers"],
+            ["activity", isAr ? "حركة الحسابات" : "Account activity"],
+          ] as const).map(([tab, label]) => (
+            <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`rounded-xl px-4 py-2.5 text-sm font-bold transition ${activeTab === tab ? "bg-blue-600 text-white" : dark ? "text-slate-400 hover:bg-white/5 hover:text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}>
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        {activeTab === "overview" && <section className={`${cardClass} flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between`}>
+          <div><h2 className="text-lg font-black">{isAr ? "مبيعات آخر 30 يومًا" : "Sales over the last 30 days"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "قيمة الفواتير الصادرة، وليست صافي الربح." : "Issued invoice value, not net profit."}</p></div><p className="text-2xl font-black text-blue-500">{money(last30Sales, lang)}</p>
+        </section>}
+
+        {activeTab === "overview" && <section className={`${cardClass} flex flex-wrap gap-3`}>
+          <button type="button" onClick={() => { setActiveTab("collections"); setShowPayment(true); }} className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">{isAr ? "تحصيل دفعة من عميل" : "Collect customer payment"}</button>
+          <button type="button" onClick={() => router.push("/cash-register")} className="rounded-xl bg-rose-600 px-4 py-3 text-sm font-bold text-white">{isAr ? "تسجيل مصروف أو مقبوض" : "Record expense or income"}</button>
+          <button type="button" onClick={() => router.push("/invoices/new")} className={`rounded-xl border px-4 py-3 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200 bg-white"}`}>{isAr ? "إنشاء فاتورة بيع" : "Create sales invoice"}</button>
+          <button type="button" onClick={() => router.push("/inventory/purchases")} className={`rounded-xl border px-4 py-3 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200 bg-white"}`}>{isAr ? "مشتريات المخزون" : "Inventory purchases"}</button>
+        </section>}
+
+        {(activeTab === "accounts" || activeTab === "collections") && <section className={`grid gap-6 ${activeTab === "accounts" ? "" : "xl:grid-cols-1"}`}>
+          {activeTab === "accounts" && <div className={cardClass}>
             <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-black">{isAr ? "الحسابات والخزن" : "Accounts & registers"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "الرصيد الحالي محسوب من سجل الحركات." : "Current balances are calculated from the movement ledger."}</p></div><button onClick={() => router.push("/cash-register")} className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white">{isAr ? "إدارة" : "Manage"}</button></div>
             <div className="mt-5 space-y-3">
               {accounts.map((account) => <div key={account.id} className={`flex items-center justify-between gap-3 rounded-2xl border p-4 ${dark ? "border-white/[0.06] bg-[#0F1115]" : "border-slate-100 bg-slate-50"}`}><div><p className="font-bold">{account.name}</p><p className="mt-1 text-xs text-slate-500">{cashName[account.account_type]?.[isAr ? "ar" : "en"] || account.account_type}{account.requires_session ? ` · ${isAr ? "وردية خزنة" : "Register sessions"}` : ""}</p></div><p className="text-left font-black">{money(account.current_balance, lang)}</p></div>)}
               {!accounts.length && <p className="rounded-xl border border-dashed p-5 text-sm text-slate-500">{isAr ? "لا توجد حسابات مالية. افتح إدارة الخزن لإنشاء الحسابات الافتراضية." : "No financial accounts yet. Open cash register management to create accounts."}</p>}
             </div>
-          </div>
+          </div>}
 
-          <div className={cardClass}>
+          {activeTab === "collections" && <div className={cardClass}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="text-xl font-black">{isAr ? "تحصيل من فاتورة" : "Collect an invoice payment"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "يدوّن التحصيل ويحدّث المتبقي على الفاتورة داخل معاملة واحدة." : "Posts the receipt and updates the invoice balance atomically."}</p></div><button onClick={() => { setShowPayment((v) => !v); setError(""); }} className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">{showPayment ? (isAr ? "إغلاق" : "Close") : (isAr ? "+ تسجيل تحصيل" : "+ Record receipt")}</button></div>
             {showPayment && <div className="mt-5 space-y-4">
               <div><label className="mb-2 block text-sm font-semibold">{isAr ? "الفاتورة والعميل" : "Invoice & client"}</label><select value={invoiceId} onChange={(e) => { setInvoiceId(e.target.value); setAmount(""); }} className={inputClass}><option value="">{isAr ? "اختار الفاتورة" : "Select invoice"}</option>{receivableInvoices.map((x) => <option key={x.id} value={x.id}>#{x.invoice_number} · {x.client?.name || (isAr ? "عميل غير محدد" : "Unknown client")} · {isAr ? "متبقي" : "Due"} {money(Math.max(Number(x.total || 0) - Number(x.paid_amount || 0), 0), lang)}</option>)}</select></div>
@@ -299,18 +422,47 @@ export default function FinancePage() {
               <div className="grid gap-3 sm:grid-cols-2"><div><label className="mb-2 block text-sm font-semibold">{isAr ? "الحساب المالي" : "Financial account"}</label><select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}><option value="">{isAr ? "اختار الحساب" : "Select account"}</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div><div><label className="mb-2 block text-sm font-semibold">{isAr ? "المبلغ المحصل" : "Amount received"}</label><input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className={inputClass} placeholder="0.00" /></div></div>
               <div className="grid gap-3 sm:grid-cols-2"><div><label className="mb-2 block text-sm font-semibold">{isAr ? "طريقة الدفع" : "Payment method"}</label><select value={method} onChange={(e) => setMethod(e.target.value)} className={inputClass}><option value="cash">{isAr ? "نقدي" : "Cash"}</option><option value="bank_transfer">{isAr ? "تحويل بنكي" : "Bank transfer"}</option><option value="wallet">{isAr ? "محفظة" : "Wallet"}</option><option value="card">{isAr ? "بطاقة" : "Card"}</option><option value="other">{isAr ? "أخرى" : "Other"}</option></select></div><div><label className="mb-2 block text-sm font-semibold">{isAr ? "رقم مرجعي (اختياري)" : "Reference (optional)"}</label><input value={reference} onChange={(e) => setReference(e.target.value)} className={inputClass} /></div></div>
               <div><label className="mb-2 block text-sm font-semibold">{isAr ? "ملاحظات (اختياري)" : "Notes (optional)"}</label><input value={notes} onChange={(e) => setNotes(e.target.value)} className={inputClass} /></div>
-              {selectedAccount?.requires_session && <p className="text-xs text-amber-500">{isAr ? "الحساب ده محتاج وردية خزنة مفتوحة؛ لو مفيش وردية مفتوحة هيرفض التسجيل." : "This account needs an open register session; the receipt will be rejected if no session is open."}</p>}
+              {selectedAccount?.requires_session && <p className="text-xs text-emerald-500">{isAr ? "لو الوردية مقفولة، هتتفتح تلقائيًا عند التحصيل." : "If the register is closed, it will open automatically when collecting payment."}</p>}
               <button onClick={recordPayment} disabled={savingPayment || !invoiceId || !accountId || !amount} className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-bold text-white disabled:opacity-50">{savingPayment ? (isAr ? "جارٍ التسجيل..." : "Recording...") : (isAr ? "تأكيد التحصيل" : "Confirm receipt")}</button>
             </div>}
-          </div>
+          </div>}
         </section>
+        }
 
-        <section className={cardClass}>
+        {activeTab === "collections" && <section className={cardClass}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div><h2 className="text-xl font-black">{isAr ? "مستحقات العملاء" : "Customer balances due"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "الفواتير التي عليها مبالغ متبقية، مع تحصيل جزئي أو كامل." : "Bills with outstanding amounts, ready for partial or full collection."}</p></div>
+            <p className="text-lg font-black text-amber-500">{money(outstanding, lang)}</p>
+          </div>
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            {customerBalances.map((customer) => (
+              <div key={customer.key} className={`rounded-2xl border p-4 ${dark ? "border-white/[0.06] bg-[#0F1115]" : "border-slate-100 bg-slate-50"}`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-black">{customer.name}</p>{customer.phone && <p dir="ltr" className="mt-1 text-xs text-slate-500">{customer.phone}</p>}<p className="mt-1 text-xs text-slate-500">{customer.invoices.length} {isAr ? "فواتير مستحقة" : "invoices due"}</p></div><div className="flex flex-wrap items-center gap-2 sm:justify-end"><p className="ml-2 font-black text-amber-500">{money(customer.due, lang)}</p><button type="button" onClick={() => openCustomerPayment(customer, false)} disabled={savingPayment} className="rounded-lg border border-amber-400/40 px-3 py-2 text-xs font-bold text-amber-500">{isAr ? "دفعة جزئية من الإجمالي" : "Partial total payment"}</button><button type="button" onClick={() => openCustomerPayment(customer, true)} disabled={savingPayment} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">{isAr ? "تسديد كل الفواتير" : "Pay all invoices"}</button></div></div>
+                <div className="mt-4 space-y-2">
+                  {customer.invoices.map((invoice) => {
+                    const due = Math.max(Number(invoice.total || 0) - Number(invoice.paid_amount || 0), 0);
+                    return <div key={invoice.id} className="flex flex-col gap-3 rounded-xl border border-white/[0.06] p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-bold">#{invoice.invoice_number}</p><p className="mt-1 text-xs text-slate-500">{isAr ? "المتبقي" : "Due"}: {money(due, lang)}</p></div><div className="flex gap-2"><button type="button" onClick={() => { setInvoiceId(invoice.id); setAmount(""); setShowPayment(true); }} className="rounded-lg border border-amber-400/40 px-3 py-2 text-xs font-bold text-amber-500">{isAr ? "دفع جزئي" : "Partial"}</button><button type="button" onClick={() => { setInvoiceId(invoice.id); setAmount(String(due)); setShowPayment(true); }} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">{isAr ? "دفع الكل" : "Pay all"}</button></div></div>;
+                  })}
+                </div>
+                {customerPayKey === customer.key && <div className={`mt-4 rounded-xl border p-4 ${dark ? "border-emerald-500/20 bg-[#13161B]" : "border-emerald-200 bg-white"}`}>
+                  <div className="grid gap-3 sm:grid-cols-[1fr_1fr]">
+                    <label className="block"><span className="mb-2 block text-xs font-bold text-slate-500">{isAr ? "حساب التحصيل" : "Collection account"}</span><select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}><option value="">{isAr ? "اختار الحساب" : "Select account"}</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
+                    <label className="block"><span className="mb-2 block text-xs font-bold text-slate-500">{isAr ? "المبلغ من إجمالي المستحق" : "Amount from total due"}</span><input type="number" min="0.01" max={customer.due} step="0.01" value={customerPayAmount} onChange={(e) => setCustomerPayAmount(e.target.value)} className={inputClass} placeholder={customer.due.toFixed(2)} /></label>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">{isAr ? "سيتم توزيع المبلغ على أقدم الفواتير أولًا." : "The amount will be applied to the oldest invoices first."}</p>
+                  {selectedAccount?.requires_session && <p className="mt-2 text-xs text-emerald-500">{isAr ? "ستُفتح الوردية تلقائيًا عند التحصيل إذا كانت مغلقة." : "The register will open automatically for collection if closed."}</p>}
+                  <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void recordCustomerPayment(customer)} disabled={savingPayment || !accountId || !customerPayAmount} className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingPayment ? (isAr ? "جارٍ تسجيل الدفعات..." : "Recording payments...") : (isAr ? "تأكيد تحصيل الإجمالي" : "Confirm total collection")}</button><button type="button" onClick={() => { setCustomerPayKey(""); setCustomerPayAmount(""); }} disabled={savingPayment} className={`rounded-lg border px-4 py-2.5 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200"}`}>{isAr ? "إلغاء" : "Cancel"}</button></div>
+                </div>}
+              </div>
+            ))}
+            {!customerBalances.length && <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-slate-500 lg:col-span-2">{isAr ? "لا توجد مبالغ مستحقة على العملاء." : "No customer balances are due."}</div>}
+          </div>
+        </section>}
+
+        {activeTab === "activity" && <section className={cardClass}>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-black">{isAr ? "آخر حركات الخزنة" : "Latest ledger movements"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "آخر 200 حركة مالية مسجلة." : "Latest 200 posted transactions."}</p></div><button onClick={() => router.push("/cash-register")} className={`rounded-xl border px-4 py-2 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200"}`}>{isAr ? "كشف حساب كامل" : "Full account statement"}</button></div>
           <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[780px] text-sm"><thead><tr className="border-b text-right text-xs text-slate-500"><th className="px-3 py-3">{isAr ? "التاريخ" : "Date"}</th><th className="px-3 py-3">{isAr ? "الحركة" : "Movement"}</th><th className="px-3 py-3">{isAr ? "الوصف" : "Description"}</th><th className="px-3 py-3">{isAr ? "الحساب" : "Account"}</th><th className="px-3 py-3">{isAr ? "المبلغ" : "Amount"}</th></tr></thead><tbody>{transactions.slice(0, 20).map((t) => <tr key={t.id} className="border-b last:border-0"><td className="px-3 py-3 whitespace-nowrap text-slate-500">{dateText(t.transaction_at, lang)}</td><td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${t.direction === "in" ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"}`}>{transactionName[t.transaction_type]?.[isAr ? "ar" : "en"] || t.transaction_type}</span></td><td className="px-3 py-3"><p className="font-semibold">{t.description}</p>{t.reference && <p className="mt-1 text-xs text-slate-500">{isAr ? "مرجع" : "Ref"}: {t.reference}</p>}</td><td className="px-3 py-3">{accounts.find((a) => a.id === t.account_id)?.name || "—"}</td><td className={`px-3 py-3 whitespace-nowrap font-black ${t.direction === "in" ? "text-emerald-500" : "text-rose-500"}`}>{t.direction === "in" ? "+" : "−"}{money(t.amount, lang)}</td></tr>)}{!transactions.length && <tr><td colSpan={5} className="px-3 py-12 text-center text-slate-500">{isAr ? "لا توجد حركات مالية حتى الآن." : "No financial movements yet."}</td></tr>}</tbody></table></div>
-        </section>
-
-        <section className={`${cardClass} flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between`}><div><h2 className="text-lg font-black">{isAr ? "مؤشر المبيعات لآخر 30 يومًا" : "Sales over the last 30 days"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "قيمة الفواتير الصادرة خلال الفترة، وليست صافي الربح." : "Issued invoice value for the period; this is not net profit."}</p></div><p className="text-2xl font-black text-blue-500">{money(last30Sales, lang)}</p></section>
+        </section>}
       </div>
     </main>
   );

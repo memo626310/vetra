@@ -91,7 +91,6 @@ export default function NewInvoicePage() {
   const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
   const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>([]);
   const [financialAccountId, setFinancialAccountId] = useState("");
-  const [openRegisterAccountIds, setOpenRegisterAccountIds] = useState<string[]>([]);
 
   const [clientId, setClientId] = useState("");
   const [petId, setPetId] = useState("");
@@ -104,6 +103,7 @@ export default function NewInvoicePage() {
   const [lines, setLines] = useState<InvoiceLine[]>([]);
 
   const [discount, setDiscount] = useState("0");
+  const [discountMode, setDiscountMode] = useState<"amount" | "percentage">("amount");
   const [paidAmount, setPaidAmount] = useState("0");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [notes, setNotes] = useState("");
@@ -164,7 +164,7 @@ export default function NewInvoicePage() {
 
     setAuthorized(true);
 
-    const [clientsResult, productsResult, categoriesResult, settingsResult, accountsResult, sessionsResult] =
+    const [clientsResult, productsResult, categoriesResult, settingsResult, accountsResult] =
       await Promise.all([
         db
           .from("clients")
@@ -202,11 +202,6 @@ export default function NewInvoicePage() {
           .eq("clinic_id", context.clinic_id)
           .eq("is_active", true)
           .order("name"),
-        db
-          .from("cash_register_sessions")
-          .select("account_id")
-          .eq("clinic_id", context.clinic_id)
-          .eq("status", "open"),
       ]);
 
     if (clientsResult.error) {
@@ -309,12 +304,6 @@ export default function NewInvoicePage() {
     } else {
       setMessage(accountsResult.error.message);
     }
-    if (!sessionsResult.error) {
-      setOpenRegisterAccountIds((sessionsResult.data || []).map((row) => row.account_id));
-    } else {
-      setMessage(sessionsResult.error.message);
-    }
-
     setLoading(false);
   }
 
@@ -436,7 +425,10 @@ export default function NewInvoicePage() {
     [lines]
   );
 
-  const invoiceDiscount = Math.max(0, Number(discount) || 0);
+  const discountInput = Math.max(0, Number(discount) || 0);
+  const invoiceDiscount = discountMode === "percentage"
+    ? Math.min(subtotal, subtotal * Math.min(discountInput, 100) / 100)
+    : Math.min(subtotal, discountInput);
   const total = Math.max(0, subtotal - invoiceDiscount);
   const paid = Math.max(0, Number(paidAmount) || 0);
   const remaining = Math.max(0, total - paid);
@@ -706,14 +698,6 @@ export default function NewInvoicePage() {
     }
 
     const selectedFinancialAccount = financialAccounts.find((account) => account.id === financialAccountId);
-    if (issueAfterSave && paid > 0 && selectedFinancialAccount?.requires_session && !openRegisterAccountIds.includes(financialAccountId)) {
-      setMessage(
-        language === "ar"
-          ? "افتح وردية الخزنة من صفحة الخزن قبل إصدار فاتورة بها تحصيل نقدي."
-          : "Open the cash register session from Cash Registers before issuing an invoice with a cash receipt."
-      );
-      return;
-    }
 setSaving(true);
 
     const {
@@ -793,6 +777,20 @@ setSaving(true);
       setMessage(itemsError.message);
       setSaving(false);
       return;
+    }
+
+    if (issueAfterSave && selectedFinancialAccount?.requires_session) {
+      const { error: sessionError } = await db.rpc("vetra_ensure_cash_register_open", {
+        p_account_id: selectedFinancialAccount.id,
+      });
+
+      if (sessionError) {
+        setMessage(language === "ar"
+          ? `تعذر فتح وردية الخزنة تلقائيًا، ولم يتم إصدار الفاتورة: ${sessionError.message}`
+          : `Could not open the cash register automatically; the invoice was not issued: ${sessionError.message}`);
+        setSaving(false);
+        return;
+      }
     }
 
     if (issueAfterSave) {
@@ -1397,18 +1395,43 @@ setSuccess(
                   <label className="mb-2 block text-sm font-semibold text-slate-500">
                     {language === "ar" ? "خصم الفاتورة" : "Invoice discount"}
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={discount}
-                    onChange={(e) => setDiscount(e.target.value)}
-                    className={`w-full rounded-2xl border px-4 py-3 outline-none focus:border-blue-500 ${
-                      darkMode
-                        ? "border-white/[0.07] bg-[#0F1115]"
-                        : "border-slate-200 bg-slate-50"
-                    }`}
-                  />
+                  <div className={`mb-2 grid grid-cols-2 gap-1 rounded-xl p-1 ${darkMode ? "bg-[#0F1115]" : "bg-slate-100"}`}>
+                    <button
+                      type="button"
+                      onClick={() => { setDiscountMode("amount"); setDiscount("0"); }}
+                      className={`rounded-lg px-3 py-2 text-xs font-bold transition ${discountMode === "amount" ? (darkMode ? "bg-white/10 text-white" : "bg-white text-slate-900 shadow-sm") : "text-slate-500"}`}
+                    >
+                      {language === "ar" ? "مبلغ" : "Money"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setDiscountMode("percentage"); setDiscount("0"); }}
+                      className={`rounded-lg px-3 py-2 text-xs font-bold transition ${discountMode === "percentage" ? (darkMode ? "bg-white/10 text-white" : "bg-white text-slate-900 shadow-sm") : "text-slate-500"}`}
+                    >
+                      {language === "ar" ? "نسبة مئوية" : "Percentage"}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max={discountMode === "percentage" ? 100 : subtotal}
+                      step={discountMode === "percentage" ? "1" : "0.01"}
+                      value={discount}
+                      onChange={(e) => setDiscount(e.target.value)}
+                      className={`w-full rounded-2xl border px-4 py-3 outline-none focus:border-blue-500 ${
+                        darkMode
+                          ? "border-white/[0.07] bg-[#0F1115]"
+                          : "border-slate-200 bg-slate-50"
+                      }`}
+                    />
+                    <span className="pointer-events-none absolute inset-y-0 end-4 flex items-center text-sm text-slate-500">
+                      {discountMode === "percentage" ? "%" : "EGP"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {language === "ar" ? "الخصم المحسوب" : "Applied discount"}: {money(invoiceDiscount)} EGP
+                  </p>
                 </div>
 
                 <div className="border-t pt-4">
@@ -1475,8 +1498,8 @@ setSuccess(
                   </select>
                   <p className="mt-2 text-xs text-slate-500">
                     {language === "ar"
-                      ? "لو طريقة الدفع نقدي، لازم تكون الوردية مفتوحة قبل إصدار الفاتورة."
-                      : "For cash payments, the register session must be open before issuing the invoice."}
+                      ? "سيتم فتح وردية الخزنة تلقائيًا عند إصدار الفاتورة أو تحصيل دفعة."
+                      : "Cash register sessions open automatically when a sales invoice is issued or a customer payment is collected."}
                   </p>
                 </div>
 

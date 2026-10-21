@@ -108,6 +108,7 @@ const translations = {
       ["سجل الزيارات", "عرض وتعديل الكشوفات السابقة", "📋"],
       ["رسائل واتساب", "قوالب الرسائل ومشاركتها", "💬"],
       ["فريق العيادة", "الأطباء والمساعدون والاستقبال", "👩‍⚕️"],
+      ["مشتريات المخزون", "إضافة مشتريات من مورد", "🧾"],
     ],
 
     open: "فتح",
@@ -124,7 +125,7 @@ const translations = {
     shortcutsTitle: "اختصارات العيادة",
     shortcutsSubtitle: "كل أدواتك اليومية في مكان واحد",
     todayStatsTitle: "إحصائيات اليوم",
-    todayStats: ["مواعيد اليوم", "تطعيمات اليوم", "كمية قليلة", "نفد من الكمية"],
+    todayStats: ["مواعيد اليوم", "تطعيمات اليوم", "كمية قليلة", "نفد من الكمية", "قرب انتهاء الصلاحية"],
     theme: "المظهر",
 
     encouragement: [
@@ -171,6 +172,7 @@ const translations = {
       ["Visit History", "Review and edit previous visits", "📋"],
       ["WhatsApp Messages", "Templates and customer sharing", "💬"],
       ["Clinic Staff", "Doctors, assistants, and front desk", "👩‍⚕️"],
+      ["Inventory Purchases", "Add stock from a supplier", "🧾"],
     ],
 
     open: "Open",
@@ -187,7 +189,7 @@ const translations = {
     shortcutsTitle: "Clinic shortcuts",
     shortcutsSubtitle: "Your daily tools, all in one place",
     todayStatsTitle: "Today's statistics",
-    todayStats: ["Today's appointments", "Today's vaccinations", "Low stock", "Out of stock"],
+    todayStats: ["Today's appointments", "Today's vaccinations", "Low stock", "Out of stock", "Near expiry"],
     theme: "Theme",
 
     encouragement: [
@@ -261,7 +263,7 @@ export default function Home() {
     useState<ClinicContext | null>(null);
 
   const [clinicLoading, setClinicLoading] = useState(true);
-  const [todayStats, setTodayStats] = useState<Array<number | null>>([null, null, null, null]);
+  const [todayStats, setTodayStats] = useState<Array<number | null>>([null, null, null, null, null]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
@@ -391,11 +393,17 @@ export default function Home() {
           String(today.getMonth() + 1).padStart(2, "0"),
           String(today.getDate()).padStart(2, "0"),
         ].join("-");
+        const expiryLimit = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30);
+        const expiryLimitKey = [
+          expiryLimit.getFullYear(),
+          String(expiryLimit.getMonth() + 1).padStart(2, "0"),
+          String(expiryLimit.getDate()).padStart(2, "0"),
+        ].join("-");
 
         const [appointmentsResult, vaccinesResult, productsResult] = await Promise.all([
           db.from("appointments").select("id, status").eq("clinic_id", clinicId).eq("appointment_date", dateKey),
           db.from("vaccinations").select("next_dose_at").eq("clinic_id", clinicId).not("next_dose_at", "is", null),
-          db.from("products").select("quantity, reorder_level").eq("clinic_id", clinicId).eq("is_active", true),
+          db.from("products").select("quantity, reorder_level, expiry_date").eq("clinic_id", clinicId).eq("is_active", true),
         ]);
 
         if (appointmentsResult.error) throw appointmentsResult.error;
@@ -408,12 +416,16 @@ export default function Home() {
         }).length;
         const lowStock = (productsResult.data || []).filter((item) => Number(item.quantity) > 0 && Number(item.quantity) <= Number(item.reorder_level)).length;
         const outOfStock = (productsResult.data || []).filter((item) => Number(item.quantity) <= 0).length;
+        const nearExpiry = (productsResult.data || []).filter((item) => {
+          const expiryDate = String(item.expiry_date || "").slice(0, 10);
+          return Boolean(expiryDate) && expiryDate >= dateKey && expiryDate <= expiryLimitKey;
+        }).length;
         const appointmentsToday = (appointmentsResult.data || []).filter((item) => !["cancelled", "no_show"].includes(String(item.status))).length;
 
-        if (mounted) setTodayStats([appointmentsToday, vaccinationsToday, lowStock, outOfStock]);
+        if (mounted) setTodayStats([appointmentsToday, vaccinationsToday, lowStock, outOfStock, nearExpiry]);
       } catch (error) {
         console.error("VETRA DASHBOARD STATS ERROR:", error);
-        if (mounted) setTodayStats([null, null, null, null]);
+        if (mounted) setTodayStats([null, null, null, null, null]);
       }
     }
 
@@ -942,6 +954,9 @@ export default function Home() {
                       case 12:
                         goTo("/staff");
                         break;
+                      case 13:
+                        goTo("/inventory/purchases");
+                        break;
                       default:
                         goTo("/dashboard");
                     }
@@ -1014,17 +1029,18 @@ export default function Home() {
               <h3 className="text-lg font-black tracking-tight sm:text-xl">{t.todayStatsTitle}</h3>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
               {[
                 ["📅", t.todayStats[0], "text-blue-400", "bg-blue-500/10"],
                 ["💉", t.todayStats[1], "text-emerald-400", "bg-emerald-500/10"],
                 ["📦", t.todayStats[2], "text-amber-400", "bg-amber-500/10"],
                 ["⚠️", t.todayStats[3], "text-rose-400", "bg-rose-500/10"],
+                ["⏳", t.todayStats[4], "text-violet-400", "bg-violet-500/10"],
               ].map(([icon, label, accent, iconBg], index) => (
                 <button
                   key={label}
                   type="button"
-                  onClick={() => goTo(["/appointments", "/vaccinations", "/inventory/products?stock=low", "/inventory/products?stock=out"][index])}
+                  onClick={() => goTo(["/appointments", "/vaccinations", "/inventory/products?stock=low", "/inventory/products?stock=out", "/inventory/products"][index])}
                   aria-label={`${label}: ${todayStats[index] ?? "—"}`}
                   className={`group min-h-[132px] rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-500/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 sm:p-5 ${darkMode ? "border-white/[0.06] bg-[#181B21]" : "border-slate-100 bg-white shadow-sm"}`}
                 >

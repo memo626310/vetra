@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
+import { clientPortalPhotos } from "../client-interface/pet-photos";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -97,103 +99,102 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900 dark:bg-slate-950 dark:text-white">
-      <div className="mx-auto flex min-h-[85vh] max-w-md items-center justify-center">
-        <div className="w-full rounded-3xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-
-          {/* Logo / Header */}
-
-          <div className="mb-8 text-center">
-            <div className="mb-4 text-4xl">
-              🐾
-            </div>
-
-            <h1 className="text-3xl font-bold tracking-tight">
-              VETRA
+    <main className="flex min-h-screen items-center justify-center bg-[#15111b] px-4 py-6 text-white sm:px-8 sm:py-10">
+      <div className="grid w-full max-w-[1336px] overflow-hidden rounded-[32px] border border-white/15 bg-[#dedde0] shadow-[0_30px_100px_rgba(0,0,0,0.35)] sm:rounded-[42px] lg:min-h-[min(780px,calc(100vh-80px))] lg:grid-cols-2">
+        <section className="relative flex min-h-[270px] items-end overflow-hidden bg-[#101923] px-7 py-8 sm:min-h-[330px] sm:px-10 sm:py-10 lg:min-h-0 lg:items-center lg:px-12 lg:py-14">
+          <Image
+            src={clientPortalPhotos[0].src}
+            alt={clientPortalPhotos[0].alt}
+            fill
+            unoptimized
+            priority
+            sizes="(max-width: 1023px) 100vw, 50vw"
+            className="object-cover object-center"
+          />
+          <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-[#101923]/95 via-[#101923]/35 to-[#101923]/10" />
+          <div className="relative z-10 mx-auto max-w-md text-center">
+            <h1 className="text-3xl font-black sm:text-4xl lg:text-[44px]">
+              Welcome back
             </h1>
-
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              Veterinary Clinic Management
+            <p className="mt-3 text-sm leading-7 text-white/90 sm:text-base">
+              Veterinary care, organized in one place.
             </p>
           </div>
+        </section>
 
-          {/* Login Form */}
-
-          <form
-            onSubmit={handleLogin}
-            className="space-y-5"
-          >
-
-            {/* Email */}
-
-            <div>
-              <label className="mb-2 block text-sm font-medium">
-                Email or phone number
-              </label>
-
-              <input
-                type="text"
-                value={identifier}
-                onChange={(e) =>
-                  setIdentifier(e.target.value)
-                }
-                placeholder="doctor@vetra.top or 01012345678"
-                autoComplete="username"
-                inputMode="text"
-                required
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-              />
+        <section className="flex items-center bg-[#dedde0] px-7 py-9 text-[#201a28] sm:px-12 sm:py-12 lg:px-[64px] lg:py-14">
+          <div className="mx-auto w-full max-w-[540px]">
+            <div className="mb-8 sm:mb-10">
+              <h2 className="text-4xl font-black leading-tight sm:text-[46px]">
+                Sign in
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-[#6b6472] sm:text-base">
+                Access your VETRA clinic workspace.
+              </p>
             </div>
 
-            {/* Password */}
-
-            <div>
-              <label className="mb-2 block text-sm font-medium">
-                Password
+            <form onSubmit={handleLogin} className="space-y-5 sm:space-y-6">
+              <label className="block">
+                <span className="mb-2.5 block text-sm font-bold sm:text-base">
+                  Email or phone number
+                </span>
+                <input
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="doctor@vetra.top or 01012345678"
+                  autoComplete="username"
+                  inputMode="text"
+                  required
+                  className="h-[62px] w-full rounded-[18px] border border-[#33283f] bg-[#211a2a] px-5 text-base text-white outline-none transition placeholder:text-[#aaa2b4] focus:border-[#76668d] focus:ring-4 focus:ring-[#211a2a]/10 sm:h-[74px] sm:px-6 sm:text-lg"
+                />
               </label>
 
-              <input
-                type="password"
-                value={password}
-                onChange={(e) =>
-                  setPassword(e.target.value)
-                }
-                placeholder="••••••••"
-                autoComplete="current-password"
-                required
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:focus:border-slate-500 dark:focus:ring-slate-700"
-              />
+              <label className="block">
+                <span className="mb-2.5 block text-sm font-bold sm:text-base">
+                  Password
+                </span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  required
+                  className="h-[62px] w-full rounded-[18px] border border-[#33283f] bg-[#211a2a] px-5 text-base text-white outline-none transition placeholder:text-[#aaa2b4] focus:border-[#76668d] focus:ring-4 focus:ring-[#211a2a]/10 sm:h-[74px] sm:px-6 sm:text-lg"
+                />
+              </label>
+
+              {error && (
+                <div role="alert" className="rounded-xl border border-red-400/30 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="h-[62px] w-full rounded-[18px] bg-[#101a32] px-5 text-base font-bold text-white shadow-[0_12px_24px_rgba(16,26,50,0.2)] transition hover:bg-[#1a2949] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#101a32]/20 disabled:cursor-not-allowed disabled:opacity-60 sm:mt-2 sm:h-[68px] sm:text-lg"
+              >
+                {loading ? "Signing in..." : "Sign in"}
+              </button>
+            </form>
+
+            <p className="mt-6 text-center text-xs leading-5 text-[#77707e] sm:text-sm">
+              VETRA Veterinary Clinic Management
+            </p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm">
+              <span className="text-[#77707e]">New to VETRA?</span>
+              <button
+                type="button"
+                onClick={() => router.push("/register")}
+                className="font-bold text-[#087a91] underline-offset-4 transition hover:underline"
+              >
+                Register a clinic
+              </button>
             </div>
-
-            {/* Error */}
-
-            {error && (
-              <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
-                {error}
-              </div>
-            )}
-
-            {/* Submit */}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-2xl bg-slate-900 px-5 py-3.5 font-semibold text-white transition hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
-            >
-              {loading
-                ? "Signing in..."
-                : "Sign in"}
-            </button>
-
-          </form>
-
-          {/* Footer */}
-
-          <p className="mt-8 text-center text-xs text-slate-400">
-            VETRA Veterinary Management System
-          </p>
-
-        </div>
+          </div>
+        </section>
       </div>
     </main>
   );

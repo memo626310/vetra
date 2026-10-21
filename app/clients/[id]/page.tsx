@@ -31,6 +31,15 @@ type Pet = {
   notes: string | null;
 };
 
+type ClientInvoice = {
+  id: string;
+  invoice_number: number;
+  status: string;
+  total: number | null;
+  paid_amount: number | null;
+  created_at: string;
+};
+
 export default function ClientPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -39,6 +48,7 @@ export default function ClientPage() {
 
   const [client, setClient] = useState<Client | null>(null);
   const [pets, setPets] = useState<Pet[]>([]);
+  const [clientInvoices, setClientInvoices] = useState<ClientInvoice[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [savingPet, setSavingPet] = useState(false);
@@ -53,6 +63,9 @@ export default function ClientPage() {
   const [breed, setBreed] = useState("");
   const [gender, setGender] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [birthDateInputMode, setBirthDateInputMode] = useState<"age" | "date">("age");
+  const [ageYears, setAgeYears] = useState("");
+  const [ageMonths, setAgeMonths] = useState("");
   const [color, setColor] = useState("");
   const [microchip, setMicrochip] = useState("");
   const [petNotes, setPetNotes] = useState("");
@@ -119,6 +132,24 @@ export default function ClientPage() {
 
       setClient(clientData as Client);
       setPets((petsData || []) as Pet[]);
+
+      const {
+        data: invoicesData,
+        error: invoicesError,
+      } = await db
+        .from("invoices")
+        .select("id, invoice_number, status, total, paid_amount, created_at")
+        .eq("clinic_id", clientData.clinic_id)
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false });
+
+      if (invoicesError) {
+        console.error("CLIENT INVOICES LOAD ERROR:", invoicesError);
+        setClientInvoices([]);
+      } else {
+        setClientInvoices((invoicesData || []) as ClientInvoice[]);
+      }
+
       setLoading(false);
     } catch (err) {
       console.error("CLIENT PAGE ERROR:", err);
@@ -136,6 +167,39 @@ export default function ClientPage() {
   useEffect(() => {
     void loadClient();
   }, [clientId]);
+
+  function calculateBirthDate(years: string, months: string) {
+    const parsedYears = Number.parseInt(years || "0", 10);
+    const parsedMonths = Number.parseInt(months || "0", 10);
+
+    if (!Number.isInteger(parsedYears) || !Number.isInteger(parsedMonths) || parsedYears < 0 || parsedMonths < 0) {
+      return "";
+    }
+
+    const totalMonths = parsedYears * 12 + parsedMonths;
+    if (totalMonths === 0 && !years && !months) return "";
+
+    const today = new Date();
+    const result = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    result.setDate(1);
+    result.setMonth(result.getMonth() - totalMonths);
+    const lastDayOfMonth = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+    result.setDate(Math.min(today.getDate(), lastDayOfMonth));
+
+    const year = result.getFullYear();
+    const month = String(result.getMonth() + 1).padStart(2, "0");
+    const day = String(result.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function updateAge(years: string, months: string) {
+    const normalizedYears = String(Math.min(Number.parseInt(years.replace(/\D/g, "").slice(0, 2) || "0", 10), 50));
+    const normalizedMonths = String(Math.min(Number.parseInt(months.replace(/\D/g, "").slice(0, 2) || "0", 10), 11));
+
+    setAgeYears(years ? normalizedYears : "");
+    setAgeMonths(months ? normalizedMonths : "");
+    setBirthDate(calculateBirthDate(normalizedYears, months ? normalizedMonths : ""));
+  }
 
   async function generateNewClientCode() {
     if (!client || generatingClientCode) return;
@@ -338,6 +402,8 @@ export default function ClientPage() {
       setBreed("");
       setGender("");
       setBirthDate("");
+      setAgeYears("");
+      setAgeMonths("");
       setColor("");
       setMicrochip("");
       setPetNotes("");
@@ -415,6 +481,15 @@ export default function ClientPage() {
   if (!client) {
     return null;
   }
+
+  const dueInvoices = clientInvoices.filter((invoice) => {
+    const due = Number(invoice.total || 0) - Number(invoice.paid_amount || 0);
+    return !["draft", "cancelled", "returned"].includes(invoice.status) && due > 0.009;
+  });
+  const clientOutstanding = dueInvoices.reduce(
+    (sum, invoice) => sum + Math.max(Number(invoice.total || 0) - Number(invoice.paid_amount || 0), 0),
+    0,
+  );
 
   return (
     <main
@@ -527,6 +602,65 @@ export default function ClientPage() {
             {message}
           </div>
         )}
+
+        {/* Outstanding balances */}
+        <section className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-black">المبالغ المستحقة</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                الفواتير التي لم يتم تحصيلها بالكامل
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-amber-50 px-5 py-3 text-left">
+              <p className="text-xs font-bold text-amber-700">إجمالي المستحق</p>
+              <p dir="ltr" className="mt-1 text-2xl font-black text-amber-700">
+                {clientOutstanding.toFixed(2)} ج.م
+              </p>
+            </div>
+          </div>
+
+          {dueInvoices.length === 0 ? (
+            <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm font-semibold text-slate-500">
+              لا توجد مبالغ مستحقة على هذا العميل.
+            </div>
+          ) : (
+            <div className="mt-5 space-y-3">
+              {dueInvoices.map((invoice) => {
+                const due = Math.max(Number(invoice.total || 0) - Number(invoice.paid_amount || 0), 0);
+
+                return (
+                  <div
+                    key={invoice.id}
+                    className="flex flex-col gap-4 rounded-2xl border border-slate-100 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-black">فاتورة #{invoice.invoice_number}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        الإجمالي: {Number(invoice.total || 0).toFixed(2)} ج.م
+                        <span className="mx-2">•</span>
+                        المدفوع: {Number(invoice.paid_amount || 0).toFixed(2)} ج.م
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <p dir="ltr" className="font-black text-amber-700">
+                        متبقي {due.toFixed(2)} ج.م
+                      </p>
+                      <Link
+                        href="/finance"
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800"
+                      >
+                        تحصيل الدفعة
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         {/* Pets */}
         <section className="mb-6">
@@ -703,17 +837,72 @@ export default function ClientPage() {
 
             <div>
               <label className="mb-2 block text-sm font-bold">
-                تاريخ الميلاد
+                تاريخ الميلاد أو العمر
               </label>
 
-              <input
-                type="date"
-                value={birthDate}
-                onChange={(e) =>
-                  setBirthDate(e.target.value)
-                }
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 outline-none focus:border-blue-500 focus:bg-white"
-              />
+              <div className="mb-3 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBirthDateInputMode("age");
+                    setBirthDate("");
+                  }}
+                  className={`rounded-xl px-3 py-2 text-sm font-bold transition ${birthDateInputMode === "age" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+                >
+                  إدخال العمر
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBirthDateInputMode("date");
+                    setBirthDate("");
+                    setAgeYears("");
+                    setAgeMonths("");
+                  }}
+                  className={`rounded-xl px-3 py-2 text-sm font-bold transition ${birthDateInputMode === "date" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+                >
+                  إدخال التاريخ
+                </button>
+              </div>
+
+              {birthDateInputMode === "age" ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="50"
+                      value={ageYears}
+                      onChange={(e) => updateAge(e.target.value, ageMonths)}
+                      placeholder="سنوات"
+                      aria-label="العمر بالسنوات"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 outline-none focus:border-blue-500 focus:bg-white"
+                    />
+
+                    <input
+                      type="number"
+                      min="0"
+                      max="11"
+                      value={ageMonths}
+                      onChange={(e) => updateAge(ageYears, e.target.value)}
+                      placeholder="شهور"
+                      aria-label="العمر بالشهور"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 outline-none focus:border-blue-500 focus:bg-white"
+                    />
+                  </div>
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    تاريخ الميلاد المحسوب: {birthDate || "سيظهر تلقائيًا بعد إدخال العمر"}
+                  </p>
+                </>
+              ) : (
+                <input
+                  type="date"
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 outline-none focus:border-blue-500 focus:bg-white"
+                />
+              )}
             </div>
 
             <div>
