@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
+import { supabase } from "@/lib/supabase";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -51,7 +52,13 @@ export default function ChangePasswordPage() {
       });
       const result = await response.json().catch(() => null) as { error?: string } | null;
       if (!response.ok) throw new Error(result?.error || (ar ? "تعذر تغيير كلمة المرور." : "Could not change password."));
-      router.replace("/dashboard");
+
+      await Promise.all([
+        vetraCore.auth.signOut(),
+        supabase.auth.signOut(),
+      ]);
+
+      router.replace("/login");
       router.refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : (ar ? "تعذر تغيير كلمة المرور." : "Could not change password."));

@@ -85,10 +85,11 @@ export default function AuthGuard({
       const staffState = await staffStateResponse.json().catch(() => null) as { mustChangePassword?: boolean } | null;
       if (!staffStateResponse.ok || !staffState) {
         verifiedState.current = null;
-        if (mounted) {
-          setCheckError(true);
-          setCheckedPath(pathname);
-        }
+        await Promise.all([
+          vetraCore.auth.signOut(),
+          import("@/lib/supabase").then(({ supabase }) => supabase.auth.signOut()),
+        ]);
+        if (mounted) router.replace("/login");
         return;
       }
       if (staffState.mustChangePassword && pathname !== "/change-password") {

@@ -23,7 +23,7 @@ const dashboardThemes: Record<DashboardTheme, {
   midnight: {
     labelAr: "ليلي تركوازي", labelEn: "Midnight teal",
     page: "bg-[#0F1115] text-white", sidebar: "border-white/[0.06] bg-[#13161B]",
-    header: "border-white/[0.07] bg-[radial-gradient(ellipse_at_top_right,_rgba(20,184,166,0.13),_transparent_48%),linear-gradient(135deg,#171b22,#12151a)]",
+    header: "border-white/[0.07] bg-[#171B21]",
     card: "border-white/[0.06] bg-[#181B21] text-white shadow-sm", cardHover: "hover:border-white/[0.10] hover:bg-[#1C2026] hover:shadow-xl",
     activeNav: "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15", accentText: "text-teal-400",
     focus: "focus-visible:ring-teal-400", quickSale: "border-teal-400/20 bg-teal-500/10 hover:border-teal-300/30 hover:bg-teal-500/[0.14]",
@@ -32,7 +32,7 @@ const dashboardThemes: Record<DashboardTheme, {
   ocean: {
     labelAr: "أزرق محيطي", labelEn: "Ocean blue",
     page: "bg-[#081521] text-slate-50", sidebar: "border-sky-200/[0.08] bg-[#0b1d2b]",
-    header: "border-sky-300/10 bg-[radial-gradient(ellipse_at_top_right,_rgba(56,189,248,0.16),_transparent_48%),linear-gradient(135deg,#102638,#0b1d2b)]",
+    header: "border-sky-300/10 bg-[#102638]",
     card: "border-sky-200/[0.08] bg-[#102333] text-slate-50 shadow-sm", cardHover: "hover:border-sky-300/20 hover:bg-[#142b3d] hover:shadow-xl",
     activeNav: "bg-sky-400/10 text-sky-300 hover:bg-sky-400/15", accentText: "text-sky-300",
     focus: "focus-visible:ring-sky-400", quickSale: "border-cyan-300/20 bg-cyan-400/10 hover:border-cyan-200/30 hover:bg-cyan-400/[0.16]",
@@ -41,7 +41,7 @@ const dashboardThemes: Record<DashboardTheme, {
   violet: {
     labelAr: "بنفسجي هادئ", labelEn: "Soft violet",
     page: "bg-[#15111b] text-white", sidebar: "border-violet-200/[0.08] bg-[#1b1524]",
-    header: "border-violet-300/10 bg-[radial-gradient(ellipse_at_top_right,_rgba(167,139,250,0.17),_transparent_48%),linear-gradient(135deg,#241b30,#191421)]",
+    header: "border-violet-300/10 bg-[#241B30]",
     card: "border-violet-200/[0.08] bg-[#211a2b] text-white shadow-sm", cardHover: "hover:border-violet-300/20 hover:bg-[#281f34] hover:shadow-xl",
     activeNav: "bg-violet-400/10 text-violet-300 hover:bg-violet-400/15", accentText: "text-violet-300",
     focus: "focus-visible:ring-violet-400", quickSale: "border-fuchsia-300/20 bg-fuchsia-400/10 hover:border-fuchsia-200/30 hover:bg-fuchsia-400/[0.16]",
@@ -50,7 +50,7 @@ const dashboardThemes: Record<DashboardTheme, {
   light: {
     labelAr: "فاتح", labelEn: "Light",
     page: "bg-[#F7F8FA] text-slate-800", sidebar: "border-slate-100 bg-white",
-    header: "border-slate-200 bg-[radial-gradient(ellipse_at_top_right,_rgba(20,184,166,0.12),_transparent_48%),linear-gradient(135deg,#ffffff,#f6faf9)]",
+    header: "border-slate-200 bg-[#FFFFFF]",
     card: "border-slate-100 bg-white text-slate-800 shadow-sm", cardHover: "hover:border-slate-200 hover:shadow-xl",
     activeNav: "bg-blue-50 text-blue-800 hover:bg-blue-100", accentText: "text-teal-700",
     focus: "focus-visible:ring-teal-500", quickSale: "border-teal-100 bg-teal-50 hover:border-teal-300 hover:shadow-md",
