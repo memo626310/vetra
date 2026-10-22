@@ -124,6 +124,7 @@ export default function InvoiceDetailsPage() {
   const [items, setItems] = useState<InvoiceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [isReception, setIsReception] = useState(false);
   const [error, setError] = useState("");
 
   const [showCancel, setShowCancel] = useState(false);
@@ -180,10 +181,11 @@ export default function InvoiceDetailsPage() {
 
       const context = await getClinicContext();
 
-      if (!["owner", "admin"].includes(context.role)) {
+      if (!["owner", "admin", "reception"].includes(context.role)) {
         router.replace("/dashboard");
         return;
       }
+      setIsReception(context.role === "reception");
 
       const db = await getClinicDb();
 
@@ -697,8 +699,9 @@ export default function InvoiceDetailsPage() {
   };
 
   const isDraft = invoice.status === "draft";
-  const canCancel = invoice.status !== "cancelled";
+  const canCancel = !isReception && invoice.status !== "cancelled";
   const canReturn =
+    !isReception &&
     !isDraft &&
     invoice.status !== "cancelled" &&
     invoice.status !== "returned" &&
@@ -709,7 +712,7 @@ export default function InvoiceDetailsPage() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 print:hidden">
           <button
-            onClick={() => router.push("/invoices")}
+            onClick={() => router.push(isReception ? "/reception" : "/invoices")}
             className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
           >
             ← {isAr ? "الفواتير" : "Invoices"}
@@ -717,7 +720,7 @@ export default function InvoiceDetailsPage() {
 
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => router.push("/dashboard")}
+              onClick={() => router.push(isReception ? "/reception" : "/dashboard")}
               className="rounded-2xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm hover:bg-cyan-400"
             >
               {isAr ? "الداشبورد" : "Dashboard"}

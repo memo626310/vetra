@@ -485,6 +485,7 @@ export default function DrugEyeProductLinks({
     }
     const draft: FormularyVisitDraft = {
       id: crypto.randomUUID(),
+      product_id: null,
       drugId: option.drug.id,
       drugName: result.name || option.drug.name,
       activeIngredient: option.drug.active_ingredient || result.activeIngredient || "",
@@ -531,6 +532,7 @@ export default function DrugEyeProductLinks({
     }
     const draft: ExternalMedicationDraft = {
       id: crypto.randomUUID(),
+      product_id: null,
       productName: result.name,
       activeIngredient: result.activeIngredient,
       manufacturer: result.manufacturer,

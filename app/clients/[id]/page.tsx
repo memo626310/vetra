@@ -326,7 +326,7 @@ export default function ClientPage() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      const result = await response.json() as { error?: string; cleanupPending?: boolean };
+      const result = await response.json().catch(() => ({})) as { error?: string; cleanupPending?: boolean };
       if (!response.ok) throw new Error(result.error || "تعذر حذف العميل.");
 
       if (result.cleanupPending) {

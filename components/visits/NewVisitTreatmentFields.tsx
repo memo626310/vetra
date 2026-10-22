@@ -13,6 +13,9 @@ type DrugEyeResult = {
   category: string | null;
   manufacturer: string | null;
 };
+type VaccineStockProduct = { id: string; name: string; quantity: number; unit: string | null; retail_price: number };
+type ClinicStockProduct = VaccineStockProduct & { active_ingredient: string | null; barcode?: string | null };
+type DrawerMedication = { id: string; product_id: string; quantity: number };
 
 type Props = {
   clinicId: string;
@@ -37,6 +40,11 @@ type Props = {
   treatment: string;
   setTreatment: (value: string) => void;
   vaccinations: VaccinationDraft[];
+  vaccineStockProducts: VaccineStockProduct[];
+  vaccineProductMappings: Record<string, string[]>;
+  clinicStockProducts: ClinicStockProduct[];
+  drawerMedications: DrawerMedication[];
+  setDrawerMedications: (value: DrawerMedication[] | ((current: DrawerMedication[]) => DrawerMedication[])) => void;
   addVaccination: () => void;
   updateVaccination: (id: string, patch: Partial<VaccinationDraft>) => void;
   removeVaccination: (id: string) => void;
@@ -55,6 +63,9 @@ export default function NewVisitTreatmentFields({
   medicationSearch, setMedicationSearch,
   filteredMedications, addMedication, medications, setMessage, medicationDrafts, removeMedication,
   treatment, setTreatment, vaccinations, addVaccination, updateVaccination, removeVaccination,
+  vaccineStockProducts, vaccineProductMappings,
+  clinicStockProducts,
+  drawerMedications, setDrawerMedications,
   resetVaccinationNextDoseToAutomatic, visitNotes, setVisitNotes, followUp, setFollowUp,
   followUpDetails, setFollowUpDetails,
 }: Props) {
@@ -67,8 +78,13 @@ export default function NewVisitTreatmentFields({
   const [manualDrugName, setManualDrugName] = useState("");
   const [manualDose, setManualDose] = useState("");
   const [manualRoute, setManualRoute] = useState("");
+  const [drawerSearch, setDrawerSearch] = useState("");
   const query = medicationSearch.trim().replace(/\s+/g, " ");
   const matchingMedications = query ? filteredMedications.slice(0, 8) : [];
+  const matchingDrawerProducts = clinicStockProducts.filter((product) => {
+    const search = drawerSearch.trim().toLocaleLowerCase();
+    return !search || product.name.toLocaleLowerCase().includes(search) || (product.active_ingredient || "").toLocaleLowerCase().includes(search) || (product.barcode || "").toLocaleLowerCase().includes(search);
+  }).slice(0, 20);
 
   function addManualMedication() {
     if (!manualDrugName.trim() || !manualDose.trim()) {
@@ -77,6 +93,7 @@ export default function NewVisitTreatmentFields({
     }
     onAddManualExternalMedication({
       id: crypto.randomUUID(),
+      product_id: null,
       productName: manualDrugName.trim(),
       activeIngredient: null,
       manufacturer: null,
@@ -337,7 +354,7 @@ export default function NewVisitTreatmentFields({
                         </div>
                         {formularyDrafts.map((draft) => (
                           <div key={draft.id} className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-2.5 ${darkMode ? "border-emerald-900/60 bg-slate-900" : "border-emerald-200 bg-white"}`}>
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <div className="text-sm font-bold">{draft.drugName}</div>
                               {draft.activeIngredient && <div className="mt-0.5 text-xs text-slate-500">{draft.activeIngredient}</div>}
                               <div className="mt-1 text-xs leading-5 text-slate-500">
@@ -418,6 +435,29 @@ export default function NewVisitTreatmentFields({
                 </div>
 
                 <div className="lg:col-span-2">
+                  <section className={`mb-4 rounded-xl border p-3 ${darkMode ? "border-cyan-900/60 bg-slate-950/60" : "border-cyan-200 bg-cyan-50/40"}`}>
+                    <div className="mb-2 text-sm font-bold">{language === "ar" ? "درج الأدوية" : "Medication drawer"}</div>
+                    <input value={drawerSearch} onChange={(event) => setDrawerSearch(event.target.value)} placeholder={language === "ar" ? "ابحث بالاسم أو المادة الفعالة أو الباركود" : "Search name, active ingredient, or barcode"} className={`mb-2 w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                    <div className="flex gap-2"><select value="" onChange={(event) => {
+                      const product = clinicStockProducts.find((item) => item.id === event.target.value);
+                      if (!product || drawerMedications.some((item) => item.product_id === product.id)) return;
+                      setDrawerMedications((current) => [...current, { id: crypto.randomUUID(), product_id: product.id, quantity: 1 }]);
+                      setDrawerSearch("");
+                    }} className={`min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`}>
+                      <option value="">{language === "ar" ? "اختار دواء من العيادة" : "Select a clinic medication"}</option>
+                      {matchingDrawerProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.quantity} {product.unit || ""}</option>)}
+                    </select></div>
+                    {drawerMedications.length > 0 && <div className="mt-2 space-y-2">{drawerMedications.map((item) => {
+                      const product = clinicStockProducts.find((candidate) => candidate.id === item.product_id);
+                      if (!product) return null;
+                      return <div key={item.id} className={`grid grid-cols-[minmax(0,1fr)_100px_36px] items-center gap-2 rounded-lg border p-2 ${darkMode ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
+                        <div className="min-w-0"><div className="truncate text-sm font-semibold">{product.name}</div><div className="text-xs text-slate-500">{language === "ar" ? "المتاح" : "Available"}: {product.quantity} {product.unit || ""}</div></div>
+                        <input type="number" min="1" max={product.quantity} step="1" value={item.quantity} aria-label={language === "ar" ? `كمية صرف ${product.name}` : `Quantity for ${product.name}`} onChange={(event) => setDrawerMedications((current) => current.map((row) => row.id === item.id ? { ...row, quantity: Math.max(1, Math.floor(Number(event.target.value) || 1)) } : row))} className={`w-full rounded-lg border px-2 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-950 text-white" : "border-slate-200 bg-white"}`} />
+                        <button type="button" aria-label={language === "ar" ? "إزالة الدواء" : "Remove medication"} onClick={() => setDrawerMedications((current) => current.filter((row) => row.id !== item.id))} className="text-lg text-rose-500">×</button>
+                      </div>;
+                    })}</div>}
+                  </section>
+
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <label className={`block text-sm font-semibold ${darkMode ? "text-slate-300" : "text-slate-700"}`}>{language === "ar" ? "التطعيمات" : "Vaccinations"}</label>
                     <button type="button" onClick={addVaccination} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700">+ {language === "ar" ? "إضافة تطعيم" : "Add vaccine"}</button>
@@ -429,7 +469,7 @@ export default function NewVisitTreatmentFields({
                       {vaccinations.map((v) => (
                         <div key={v.id} className={`rounded-2xl border p-4 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-slate-50"}`}>
                           <div className="grid gap-3 md:grid-cols-2">
-                            <input value={v.vaccine_name} onChange={(e) => updateVaccination(v.id,{vaccine_name:e.target.value})} placeholder={language === "ar" ? "اسم المستحضر / التطعيم" : "Vaccine / product name"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input value={v.vaccine_name} onChange={(e) => updateVaccination(v.id,{vaccine_name:e.target.value, product_id:null})} placeholder={language === "ar" ? "اسم المستحضر / التطعيم" : "Vaccine / product name"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
                             <select value={v.vaccine_type} onChange={(e) => updateVaccination(v.id,{vaccine_type:e.target.value})} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`}>
                               <option value="">{language === "ar" ? "اختار نوع البروتوكول" : "Select protocol type"}</option>
                               <option value="Viral">{language === "ar" ? "التطعيم الفيروسي (ثلاثي / رباعي)" : "Viral (trivalent / quadrivalent)"}</option>
@@ -438,6 +478,26 @@ export default function NewVisitTreatmentFields({
                               <option value="External parasites">{language === "ar" ? "البراغيث والقراد / الطفيليات الخارجية" : "Fleas / ticks / external parasites"}</option>
                               <option value="Other">{language === "ar" ? "نوع آخر (يدوي)" : "Other (manual)"}</option>
                             </select>
+                            {(() => {
+                              const typeKey = v.vaccine_type.toLowerCase();
+                              const protocolKey = typeKey.includes("deworm") ? "deworm"
+                                : typeKey.includes("external") || typeKey.includes("parasite") ? "parasite"
+                                : typeKey.includes("rabies") ? "rabies"
+                                : typeKey.includes("viral") ? "viral" : "";
+                              const allowedProductIds = vaccineProductMappings[protocolKey] || [];
+                              const options = vaccineStockProducts.filter((product) => allowedProductIds.includes(product.id));
+                              if (!protocolKey || options.length === 0) return null;
+                              return <label className="block md:col-span-2"><span className="mb-1 block text-xs font-semibold text-slate-500">{language === "ar" ? "منتج المخزون المستخدم" : "Inventory product used"}</span><select value={v.product_id || ""} onChange={(event) => {
+                                const product = options.find((item) => item.id === event.target.value);
+                                updateVaccination(v.id, { product_id: product?.id || null, vaccine_name: product?.name || v.vaccine_name });
+                              }} className={`w-full rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`}><option value="">{language === "ar" ? "اختار المنتج" : "Select product"}</option>{options.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.quantity} {product.unit || ""} · {Number(product.retail_price || 0).toFixed(2)} EGP</option>)}</select></label>;
+                            })()}
+                            {v.product_id && vaccineStockProducts.find((product) => product.id === v.product_id) && (
+                              <p className="text-xs text-emerald-600 dark:text-emerald-400 md:col-span-2">
+                                {language === "ar" ? "مرتبط بالمخزون:" : "Linked inventory product:"} {vaccineStockProducts.find((product) => product.id === v.product_id)?.name}
+                                {" · "}{language === "ar" ? "الرصيد" : "Stock"}: {vaccineStockProducts.find((product) => product.id === v.product_id)?.quantity}
+                              </p>
+                            )}
                             <select value={v.dose_stage} onChange={(e) => updateVaccination(v.id,{dose_stage:e.target.value})} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`}>
                               {getVaccinationStageOptions(v.vaccine_type).map((stage) => (
                                 <option key={stage.value} value={stage.value}>{language === "ar" ? stage.ar : stage.en}</option>

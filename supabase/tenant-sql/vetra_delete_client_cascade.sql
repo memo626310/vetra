@@ -5,7 +5,7 @@ begin;
 create or replace function public.vetra_delete_client_cascade(p_client_id uuid)
 returns jsonb
 language plpgsql
-security invoker
+security definer
 set search_path = public, pg_temp
 as $$
 declare

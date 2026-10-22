@@ -6,7 +6,10 @@ import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb } from "@/lib/clinic-db";
 import PushNotificationsButton from "@/components/PushNotificationsButton";
+import ReceptionCheckoutNotice from "@/components/ReceptionCheckoutNotice";
 import { writeVetraTheme } from "@/lib/theme";
+import { permissionForPath } from "@/lib/staff-permissions";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 // VETRA_DASHBOARD_CURRENT_DESIGN_POLISH_V1
 
 type Language = "ar" | "en";
@@ -253,6 +256,7 @@ const cardColors = [
 
 export default function Home() {
   const router = useRouter();
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const [theme, setTheme] = useState<DashboardTheme>("midnight");
   const [lastDarkTheme, setLastDarkTheme] = useState<DashboardTheme>("midnight");
   const [language, setLanguage] = useState<Language>("ar");
@@ -380,7 +384,7 @@ export default function Home() {
 
   useEffect(() => {
     const clinicId = clinicContext?.clinic_id;
-    if (!ready || !clinicId) return;
+    if (!ready || !clinicId || !permissionsLoaded) return;
 
     let mounted = true;
 
@@ -401,9 +405,9 @@ export default function Home() {
         ].join("-");
 
         const [appointmentsResult, vaccinesResult, productsResult] = await Promise.all([
-          db.from("appointments").select("id, status").eq("clinic_id", clinicId).eq("appointment_date", dateKey),
-          db.from("vaccinations").select("next_dose_at").eq("clinic_id", clinicId).not("next_dose_at", "is", null),
-          db.from("products").select("quantity, reorder_level, expiry_date").eq("clinic_id", clinicId).eq("is_active", true),
+          can("appointments") ? db.from("appointments").select("id, status").eq("clinic_id", clinicId).eq("appointment_date", dateKey) : Promise.resolve({ data: [], error: null }),
+          can("vaccinations") ? db.from("vaccinations").select("next_dose_at").eq("clinic_id", clinicId).not("next_dose_at", "is", null) : Promise.resolve({ data: [], error: null }),
+          can("inventory") ? db.from("products").select("quantity, reorder_level, expiry_date").eq("clinic_id", clinicId).eq("is_active", true) : Promise.resolve({ data: [], error: null }),
         ]);
 
         if (appointmentsResult.error) throw appointmentsResult.error;
@@ -433,7 +437,7 @@ export default function Home() {
     return () => {
       mounted = false;
     };
-  }, [clinicContext?.clinic_id, ready]);
+  }, [clinicContext?.clinic_id, ready, permissionsLoaded, can]);
 
   const t = translations[language];
   const isArabic = language === "ar";
@@ -518,7 +522,18 @@ export default function Home() {
   ["💰", t.nav.finance, "/finance"],
   ["📊", t.nav.reports, "/reports"],
   ["🟢", isArabic ? "نشاط العملاء" : "Client activity", "/dashboard/clients-activity"],
-];
+  ].filter((item) => {
+    const required = permissionForPath(item[2]);
+    return !required || (permissionsLoaded && can(required.key, required.action));
+  });
+  const visibleCards = t.cards.map((card, index) => ({ card, index })).filter(({ index }) => {
+    const cardPaths = ["/visits/new", "/invoices/new", "/clients", "/pets", "/appointments", "/vaccinations", "/inventory/products", "/barcode-test", "/finance", "/reports", "/dashboard/visits", "/messages", "/staff", "/inventory/purchases"];
+    const required = permissionForPath(cardPaths[index]);
+    return !required || (permissionsLoaded && can(required.key, required.action));
+  });
+  const visibleStats = ["appointments", "vaccinations", "inventory", "inventory", "inventory"]
+    .map((key, index) => ({ key, index }))
+    .filter(({ key }) => permissionsLoaded && can(key, "view"));
   return (
     <main
       dir={isArabic ? "rtl" : "ltr"}
@@ -604,8 +619,6 @@ export default function Home() {
           <nav aria-label={isArabic ? "التنقل الرئيسي" : "Main navigation"} className="space-y-1.5">
             {navItems.map(([icon, title, href], index) => {
               const isHome = index === 0;
-              const isClients = index === 1;
-              const isPets = index === 2;
 
               return (
                 <button
@@ -644,7 +657,7 @@ export default function Home() {
 
           {/* Settings */}
 
-          <div
+          {permissionsLoaded && can("clinic_settings", "view") && <div
             className={`mt-10 border-t pt-6 ${
               darkMode
                 ? "border-white/[0.06]"
@@ -677,7 +690,7 @@ export default function Home() {
                 {t.nav.settings}
               </span>
             </button>
-          </div>
+          </div>}
         </aside>
 
         {/* ================= MAIN ================= */}
@@ -892,6 +905,15 @@ export default function Home() {
             </div>
           </header>
 
+          {clinicContext && ["owner", "admin", "reception"].includes(String(clinicContext.role || "").toLowerCase()) && (
+            <ReceptionCheckoutNotice
+              clinicId={clinicContext.clinic_id}
+              language={isArabic ? "ar" : "en"}
+              darkMode={darkMode}
+              canDismiss={["owner", "admin"].includes(String(clinicContext.role || "").toLowerCase())}
+            />
+          )}
+
           {/* ================= CARDS ================= */}
 
           <div className="mb-4 flex flex-wrap items-end justify-between gap-2 sm:mb-5">
@@ -899,12 +921,12 @@ export default function Home() {
               <h3 className="text-lg font-black tracking-tight sm:text-xl">{t.shortcutsTitle}</h3>
               <p className={`mt-1 text-xs font-medium sm:text-sm ${darkMode ? "text-slate-500" : "text-slate-500"}`}>{t.shortcutsSubtitle}</p>
             </div>
-            <span className={`hidden rounded-full px-3 py-1.5 text-xs font-bold sm:inline-flex ${darkMode ? "bg-white/[0.04] text-slate-400" : "bg-white text-slate-500 shadow-sm"}`}>{t.cards.length} {isArabic ? "أدوات" : "tools"}</span>
+            <span className={`hidden rounded-full px-3 py-1.5 text-xs font-bold sm:inline-flex ${darkMode ? "bg-white/[0.04] text-slate-400" : "bg-white text-slate-500 shadow-sm"}`}>{visibleCards.length} {isArabic ? "أدوات" : "tools"}</span>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
 
-            {t.cards.map((card, index) => {
+            {visibleCards.map(({ card, index }) => {
               const [title, subtitle, icon] = card;
               const colors = cardColors[index % cardColors.length];
               const featured = index === 0;
@@ -1036,7 +1058,9 @@ export default function Home() {
                 ["📦", t.todayStats[2], "text-amber-400", "bg-amber-500/10"],
                 ["⚠️", t.todayStats[3], "text-rose-400", "bg-rose-500/10"],
                 ["⏳", t.todayStats[4], "text-violet-400", "bg-violet-500/10"],
-              ].map(([icon, label, accent, iconBg], index) => (
+              ].map(([icon, label, accent, iconBg], index) => ({ icon, label, accent, iconBg, index }))
+              .filter(({ index }) => visibleStats.some((item) => item.index === index))
+              .map(({ icon, label, accent, iconBg, index }) => (
                 <button
                   key={label}
                   type="button"

@@ -156,7 +156,8 @@ export default function NewInvoicePage() {
     const context = await getClinicContext();
     const db = await getClinicDb();
 
-    if (!["owner", "admin"].includes(context.role)) {
+    const canCreateVisitInvoice = context.role === "reception" && Boolean(visitId);
+    if (!["owner", "admin"].includes(context.role) && !canCreateVisitInvoice) {
       setAuthorized(false);
       setLoading(false);
       return;
@@ -208,6 +209,8 @@ export default function NewInvoicePage() {
       setMessage(clientsResult.error.message);
     } else {
       setClients((clientsResult.data || []) as Client[]);
+      const requestedClient = (clientsResult.data || []).find((client) => client.id === clientId);
+      if (requestedClient) setClientSearch(requestedClient.name);
     }
 
     if (productsResult.error) {
@@ -242,10 +245,28 @@ export default function NewInvoicePage() {
         const db = await getClinicDb();
         const { data: visitMedicationRows, error: visitMedicationError } = await db
           .from("visit_medications")
-          .select("medication_id, calculated_dose, calculated_dose_unit, calculated_volume, volume_unit, route, frequency, duration_days")
+          .select("medication_id, product_id, calculated_dose, calculated_dose_unit, calculated_volume, volume_unit, route, frequency, duration_days")
+          .eq("visit_id", visitFromUrl);
+        const { data: visitVaccinationRows, error: visitVaccinationError } = await db
+          .from("vaccinations")
+          .select("product_id,vaccine_name,dose,route")
+          .eq("visit_id", visitFromUrl);
+        const { data: visitPrescriptionRows, error: visitPrescriptionsError } = await db
+          .from("visit_prescriptions")
+          .select("product_id,medication_name,active_ingredient,prescription")
           .eq("visit_id", visitFromUrl);
         if (visitMedicationError) {
           setInvoiceMedicationNotice(language === "ar" ? `تعذر تحميل أدوية الزيارة: ${visitMedicationError.message}` : `Could not load visit medications: ${visitMedicationError.message}`);
+          setLines([consultationLine]);
+          return;
+        }
+        if (visitVaccinationError) {
+          setInvoiceMedicationNotice(language === "ar" ? `تعذر تحميل تطعيمات الزيارة: ${visitVaccinationError.message}` : `Could not load visit vaccinations: ${visitVaccinationError.message}`);
+          setLines([consultationLine]);
+          return;
+        }
+        if (visitPrescriptionsError) {
+          setInvoiceMedicationNotice(language === "ar" ? `تعذر تحميل روشتة الزيارة: ${visitPrescriptionsError.message}` : `Could not load visit prescriptions: ${visitPrescriptionsError.message}`);
           setLines([consultationLine]);
           return;
         }
@@ -266,6 +287,7 @@ export default function NewInvoicePage() {
         const visitMedicationDrafts = (visitMedicationRows || []).map((row) => ({
           name: medNames.get(String(row.medication_id))?.name || "Medication",
           activeIngredient: medNames.get(String(row.medication_id))?.activeIngredient || "",
+          productId: row.product_id ? String(row.product_id) : null,
           details: [row.calculated_dose != null ? `${row.calculated_dose} ${row.calculated_dose_unit || ""}` : "", row.calculated_volume != null ? `${row.calculated_volume} ${row.volume_unit || "mL"}` : "", row.route, row.frequency, row.duration_days ? `${row.duration_days} days` : ""].filter(Boolean).join(" · "),
         }));
         const selectedNames = new Set(visitMedicationDrafts.map((draft) => normalizeProductName(draft.name)));
@@ -280,20 +302,78 @@ export default function NewInvoicePage() {
           return null;
         }).filter((draft): draft is { name: string; details: string } => draft !== null && Boolean(draft.name) && !selectedNames.has(normalizeProductName(draft.name)));
         const allMedicationDrafts = [...visitMedicationDrafts, ...structuredTreatmentDrafts.map((draft) => ({ ...draft, activeIngredient: "" }))];
-        const medicationLines: InvoiceLine[] = allMedicationDrafts.map((draft) => {
+        const medicationLines: InvoiceLine[] = allMedicationDrafts.flatMap((draft) => {
           const medName = draft.name;
           const exactMatch = products.find((product) => normalizeProductName(product.name) === normalizeProductName(medName));
           const ingredient = "activeIngredient" in draft ? normalizeProductName(draft.activeIngredient) : "";
           const ingredientMatches = ingredient ? products.filter((product) => normalizeProductName(product.name) === ingredient) : [];
-          const matchedProduct = exactMatch || (ingredientMatches.length === 1 ? ingredientMatches[0] : null);
+          const selectedProduct = "productId" in draft && draft.productId
+            ? products.find((product) => product.id === draft.productId)
+            : null;
+          const matchedProduct = selectedProduct || exactMatch || (ingredientMatches.length === 1 ? ingredientMatches[0] : null);
           const doseLabel = draft.details;
           if (matchedProduct && Number(matchedProduct.quantity) > 0) {
             return { key: crypto.randomUUID(), item_type: "product", product_id: matchedProduct.id, service_name: "", description: `${matchedProduct.name}${doseLabel ? ` — ${doseLabel}` : ""}`, quantity: 1, unit_price: Number(matchedProduct.retail_price) || 0, discount: 0, available_quantity: Number(matchedProduct.quantity), autoMedication: true };
           }
           missing.push(medName);
-          return { key: crypto.randomUUID(), item_type: "service", product_id: null, service_name: medName, description: `${medName}${doseLabel ? ` — ${doseLabel}` : ""}`, quantity: 1, unit_price: 0, discount: 0, available_quantity: null, autoMedication: true };
+          return [];
         });
-        setLines([consultationLine, ...medicationLines]);
+        const prescriptionLines: InvoiceLine[] = (visitPrescriptionRows || []).flatMap((row) => {
+          const product = products.find((item) => item.id === row.product_id);
+          if (!product) return [];
+          return [{ key: crypto.randomUUID(), item_type: "product", product_id: product.id, service_name: "", description: `${product.name}${row.prescription ? ` — ${row.prescription}` : ""}`, quantity: 1, unit_price: Number(product.retail_price) || 0, discount: 0, available_quantity: Number(product.quantity), autoMedication: true }];
+        });
+        const vaccinationLines: InvoiceLine[] = (visitVaccinationRows || []).flatMap((row) => {
+          const linkedProduct = products.find((product) => product.id === row.product_id);
+          if (!linkedProduct) return [];
+          const details = [row.dose, row.route].filter(Boolean).join(" · ");
+          return [{ key: crypto.randomUUID(), item_type: "product", product_id: linkedProduct.id, service_name: "", description: `${linkedProduct.name}${details ? ` — ${details}` : ""}`, quantity: 1, unit_price: Number(linkedProduct.retail_price) || 0, discount: 0, available_quantity: Number(linkedProduct.quantity), autoMedication: false }];
+        });
+        const { data: visitMovements, error: visitMovementsError } = await db
+          .from("inventory_movements")
+          .select("product_id,quantity")
+          .eq("clinic_id", context.clinic_id)
+          .eq("reference_type", "visit")
+          .eq("reference_id", visitId)
+          .eq("movement_type", "sale");
+        if (visitMovementsError) throw visitMovementsError;
+        const dispensed = new Map<string, number>();
+        for (const movement of visitMovements || []) {
+          if (movement.product_id) dispensed.set(String(movement.product_id), (dispensed.get(String(movement.product_id)) || 0) + Number(movement.quantity || 0));
+        }
+        const dispensedProductIds = new Set(dispensed.keys());
+        const alreadyRepresented = new Set<string>();
+        const billableVisitLines = [...medicationLines, ...prescriptionLines, ...vaccinationLines].map((line) => {
+          if (!line.product_id || !dispensedProductIds.has(line.product_id)) return line;
+          alreadyRepresented.add(line.product_id);
+          const product = products.find((item) => item.id === line.product_id);
+          return {
+            ...line,
+            item_type: "service" as const,
+            product_id: null,
+            service_name: product?.name || line.description,
+            available_quantity: null,
+            autoMedication: false,
+          };
+        });
+        const drawerMedicationLines: InvoiceLine[] = [...dispensed.entries()].flatMap(([productId, quantity]) => {
+          if (alreadyRepresented.has(productId)) return [];
+          const product = products.find((item) => item.id === productId);
+          if (!product) return [];
+          return [{
+            key: crypto.randomUUID(),
+            item_type: "service",
+            product_id: null,
+            service_name: product.name,
+            description: product.name,
+            quantity,
+            unit_price: Number(product.retail_price) || 0,
+            discount: 0,
+            available_quantity: null,
+            autoMedication: false,
+          }];
+        });
+        setLines([consultationLine, ...billableVisitLines, ...drawerMedicationLines]);
         if (missing.length) setInvoiceMedicationNotice(language === "ar"
           ? `أُضيفت الأدوية غير المطابقة كبنود بدون سعر/مخزون: ${[...new Set(missing)].join("، ")}. اربط اسم الدواء بمنتج مخزون مطابق أو حدّد سعره قبل الإصدار.`
           : `Medications without a matching inventory product were added without price/stock: ${[...new Set(missing)].join(", ")}. Match them to an inventory product or enter their price before issuing.`);
@@ -712,10 +792,41 @@ setSaving(true);
     const context = await getClinicContext();
     const db = await getClinicDb();
 
-    if (!["owner", "admin"].includes(context.role)) {
+    const canCreateVisitInvoice = context.role === "reception" && Boolean(visitId);
+    if (!["owner", "admin"].includes(context.role) && !canCreateVisitInvoice) {
       setAuthorized(false);
       setSaving(false);
       return;
+    }
+
+    if (canCreateVisitInvoice) {
+      const { data: visit, error: visitError } = await db.from("visits")
+        .select("id,client_id,pet_id")
+        .eq("id", visitId)
+        .eq("clinic_id", context.clinic_id)
+        .maybeSingle();
+      if (visitError || !visit || visit.client_id !== clientId || visit.pet_id !== petId) {
+        setMessage(language === "ar" ? "الزيارة أو بيانات العميل والحيوان غير متطابقة." : "The visit and selected client or pet do not match.");
+        setSaving(false);
+        return;
+      }
+
+      const { data: existingInvoice, error: existingInvoiceError } = await db.from("invoices")
+        .select("id")
+        .eq("clinic_id", context.clinic_id)
+        .eq("visit_id", visitId)
+        .limit(1)
+        .maybeSingle();
+      if (existingInvoiceError) {
+        setMessage(existingInvoiceError.message);
+        setSaving(false);
+        return;
+      }
+      if (existingInvoice) {
+        router.replace(`/invoices/${existingInvoice.id}`);
+        setSaving(false);
+        return;
+      }
     }
 
     const { data: invoice, error: invoiceError } = await db
@@ -884,8 +995,8 @@ setSuccess(
           </h1>
           <p className="mt-3 text-sm text-slate-500">
             {language === "ar"
-              ? "إنشاء الفواتير متاح للـ Owner و Admin فقط."
-              : "Invoice creation is available to Owner and Admin users only."}
+              ? "إنشاء الفواتير متاح للـ Owner و Admin، والاستقبال لفواتير الزيارات فقط."
+              : "Invoice creation is available to Owner and Admin; reception can create visit invoices only."}
           </p>
           <button
             onClick={() => router.push("/")}
@@ -909,7 +1020,7 @@ setSuccess(
         <header className="mb-5 flex min-w-0 flex-col gap-3 sm:mb-6 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <button
-              onClick={() => router.push("/invoices")}
+              onClick={() => router.push(visitId && new URLSearchParams(window.location.search).has("visit") ? "/reception" : "/invoices")}
               className="mb-3 text-sm text-slate-500 hover:text-blue-600"
             >
               ← {language === "ar" ? "الفواتير" : "Invoices"}

@@ -67,6 +67,24 @@ type DueItem = {
   source: "protocol" | "record";
 };
 
+type StockProduct = {
+  id: string;
+  name: string;
+  barcode: string | null;
+  quantity: number;
+  unit: string | null;
+  retail_price: number;
+};
+
+type VaccineProtocolKey = "viral" | "rabies" | "deworm" | "parasite";
+
+const vaccineProtocols: Array<{ key: VaccineProtocolKey; titleAr: string; titleEn: string }> = [
+  { key: "viral", titleAr: "الرباعي / الفيروسي", titleEn: "Viral / quadrivalent" },
+  { key: "rabies", titleAr: "السعار", titleEn: "Rabies" },
+  { key: "deworm", titleAr: "الديدان", titleEn: "Deworming" },
+  { key: "parasite", titleAr: "الطفيليات الخارجية", titleEn: "External parasites" },
+];
+
 const T = {
   ar: {
     title: "التطعيمات والرعاية الوقائية",
@@ -735,6 +753,13 @@ export default function ClinicVaccinationsPage() {
 
   const [pets, setPets] = useState<Pet[]>([]);
   const [vaccines, setVaccines] = useState<Vaccine[]>([]);
+  const [stockProducts, setStockProducts] = useState<StockProduct[]>([]);
+  const [vaccineProductMappings, setVaccineProductMappings] = useState<Partial<Record<VaccineProtocolKey, string[]>>>({});
+  const [mappingSearch, setMappingSearch] = useState<Partial<Record<VaccineProtocolKey, string>>>({});
+  const [savingVaccineMapping, setSavingVaccineMapping] = useState<VaccineProtocolKey | "">("");
+  const [mappingMessage, setMappingMessage] = useState("");
+  const [activeTab, setActiveTab] = useState<"tracking" | "inventory">("tracking");
+  const [activeTrackingTab, setActiveTrackingTab] = useState<"all" | VaccineProtocolKey>("all");
 
   const [clinicName, setClinicName] = useState("VETRA");
   const [databaseStatus, setDatabaseStatus] = useState("");
@@ -895,6 +920,32 @@ export default function ClinicVaccinationsPage() {
 
       if (petsResult.error) throw petsResult.error;
       if (vaccinesResult.error) throw vaccinesResult.error;
+
+      const [productsResult, mappingsResult] = await Promise.all([
+        db.from("products")
+          .select("id,name,barcode,quantity,unit,retail_price")
+          .eq("clinic_id", context.clinic_id)
+          .eq("is_active", true)
+          .order("name", { ascending: true }),
+        db.from("clinic_vaccination_products")
+          .select("protocol_key,product_id")
+          .eq("clinic_id", context.clinic_id),
+      ]);
+      if (productsResult.error) throw productsResult.error;
+      setStockProducts((productsResult.data || []) as StockProduct[]);
+      if (mappingsResult.error) {
+        console.error("LOAD VACCINE PRODUCT MAPPINGS ERROR:", mappingsResult.error);
+        setMappingMessage(lang === "ar"
+          ? "فعّل ربط التطعيمات بقاعدة البيانات لتتمكن من حفظ المنتجات المرتبطة."
+          : "Apply the vaccination product mapping database update to save linked products.");
+      } else {
+        const groupedMappings: Partial<Record<VaccineProtocolKey, string[]>> = {};
+        for (const row of mappingsResult.data || []) {
+          const key = row.protocol_key as VaccineProtocolKey;
+          groupedMappings[key] = [...(groupedMappings[key] || []), String(row.product_id)];
+        }
+        setVaccineProductMappings(groupedMappings);
+      }
       setClinicName(clinicProfile?.display_name || context.clinic_name || "VETRA");
 
       const rawPets = (petsResult.data || []) as Array<Omit<Pet, "client">>;
@@ -938,6 +989,35 @@ export default function ClinicVaccinationsPage() {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function saveVaccineProductMapping(protocolKey: VaccineProtocolKey, productId: string, add: boolean) {
+    setSavingVaccineMapping(protocolKey);
+    setMappingMessage("");
+    try {
+      const context = await getClinicContext();
+      const db = await getClinicDb();
+      const result = add
+        ? await db.from("clinic_vaccination_products").insert({
+            clinic_id: context.clinic_id, protocol_key: protocolKey, product_id: productId,
+          })
+        : await db.from("clinic_vaccination_products").delete()
+            .eq("clinic_id", context.clinic_id).eq("protocol_key", protocolKey).eq("product_id", productId);
+      if (result.error) throw result.error;
+      setVaccineProductMappings((current) => {
+        const next = { ...current };
+        const values = current[protocolKey] || [];
+        next[protocolKey] = add ? [...values, productId] : values.filter((id) => id !== productId);
+        if (!next[protocolKey]?.length) delete next[protocolKey];
+        return next;
+      });
+      setMappingSearch((current) => ({ ...current, [protocolKey]: "" }));
+      setMappingMessage(lang === "ar" ? "تم تحديث المنتجات المرتبطة." : "Linked products updated.");
+    } catch (error) {
+      setMappingMessage(error instanceof Error ? error.message : (lang === "ar" ? "تعذر حفظ الربط." : "Could not save the mapping."));
+    } finally {
+      setSavingVaccineMapping("");
     }
   }
 
@@ -1127,10 +1207,16 @@ export default function ClinicVaccinationsPage() {
     });
   }, [dueItems, searchedPets, filter]);
 
+  const dueItemsForTrackingTab = useMemo(() => activeTrackingTab === "all"
+    ? filteredDueItems
+    : filteredDueItems.filter((item) => item.vaccineType === activeTrackingTab),
+  [filteredDueItems, activeTrackingTab]);
+
   const visibleMissingVaccines = useMemo(() => {
     const petIds = new Set(searchedPets.map((pet) => pet.id));
-    return missingVaccines.filter((item) => petIds.has(item.pet.id));
-  }, [missingVaccines, searchedPets]);
+    return missingVaccines.filter((item) => petIds.has(item.pet.id)
+      && (activeTrackingTab === "all" || item.vaccineType === activeTrackingTab));
+  }, [missingVaccines, searchedPets, activeTrackingTab]);
 
   const overdueCount = useMemo(
     () =>
@@ -1187,6 +1273,18 @@ export default function ClinicVaccinationsPage() {
         .slice(0, 10),
     [vaccines]
   );
+
+  const recentVaccinesForTrackingTab = useMemo(() => {
+    if (activeTrackingTab === "all") return recentVaccines;
+    const typeMatches = (value: string | null) => {
+      const normalized = normalize(value || "");
+      if (activeTrackingTab === "viral") return normalized.includes("viral") || normalized.includes("فيروسي") || normalized.includes("رباعي");
+      if (activeTrackingTab === "rabies") return normalized.includes("rabies") || normalized.includes("سعار");
+      if (activeTrackingTab === "deworm") return normalized.includes("deworm") || normalized.includes("worm") || normalized.includes("ديدان");
+      return normalized.includes("parasite") || normalized.includes("external") || normalized.includes("طفيليات") || normalized.includes("حشرات");
+    };
+    return recentVaccines.filter((vaccine) => typeMatches(vaccine.vaccine_type));
+  }, [recentVaccines, activeTrackingTab]);
 
   function statusCardClass(
     active: boolean
@@ -1355,6 +1453,56 @@ export default function ClinicVaccinationsPage() {
           </div>
         </header>
 
+        <div role="tablist" aria-label={lang === "ar" ? "أقسام التطعيمات" : "Vaccination sections"} className={`mb-5 flex gap-1 border-b ${dark ? "border-white/10" : "border-slate-200"}`}>
+          {([
+            ["tracking", lang === "ar" ? "متابعة التطعيمات" : "Vaccination tracking"],
+            ["inventory", lang === "ar" ? "ربط المخزون" : "Inventory links"],
+          ] as const).map(([tab, label]) => (
+            <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)} className={`border-b-2 px-4 py-3 text-sm font-bold transition ${activeTab === tab ? "border-emerald-500 text-emerald-500" : `border-transparent ${dark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"}`}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "inventory" ? (
+          <section className={`rounded-2xl border p-4 sm:p-5 ${dark ? "border-white/[0.07] bg-[#13161B]" : "border-slate-200 bg-white"}`} role="tabpanel">
+            <div className="mb-4">
+              <h2 className="text-lg font-black">{lang === "ar" ? "ربط أنواع التطعيمات بمنتجات المخزون" : "Link vaccine types to inventory products"}</h2>
+              <p className="mt-1 text-sm text-slate-500">{lang === "ar" ? "اختار المنتج اللي يقابل كل نوع؛ هيظهر تلقائيًا عند تسجيل التطعيم في الكشف." : "Choose the stocked product for each protocol; it will be selected automatically in a visit."}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {vaccineProtocols.map((protocol) => {
+                const linkedProducts = stockProducts.filter((product) => (vaccineProductMappings[protocol.key] || []).includes(product.id));
+                const query = (mappingSearch[protocol.key] || "").trim().toLocaleLowerCase();
+                const searchResults = query ? stockProducts.filter((product) =>
+                  !linkedProducts.some((linked) => linked.id === product.id)
+                  && (product.name.toLocaleLowerCase().includes(query) || (product.barcode || "").toLocaleLowerCase().includes(query)),
+                ).slice(0, 8) : [];
+                return (
+                  <div key={protocol.key} className={`min-w-0 rounded-xl border p-3 ${dark ? "border-white/[0.07] bg-[#0F1115]" : "border-slate-200 bg-slate-50"}`}>
+                    <span className="mb-1.5 block text-sm font-bold">{lang === "ar" ? protocol.titleAr : protocol.titleEn}</span>
+                    <input value={mappingSearch[protocol.key] || ""} onChange={(event) => setMappingSearch((current) => ({ ...current, [protocol.key]: event.target.value }))} placeholder={lang === "ar" ? "ابحث عن منتج في المخزون..." : "Search inventory products..."} className={`w-full rounded-xl border px-3 py-2.5 text-sm ${dark ? "border-white/10 bg-[#181B21] text-white" : "border-slate-200 bg-white text-slate-900"}`} />
+                    {searchResults.length > 0 && <div className={`mt-1 max-h-48 overflow-auto rounded-lg border ${dark ? "border-white/10 bg-[#181B21]" : "border-slate-200 bg-white"}`}>
+                      {searchResults.map((product) => <button key={product.id} type="button" disabled={savingVaccineMapping === protocol.key} onClick={() => void saveVaccineProductMapping(protocol.key, product.id, true)} className="flex w-full items-center justify-between gap-3 border-b border-white/[0.06] px-3 py-2 text-start text-sm last:border-0 hover:bg-emerald-500/10">
+                        <span className="min-w-0 truncate">{product.name}{product.barcode ? ` · ${product.barcode}` : ""}</span><span className="shrink-0 text-xs text-slate-500">{product.quantity} {product.unit || ""} · {Number(product.retail_price || 0).toFixed(2)}</span>
+                      </button>)}
+                    </div>}
+                    <div className="mt-2 space-y-1.5">{linkedProducts.map((product) => <div key={product.id} className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-xs ${dark ? "bg-white/[0.04]" : "bg-white"}`}><span className="min-w-0 truncate">{product.name} · {product.quantity} {product.unit || ""}</span><button type="button" title={lang === "ar" ? "إزالة الربط" : "Remove link"} disabled={savingVaccineMapping === protocol.key} onClick={() => void saveVaccineProductMapping(protocol.key, product.id, false)} className="shrink-0 px-1 text-base text-rose-500">×</button></div>)}{linkedProducts.length === 0 && <span className="block text-xs text-slate-500">{lang === "ar" ? "لا توجد منتجات مرتبطة" : "No linked products"}</span>}</div>
+                  </div>
+                );
+              })}
+            </div>
+            {mappingMessage && <p role="status" className="mt-3 text-sm text-amber-500">{mappingMessage}</p>}
+          </section>
+        ) : (
+          <>
+        <div role="tablist" aria-label={lang === "ar" ? "أنواع التطعيمات" : "Vaccination types"} className={`mb-5 flex gap-1 overflow-x-auto border-b ${dark ? "border-white/10" : "border-slate-200"}`}>
+          {([ ["all", lang === "ar" ? "الكل" : "All"], ...vaccineProtocols.map((protocol) => [protocol.key, lang === "ar" ? protocol.titleAr : protocol.titleEn] as const) ] as const).map(([tab, label]) => (
+            <button key={tab} type="button" role="tab" aria-selected={activeTrackingTab === tab} onClick={() => setActiveTrackingTab(tab as "all" | VaccineProtocolKey)} className={`shrink-0 border-b-2 px-4 py-3 text-sm font-bold transition ${activeTrackingTab === tab ? "border-emerald-500 text-emerald-500" : `border-transparent ${dark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"}`}`}>
+              {label}
+            </button>
+          ))}
+        </div>
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
             {
@@ -1535,7 +1683,7 @@ export default function ClinicVaccinationsPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-sm font-black text-cyan-200">{filteredDueItems.length}</span>
+              <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-sm font-black text-cyan-200">{dueItemsForTrackingTab.length}</span>
               <Link
                 href="/pets"
                 className="rounded-xl border border-white/[0.06] px-3 py-2 text-xs font-black text-slate-400 hover:text-white"
@@ -1545,14 +1693,14 @@ export default function ClinicVaccinationsPage() {
             </div>
           </div>
 
-          {filteredDueItems.length === 0 ? (
+          {dueItemsForTrackingTab.length === 0 ? (
             <div className="p-10 text-center text-sm text-slate-500">
               {dueItems.length === 0 ? T[lang].noDue : T[lang].noFilteredResults}
             </div>
           ) : (
             <>
             <div className="grid gap-3 p-4 sm:grid-cols-2 lg:hidden">
-              {filteredDueItems.slice(0, 100).map((item) => {
+              {dueItemsForTrackingTab.slice(0, 100).map((item) => {
                 const key = `${item.pet.id}-${item.vaccineType}`;
                 return (
                   <article key={key} className={dark ? "rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4" : "rounded-2xl border border-slate-200 bg-slate-50 p-4"}>
@@ -1619,7 +1767,7 @@ export default function ClinicVaccinationsPage() {
                 </thead>
 
                 <tbody>
-                  {filteredDueItems
+                  {dueItemsForTrackingTab
                     .slice(0, 100)
                     .map((item) => (
                       <tr
@@ -1808,7 +1956,7 @@ export default function ClinicVaccinationsPage() {
             </h2>
           </div>
 
-          {recentVaccines.length === 0 ? (
+          {recentVaccinesForTrackingTab.length === 0 ? (
             <div className="p-10 text-center text-sm text-slate-500">
               {T[lang].noHistory}
             </div>
@@ -1845,7 +1993,7 @@ export default function ClinicVaccinationsPage() {
                 </thead>
 
                 <tbody>
-                  {recentVaccines.map(
+                  {recentVaccinesForTrackingTab.map(
                     (vaccine) => {
                       const pet =
                         pets.find(
@@ -1948,6 +2096,8 @@ export default function ClinicVaccinationsPage() {
             </div>
           )}
         </section>
+          </>
+        )}
       </div>
     </main>
   );

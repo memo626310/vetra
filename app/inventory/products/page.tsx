@@ -62,6 +62,8 @@ type Product = {
 
   name: string;
 
+  active_ingredient: string | null;
+
 
   category_id: string | null;
 
@@ -117,6 +119,8 @@ const emptyProduct = {
 
   name: "",
 
+  active_ingredient: "",
+
 
   category_id: "",
 
@@ -164,6 +168,7 @@ export default function ProductsPage() {
 
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [inventoryLinkCategories, setInventoryLinkCategories] = useState<{ medication: string; vaccine: string }>({ medication: "", vaccine: "" });
 
 
 
@@ -427,13 +432,31 @@ export default function ProductsPage() {
     } else {
 
 
-      setCategories(
-
-
-        categoriesResult.data || []
-
-
-      );
+      let loadedCategories = (categoriesResult.data || []) as Category[];
+      for (const name of ["الأدوية", "التطعيمات"]) {
+        const existing = loadedCategories.find((category) => category.name.trim() === name);
+        if (existing) continue;
+        const { data: created, error: createError } = await db
+          .from("product_categories")
+          .insert({ name, clinic_id: context.clinic_id })
+          .select("id,name")
+          .single();
+        if (createError && createError.code !== "23505") {
+          console.error("CREATE DEFAULT INVENTORY CATEGORY ERROR:", createError);
+          continue;
+        }
+        if (created) loadedCategories = [...loadedCategories, created as Category];
+        else {
+          const { data: duplicate } = await db.from("product_categories")
+            .select("id,name").eq("clinic_id", context.clinic_id).eq("name", name).maybeSingle();
+          if (duplicate) loadedCategories = [...loadedCategories, duplicate as Category];
+        }
+      }
+      setCategories(loadedCategories.sort((a, b) => a.name.localeCompare(b.name)));
+      setInventoryLinkCategories({
+        medication: loadedCategories.find((category) => ["الأدوية", "ادوية", "الادوية", "medications", "medicines"].includes(category.name.trim().toLocaleLowerCase()))?.id || "",
+        vaccine: loadedCategories.find((category) => ["التطعيمات", "اللقاحات", "تطعيمات", "vaccines", "vaccinations"].includes(category.name.trim().toLocaleLowerCase()))?.id || "",
+      });
 
 
     }
@@ -446,6 +469,28 @@ export default function ProductsPage() {
     setLoading(false);
 
 
+  }
+
+  async function linkProductToInventorySection(product: Product, section: "medication" | "vaccine") {
+    const categoryId = inventoryLinkCategories[section];
+    if (!categoryId || product.category_id === categoryId) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const context = await getClinicContext();
+      const db = await getClinicDb();
+      const { error } = await db.from("products")
+        .update({ category_id: categoryId })
+        .eq("id", product.id)
+        .eq("clinic_id", context.clinic_id);
+      if (error) throw error;
+      await loadData();
+      setMessage(section === "medication" ? `تم ربط «${product.name}» بدرج الأدوية.` : `تم ربط «${product.name}» بقسم التطعيمات.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر ربط الصنف بالقسم.");
+    } finally {
+      setSaving(false);
+    }
   }
 
 
@@ -498,6 +543,9 @@ export default function ProductsPage() {
 
 
       name: product.name || "",
+
+
+      active_ingredient: product.active_ingredient || "",
 
 
       category_id:
@@ -649,6 +697,9 @@ const payload = {
 
 
       name: productForm.name.trim(),
+
+
+      active_ingredient: productForm.active_ingredient.trim() || null,
 
 
 
@@ -2305,6 +2356,20 @@ const { error } =
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-2">
                             <button
+                              onClick={() => linkProductToInventorySection(product, "medication")}
+                              disabled={saving || !inventoryLinkCategories.medication}
+                              className="rounded-lg bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-700 hover:bg-cyan-100 disabled:opacity-50 dark:bg-cyan-950/30 dark:text-cyan-300"
+                            >
+                              💊 درج الأدوية
+                            </button>
+                            <button
+                              onClick={() => linkProductToInventorySection(product, "vaccine")}
+                              disabled={saving || !inventoryLinkCategories.vaccine}
+                              className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 dark:bg-emerald-950/30 dark:text-emerald-300"
+                            >
+                              🧪 التطعيمات
+                            </button>
+                            <button
                               onClick={() =>
                                 openEditProduct(product)
                               }
@@ -2538,6 +2603,12 @@ const { error } =
 
 
 
+
+                <Field
+                  label="المادة الفعالة"
+                  value={productForm.active_ingredient}
+                  onChange={(value) => setProductForm({ ...productForm, active_ingredient: value })}
+                />
 
                 {/* CATEGORY */}
                 <div>

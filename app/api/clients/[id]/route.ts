@@ -80,14 +80,23 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
       return Response.json({ error: "معرّف العميل غير صالح." }, { status: 400 });
     }
 
-    const { clinicId, clinicDb } = await resolveClinicPushContext(request);
+    const { clinicId, clinicDb, role } = await resolveClinicPushContext(request);
+    if (!["owner", "admin"].includes(role)) {
+      return Response.json({ error: "لا تملك صلاحية حذف العملاء. يلزم حساب المالك أو مدير العيادة." }, { status: 403 });
+    }
+
     const { data, error } = await clinicDb.rpc("vetra_delete_client_cascade", { p_client_id: id });
     let deletion: { clientName?: string; petIds?: unknown } | null = null;
     if (error) {
       const migrationMissing = error.code === "PGRST202" || error.code === "42883";
       if (!migrationMissing) {
         console.error("CLIENT CASCADE DELETE ERROR:", error);
-        return Response.json({ error: "تعذر حذف العميل وبياناته المرتبطة." }, { status: 400 });
+        const detail = error.code === "23503"
+          ? "لا يمكن حذف العميل بسبب سجل مرتبط لم يشمله إجراء الحذف. راجع سجل الخادم لمعرفة الجدول المرتبط."
+          : error.code === "42501"
+            ? "قاعدة بيانات العيادة رفضت صلاحيات الحذف. أعد تشغيل ملف supabase/tenant-sql/vetra_delete_client_cascade.sql على قاعدة العيادة."
+            : error.message || "تعذر حذف العميل وبياناته المرتبطة.";
+        return Response.json({ error: detail }, { status: 400 });
       }
       deletion = await deleteClientFromTenant(clinicDb, clinicId, id);
     } else {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { writeVetraThemeMode } from "@/lib/theme";
+import { defaultStaffPermissions, normalizeStaffPermissions, permissionActions, permissionDefinitions, type StaffPermissions, type PermissionAction } from "@/lib/staff-permissions";
 
 type Language = "ar" | "en";
 type StaffType = "doctor" | "assistant" | "front_desk";
@@ -20,6 +21,7 @@ type StaffMember = {
   auth_user_id: string | null;
   login_email: string | null;
   must_change_password: boolean;
+  permissions: StaffPermissions;
 };
 
 type IssuedCredentials = { name: string; loginIdentifiers: string[]; temporaryPassword: string };
@@ -33,7 +35,7 @@ const copy = {
     search: "ابحث بالاسم أو الهاتف أو البريد", all: "الكل", remove: "إزالة", confirmRemove: "إزالة هذا الموظف من قائمة العيادة؟",
     saved: "تمت إضافة الموظف.", removed: "تمت إزالة الموظف.", required: "اكتب اسم الموظف.", loadError: "تعذر تحميل فريق العيادة.",
     setupError: "تعذر حفظ الموظف. تحقق من تشغيل ملف إعداد جدول الموظفين على قاعدة العيادة.", back: "العودة للداشبورد", noAccess: "صلاحيات الدخول للموظفين غير مفعّلة في هذه المرحلة.",
-    account: "إنشاء دخول وإرسال واتساب", reset: "إعادة تعيين وإرسال كلمة مؤقتة", accountWorking: "جارٍ تجهيز بيانات الدخول...", credentials: "بيانات الدخول المؤقتة", username: "اسم المستخدم", tempPassword: "كلمة المرور المؤقتة", copy: "نسخ", copied: "تم النسخ", forceChange: "سيُطلب تغييرها عند أول دخول.", accountError: "تعذر تجهيز حساب الموظف.", phoneRequired: "أضف رقم واتساب للموظف أولًا.",
+    account: "إنشاء دخول وإرسال واتساب", reset: "إعادة تعيين وإرسال كلمة مؤقتة", accountWorking: "جارٍ تجهيز بيانات الدخول...", credentials: "بيانات الدخول المؤقتة", username: "اسم المستخدم", tempPassword: "كلمة المرور المؤقتة", copy: "نسخ", copied: "تم النسخ", forceChange: "سيُطلب تغييرها عند أول دخول.", accountError: "تعذر تجهيز حساب الموظف.", phoneRequired: "أضف رقم واتساب للموظف أولًا.", permissions: "الصلاحيات", permissionsHint: "حدد ما يستطيع الموظف رؤيته أو تنفيذه.", savePermissions: "حفظ الصلاحيات", permissionsSaved: "تم حفظ الصلاحيات.", editPermissions: "تعديل الصلاحيات",
   },
   en: {
     title: "Clinic staff", subtitle: "Doctors, assistants, and front desk team",
@@ -43,7 +45,7 @@ const copy = {
     search: "Search name, phone, or email", all: "All", remove: "Remove", confirmRemove: "Remove this person from the clinic staff list?",
     saved: "Staff member added.", removed: "Staff member removed.", required: "Enter the staff member's name.", loadError: "Could not load clinic staff.",
     setupError: "Could not save this staff member. Check that the staff table SQL was applied to this clinic database.", back: "Back to dashboard", noAccess: "Staff account access is not enabled in this phase.",
-    account: "Create login & WhatsApp", reset: "Reset password & WhatsApp", accountWorking: "Preparing sign-in details...", credentials: "Temporary sign-in details", username: "Username", tempPassword: "Temporary password", copy: "Copy", copied: "Copied", forceChange: "A password change will be required at first sign-in.", accountError: "Could not prepare staff account.", phoneRequired: "Add a WhatsApp number for this staff member first.",
+    account: "Create login & WhatsApp", reset: "Reset password & WhatsApp", accountWorking: "Preparing sign-in details...", credentials: "Temporary sign-in details", username: "Username", tempPassword: "Temporary password", copy: "Copy", copied: "Copied", forceChange: "A password change will be required at first sign-in.", accountError: "Could not prepare staff account.", phoneRequired: "Add a WhatsApp number for this staff member first.", permissions: "Permissions", permissionsHint: "Choose what this staff member can see and do.", savePermissions: "Save permissions", permissionsSaved: "Permissions saved.", editPermissions: "Edit permissions",
   },
 };
 
@@ -70,6 +72,9 @@ export default function StaffPage() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [specialty, setSpecialty] = useState("");
+  const [permissions, setPermissions] = useState<StaffPermissions>(defaultStaffPermissions("doctor"));
+  const [editingPermissionsId, setEditingPermissionsId] = useState("");
+  const [permissionsSaving, setPermissionsSaving] = useState(false);
   const [accountBusyId, setAccountBusyId] = useState("");
   const [credentials, setCredentials] = useState<IssuedCredentials | null>(null);
   const t = copy[language];
@@ -80,12 +85,12 @@ export default function StaffPage() {
       const context = await getClinicContext();
       const db = await getClinicDb();
       const { data, error: queryError } = await db.from("clinic_staff")
-        .select("id,clinic_id,full_name,staff_type,phone,email,specialty,created_at,auth_user_id,login_email,must_change_password")
+        .select("id,clinic_id,full_name,staff_type,phone,email,specialty,created_at,auth_user_id,login_email,must_change_password,permissions")
         .eq("clinic_id", context.clinic_id)
         .order("created_at", { ascending: false });
       if (queryError) throw queryError;
       setClinicId(context.clinic_id);
-      setStaff((data || []) as StaffMember[]);
+      setStaff((data || []).map((item) => ({ ...item, permissions: normalizeStaffPermissions(item.permissions, item.staff_type) })) as StaffMember[]);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : copy.ar.loadError);
     } finally {
@@ -131,7 +136,8 @@ export default function StaffPage() {
         phone: phone.trim() || null,
         email: email.trim() || null,
         specialty: staffType === "doctor" ? specialty.trim() || null : null,
-      }).select("id,clinic_id,full_name,staff_type,phone,email,specialty,created_at,auth_user_id,login_email,must_change_password").single();
+      permissions: normalizeStaffPermissions(permissions, staffType),
+      }).select("id,clinic_id,full_name,staff_type,phone,email,specialty,created_at,auth_user_id,login_email,must_change_password,permissions").single();
       if (insertError) throw insertError;
       setStaff((current) => [data as StaffMember, ...current]);
       setFullName("");
@@ -139,6 +145,7 @@ export default function StaffPage() {
       setEmail("");
       setSpecialty("");
       setStaffType("doctor");
+      setPermissions(defaultStaffPermissions("doctor"));
       setShowForm(false);
       setNotice(t.saved);
     } catch (insertFailure) {
@@ -146,6 +153,34 @@ export default function StaffPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function togglePermission(group: StaffPermissions, key: string, action: PermissionAction): StaffPermissions {
+    return { ...group, [key]: { ...group[key], [action]: group[key]?.[action] !== true } };
+  }
+
+  async function savePermissions(staffId: string) {
+    setPermissionsSaving(true);
+    setError("");
+    try {
+      const { data: sessionData } = await vetraCore.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error(t.accountError);
+      const response = await fetch("/api/staff/permissions", { method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ staffId, permissions }) });
+      const result = await response.json().catch(() => null) as { permissions?: StaffPermissions; error?: string } | null;
+      if (!response.ok || !result?.permissions) throw new Error(result?.error || t.accountError);
+      setStaff((current) => current.map((person) => person.id === staffId ? { ...person, permissions: result.permissions as StaffPermissions } : person));
+      setEditingPermissionsId("");
+      setNotice(t.permissionsSaved);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : t.accountError);
+    } finally {
+      setPermissionsSaving(false);
+    }
+  }
+
+  function permissionEditor() {
+    return <fieldset className={`mt-5 rounded-lg border p-4 ${input}`}><legend className="px-2 text-sm font-bold">{t.permissions}</legend><p className="mb-3 text-xs text-slate-500">{t.permissionsHint}</p><div className="space-y-2">{permissionDefinitions.map((definition) => <div key={definition.key} className="grid gap-2 border-b border-slate-200/10 pb-2 last:border-0 sm:grid-cols-[minmax(0,1fr)_auto]"><span className="text-sm font-semibold">{ar ? definition.ar : definition.en}</span><div className="flex flex-wrap gap-x-4 gap-y-2">{definition.actions.map((action) => { const label = permissionActions.find((item) => item.key === action); return <label key={action} className="flex items-center gap-1.5 text-xs text-slate-500"><input type="checkbox" checked={permissions[definition.key]?.[action] === true} onChange={() => setPermissions((current) => togglePermission(current, definition.key, action))} className="h-4 w-4 accent-cyan-500" />{ar ? label?.ar : label?.en}</label>; })}</div></div>)}</div></fieldset>;
   }
 
   async function issueStaffLogin(person: StaffMember) {
@@ -258,12 +293,13 @@ export default function StaffPage() {
         <h2 className="mb-4 text-base font-bold">{t.add}</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-semibold">{t.name}<input required maxLength={120} value={fullName} onChange={(event) => setFullName(event.target.value)} className={`mt-2 w-full rounded-lg border px-3 py-3 ${input}`} /></label>
-          <label className="text-sm font-semibold">{t.type}<select value={staffType} onChange={(event) => setStaffType(event.target.value as StaffType)} className={`mt-2 w-full rounded-lg border px-3 py-3 ${input}`}><option value="doctor">{t.doctor}</option><option value="assistant">{t.assistant}</option><option value="front_desk">{t.front_desk}</option></select></label>
+          <label className="text-sm font-semibold">{t.type}<select value={staffType} onChange={(event) => { const nextType = event.target.value as StaffType; setStaffType(nextType); setPermissions(defaultStaffPermissions(nextType)); }} className={`mt-2 w-full rounded-lg border px-3 py-3 ${input}`}><option value="doctor">{t.doctor}</option><option value="assistant">{t.assistant}</option><option value="front_desk">{t.front_desk}</option></select></label>
           <label className="text-sm font-semibold">{t.phone}<input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} className={`mt-2 w-full rounded-lg border px-3 py-3 ${input}`} /></label>
           <label className="text-sm font-semibold">{t.email}<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className={`mt-2 w-full rounded-lg border px-3 py-3 ${input}`} /></label>
           {staffType === "doctor" && <label className="text-sm font-semibold sm:col-span-2">{t.specialty}<input maxLength={120} value={specialty} onChange={(event) => setSpecialty(event.target.value)} placeholder={t.specialtyPlaceholder} className={`mt-2 w-full rounded-lg border px-3 py-3 ${input}`} /></label>}
         </div>
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-500">{ar ? "سيحصل كل موظف على حساب مستقل، دون إعداد صلاحيات مختلفة حاليًا." : "Each staff member gets a separate account; differentiated permissions are not configured yet."}</p><button type="submit" disabled={saving} className="rounded-lg bg-cyan-500 px-5 py-3 text-sm font-bold text-slate-950 disabled:opacity-50">{saving ? t.saving : t.save}</button></div>
+        {permissionEditor()}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-500">{ar ? "يمكنك تغيير أي صلاحية لاحقًا من قائمة الفريق." : "You can change any permission later from the team list."}</p><button type="submit" disabled={saving} className="rounded-lg bg-cyan-500 px-5 py-3 text-sm font-bold text-slate-950 disabled:opacity-50">{saving ? t.saving : t.save}</button></div>
       </form>}
 
       <section className={`overflow-hidden rounded-xl border ${surface}`}>
@@ -273,7 +309,8 @@ export default function StaffPage() {
         </div>
         {loading ? <p className="p-10 text-center text-sm text-slate-500">{ar ? "جارٍ تحميل الفريق..." : "Loading team..."}</p> : visibleStaff.length ? <ul className="divide-y divide-slate-200/10">{visibleStaff.map((person) => <li key={person.id} className="flex flex-wrap items-center justify-between gap-4 p-4 sm:px-5">
           <div className="flex min-w-0 items-center gap-3"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 font-bold text-cyan-500">{person.full_name.trim().slice(0, 1).toLocaleUpperCase()}</div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-sm font-bold">{person.full_name}</h3><span className="rounded-full bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold text-cyan-600 dark:text-cyan-300">{roleLabels[person.staff_type][language]}</span></div><p className="mt-1 text-xs text-slate-500">{[person.specialty, person.phone, person.email].filter(Boolean).join(" · ") || "—"}</p></div></div>
-          <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => void issueStaffLogin(person)} disabled={accountBusyId === person.id} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-600 hover:bg-cyan-500/10 disabled:opacity-50">{accountBusyId === person.id ? t.accountWorking : person.auth_user_id || person.login_email ? t.reset : t.account}</button><button type="button" onClick={() => void removeStaff(person)} className="rounded-lg px-3 py-2 text-xs font-bold text-rose-500 hover:bg-rose-500/10">{t.remove}</button></div>
+          <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setEditingPermissionsId((current) => current === person.id ? "" : person.id); setPermissions(normalizeStaffPermissions(person.permissions, person.staff_type)); setError(""); }} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-600 hover:bg-cyan-500/10">{t.editPermissions}</button><button type="button" onClick={() => void issueStaffLogin(person)} disabled={accountBusyId === person.id} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-600 hover:bg-cyan-500/10 disabled:opacity-50">{accountBusyId === person.id ? t.accountWorking : person.auth_user_id || person.login_email ? t.reset : t.account}</button><button type="button" onClick={() => void removeStaff(person)} className="rounded-lg px-3 py-2 text-xs font-bold text-rose-500 hover:bg-rose-500/10">{t.remove}</button></div>
+          {editingPermissionsId === person.id && <div className="w-full">{permissionEditor()}<div className="mt-3 flex justify-end"><button type="button" onClick={() => void savePermissions(person.id)} disabled={permissionsSaving} className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-50">{permissionsSaving ? t.saving : t.savePermissions}</button></div></div>}
         </li>)}</ul> : <p className="p-10 text-center text-sm text-slate-500">{t.empty}</p>}
       </section>
     </div>

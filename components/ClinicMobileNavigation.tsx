@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
 import { readVetraTheme, VETRA_THEME_EVENT } from "@/lib/theme";
+import { permissionForPath } from "@/lib/staff-permissions";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 // VETRA_CLINIC_MOBILE_NAV_COMPONENT
 // VETRA_CLINIC_NAV_TEAL_POLISH_V1
@@ -23,6 +25,7 @@ const MORE_ITEMS = [
 export default function ClinicMobileNavigation() {
   const pathname = usePathname();
   const router = useRouter();
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const [moreOpen, setMoreOpen] = useState(false);
   const [dark, setDark] = useState(true);
   const [language, setLanguage] = useState<"ar" | "en">("ar");
@@ -75,6 +78,10 @@ export default function ClinicMobileNavigation() {
 
   const linkClass = (href: string) => `flex min-w-0 flex-col items-center justify-center gap-1 px-1 text-[10px] font-bold sm:text-xs ${isActive(href) ? "text-teal-500" : ""}`;
   const surfaceClass = dark ? "border-white/10 bg-[#11151B]/95 text-slate-200" : "border-slate-200 bg-white/95 text-slate-700";
+  const visibleMoreItems = MORE_ITEMS.filter((item) => {
+    const required = permissionForPath(item.href);
+    return !required || (permissionsLoaded && can(required.key, required.action));
+  });
 
   return (
     <>
@@ -88,7 +95,7 @@ export default function ClinicMobileNavigation() {
               <button type="button" onClick={() => setMoreOpen(false)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-500/10 text-xl" aria-label={language === "ar" ? "إغلاق" : "Close"}>×</button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {MORE_ITEMS.map((item) => (
+              {visibleMoreItems.map((item) => (
                 <button key={item.href} type="button" onClick={() => goTo(item.href)} className={`flex min-h-12 items-center gap-3 rounded-2xl border px-3 py-3 text-start text-sm font-bold active:scale-[0.98] ${dark ? "border-white/10 bg-white/[0.04]" : "border-slate-200 bg-slate-50"}`}>
                   <span className="text-xl">{item.icon}</span><span>{language === "ar" ? item.ar : item.en}</span>
                 </button>
@@ -102,11 +109,11 @@ export default function ClinicMobileNavigation() {
       )}
 
       <nav className={`fixed inset-x-0 bottom-0 z-[80] border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_28px_rgba(0,0,0,0.08)] backdrop-blur-xl lg:hidden ${surfaceClass}`} aria-label={language === "ar" ? "التنقل الرئيسي" : "Main navigation"}>
-        <div className="mx-auto grid min-h-[68px] max-w-xl grid-cols-5 items-stretch px-1">
+        <div className="mx-auto flex min-h-[68px] max-w-xl items-stretch justify-around px-1 [&>button]:flex-1">
           <button type="button" onClick={() => goTo("/dashboard")} className={linkClass("/dashboard")}><span className="text-xl leading-6">🏠</span><span className="truncate">{language === "ar" ? "الرئيسية" : "Home"}</span></button>
-          <button type="button" onClick={() => goTo("/visits/new")} className={linkClass("/visits/new")}><span className="-mt-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-500 text-2xl text-[#062D40] shadow-lg shadow-teal-600/25">＋</span><span className="truncate">{language === "ar" ? "كشف جديد" : "New Visit"}</span></button>
-          <button type="button" onClick={() => goTo("/clients")} className={linkClass("/clients")}><span className="text-xl leading-6">👥</span><span className="truncate">{language === "ar" ? "العملاء" : "Clients"}</span></button>
-          <button type="button" onClick={() => goTo("/pets")} className={linkClass("/pets")}><span className="text-xl leading-6">🐾</span><span className="truncate">{language === "ar" ? "الحيوانات" : "Pets"}</span></button>
+          {permissionsLoaded && can("medical_records", "create") && <button type="button" onClick={() => goTo("/visits/new")} className={linkClass("/visits/new")}><span className="-mt-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-500 text-2xl text-[#062D40] shadow-lg shadow-teal-600/25">＋</span><span className="truncate">{language === "ar" ? "كشف جديد" : "New Visit"}</span></button>}
+          {permissionsLoaded && can("patients", "view") && <button type="button" onClick={() => goTo("/clients")} className={linkClass("/clients")}><span className="text-xl leading-6">👥</span><span className="truncate">{language === "ar" ? "العملاء" : "Clients"}</span></button>}
+          {permissionsLoaded && can("patients", "view") && <button type="button" onClick={() => goTo("/pets")} className={linkClass("/pets")}><span className="text-xl leading-6">🐾</span><span className="truncate">{language === "ar" ? "الحيوانات" : "Pets"}</span></button>}
           <button type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen(true)} className={linkClass("__more__")}><span className="text-xl leading-6">☰</span><span className="truncate">{language === "ar" ? "المزيد" : "More"}</span></button>
         </div>
       </nav>

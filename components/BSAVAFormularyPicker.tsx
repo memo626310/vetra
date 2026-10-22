@@ -5,6 +5,7 @@ import { getClinicContext } from "@/lib/clinic-db";
 
 export type FormularyVisitDraft = {
   id: string;
+  product_id: string | null;
   drugId: number;
   drugName: string;
   activeIngredient: string;
@@ -299,7 +300,7 @@ export async function createBsavaVisitDraft(drugId: number, petSpecies: string, 
   const displayMin = volumeMin ?? calculated.min;
   const displayMax = volumeMax ?? calculated.max;
   return {
-    id: crypto.randomUUID(), drugId: drug.id, drugName: drug.name,
+    id: crypto.randomUUID(), product_id: null, drugId: drug.id, drugName: drug.name,
     activeIngredient: drug.active_ingredient, species: species || drug.species[0] || "",
     route: selectedRoute, doseUnit: measurement.unit, doseBasis: measurement.basis,
     doseExpression: measurement.expression, doseText: protocol.dose_text,
@@ -497,6 +498,7 @@ export function BSAVAFormularyPicker({ language, darkMode, petSpecies, weightKg,
         : selectedMeasurement.expression;
     const draft: FormularyVisitDraft = {
       id: crypto.randomUUID(),
+      product_id: null,
       drugId: selectedDrug.id,
       drugName: selectedDrug.name,
       activeIngredient: selectedDrug.active_ingredient,

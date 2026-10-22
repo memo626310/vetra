@@ -58,6 +58,7 @@ export type Medication = {
 export type MedicationDraft = {
   id: string;
   medication_id: string;
+  product_id: string | null;
   weight_kg: number;
   calculated_dose: number;
   calculated_dose_unit: string;
@@ -75,6 +76,7 @@ export type MedicationDraft = {
 
 export type ExternalMedicationDraft = {
   id: string;
+  product_id: string | null;
   productName: string;
   activeIngredient: string | null;
   manufacturer: string | null;
@@ -91,6 +93,7 @@ export type ExternalMedicationDraft = {
 
 export type VaccinationDraft = {
   id: string;
+  product_id: string | null;
   vaccine_name: string;
   vaccine_type: string;
   dose_stage: string;

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
+import { permissionForPath } from "@/lib/staff-permissions";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 const PUBLIC_PATHS = [
   "/",
@@ -27,6 +29,7 @@ export default function AuthGuard({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const [checkedPath, setCheckedPath] = useState("");
   const [checkError, setCheckError] = useState(false);
   const verifiedState = useRef<{ userId: string; verifiedAt: number; mustChangePassword: boolean } | null>(null);
@@ -126,7 +129,8 @@ export default function AuthGuard({
     };
   }, [pathname, router]);
 
-  if ((checkedPath !== pathname || checkError) && !isPublicPath(pathname)) {
+  const requiredPermission = permissionForPath(pathname);
+  if ((checkedPath !== pathname || checkError || (requiredPermission && !permissionsLoaded)) && !isPublicPath(pathname)) {
     return (
       <main className="min-h-screen bg-[#f7f8fa] px-4 pt-3 dark:bg-[#0f1115]">
         <div className="mx-auto flex max-w-7xl items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#181b21]" role="status" aria-live="polite">
@@ -135,6 +139,13 @@ export default function AuthGuard({
         </div>
       </main>
     );
+  }
+
+  if (requiredPermission && !can(requiredPermission.key, requiredPermission.action)) {
+    return <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0f1115] px-4 text-center text-white">
+      <h1 className="text-xl font-bold">ليس لديك صلاحية لفتح هذا القسم</h1>
+      <button type="button" onClick={() => router.replace("/dashboard")} className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950">العودة للرئيسية</button>
+    </main>;
   }
 
   return <>{children}</>;

@@ -32,6 +32,8 @@ type AvailableDoctor = { id: string; full_name: string; specialty: string | null
 type VisitServiceDraft = { id: string; name: string; quantity: number; price: number };
 type MedicationBillLine = { id: string; name: string };
 type VisitAttachmentDraft = { id: string; file: File; category: "analysis" | "xray" };
+type VaccineStockProduct = { id: string; name: string; active_ingredient: string | null; quantity: number; unit: string | null; retail_price: number; barcode?: string | null; category_id?: string | null };
+type DrawerMedication = { id: string; product_id: string; quantity: number };
 
 export default function NewVisitPage() {
   const router = useRouter();
@@ -101,6 +103,10 @@ export default function NewVisitPage() {
   const [formularyDrafts, setFormularyDrafts] = useState<FormularyVisitDraft[]>([]);
   const [externalMedicationDrafts, setExternalMedicationDrafts] = useState<ExternalMedicationDraft[]>([]);
   const [vaccinations, setVaccinations] = useState<VaccinationDraft[]>([]);
+  const [vaccineStockProducts, setVaccineStockProducts] = useState<VaccineStockProduct[]>([]);
+  const [clinicStockProducts, setClinicStockProducts] = useState<VaccineStockProduct[]>([]);
+  const [vaccineProductMappings, setVaccineProductMappings] = useState<Record<string, string[]>>({});
+  const [drawerMedications, setDrawerMedications] = useState<DrawerMedication[]>([]);
   const [medicalRecordDraft, setMedicalRecordDraft] = useState<MedicalRecordDraft>(emptyMedicalRecordDraft);
 
   const t = translations[language];
@@ -174,6 +180,38 @@ export default function NewVisitPage() {
         doctors.unshift({ id: "current-user", full_name: context.doctor_name, specialty: null });
       }
       setAvailableDoctors(doctors);
+      const [vaccineProductsResult, vaccineMappingsResult, categoriesResult] = await Promise.all([
+        db.from("products")
+          .select("id,name,active_ingredient,barcode,quantity,unit,retail_price,category_id")
+          .eq("clinic_id", context.clinic_id)
+          .eq("is_active", true)
+          .order("name", { ascending: true }),
+        db.from("clinic_vaccination_products")
+          .select("protocol_key,product_id")
+          .eq("clinic_id", context.clinic_id),
+        db.from("product_categories").select("id,name").eq("clinic_id", context.clinic_id),
+      ]);
+      if (vaccineProductsResult.error) {
+        console.warn("LOAD VACCINE STOCK PRODUCTS ERROR:", vaccineProductsResult.error);
+      } else {
+        const stockProducts = (vaccineProductsResult.data || []) as VaccineStockProduct[];
+        const categories = categoriesResult.data || [];
+        const medicationCategory = categories.find((category) => ["الأدوية", "ادوية", "medications", "medicines"].includes(String(category.name).trim().toLocaleLowerCase()));
+        const vaccineCategory = categories.find((category) => ["التطعيمات", "اللقاحات", "تطعيمات", "vaccines", "vaccinations"].includes(String(category.name).trim().toLocaleLowerCase()));
+        setClinicStockProducts(medicationCategory ? stockProducts.filter((product) => product.category_id === medicationCategory.id) : []);
+        setVaccineStockProducts(vaccineCategory ? stockProducts.filter((product) => product.category_id === vaccineCategory.id) : []);
+      }
+      if (vaccineMappingsResult.error) {
+        console.warn("LOAD VACCINE PRODUCT MAPPINGS ERROR:", vaccineMappingsResult.error);
+      } else {
+        const groupedMappings: Record<string, string[]> = {};
+        for (const row of vaccineMappingsResult.data || []) {
+          const key = String(row.protocol_key);
+          groupedMappings[key] = [...(groupedMappings[key] || []), String(row.product_id)];
+        }
+        setVaccineProductMappings(groupedMappings);
+      }
+      if (categoriesResult.error) console.warn("LOAD PRODUCT CATEGORIES ERROR:", categoriesResult.error);
       const { data: billingSettings, error: billingSettingsError } = await db.from("billing_settings")
         .select("consultation_fee, injection_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
       if (billingSettingsError) {
@@ -464,6 +502,7 @@ export default function NewVisitPage() {
     return {
       id: crypto.randomUUID(),
       medication_id: med.id,
+      product_id: null,
       weight_kg: w,
       calculated_dose: Number(dose.toFixed(3)),
       calculated_dose_unit: unit,
@@ -511,7 +550,7 @@ export default function NewVisitPage() {
       setMessage(language === "ar" ? "أدخل وزن الحيوان أولًا وتأكد أن الدواء له جرعة مسجلة." : "Enter the pet weight and make sure the medication has a configured dose.");
       return false;
     }
-    setMedicationDrafts((current) => [...current, draft]);
+    setMedicationDrafts((current) => [...current, { ...draft, product_id: null }]);
     setSelectedMedicationId("");
     setMedicationSearch("");
     return true;
@@ -526,6 +565,7 @@ export default function NewVisitPage() {
       ...current,
       {
         id: crypto.randomUUID(),
+        product_id: null,
         vaccine_name: "",
         vaccine_type: "",
         dose_stage: "manual",
@@ -548,6 +588,14 @@ export default function NewVisitPage() {
       const typeChanged = patch.vaccine_type !== undefined;
       const nextType = patch.vaccine_type ?? item.vaccine_type;
       const nextAdministeredAt = patch.administered_at ?? item.administered_at;
+      const typeKey = nextType.toLowerCase();
+      const protocolKey = typeKey.includes("deworm") ? "deworm"
+        : typeKey.includes("external") || typeKey.includes("parasite") ? "parasite"
+        : typeKey.includes("rabies") ? "rabies"
+        : typeKey.includes("viral") ? "viral" : "";
+      const mappedProductIds = protocolKey ? vaccineProductMappings[protocolKey] || [] : [];
+      const mappedProductId = typeChanged ? (mappedProductIds.length === 1 ? mappedProductIds[0] : null) : item.product_id;
+      const mappedProduct = mappedProductId ? vaccineStockProducts.find((product) => product.id === mappedProductId) : null;
       const stage = patch.dose_stage ?? (typeChanged ? getDefaultVaccinationStage(nextType) : item.dose_stage);
       const dateManuallyChanged = patch.next_dose_at !== undefined;
       const nextDoseManual = dateManuallyChanged ? true : typeChanged ? false : item.next_dose_manual;
@@ -560,6 +608,8 @@ export default function NewVisitPage() {
       return {
         ...item,
         ...patch,
+        product_id: patch.product_id !== undefined ? patch.product_id : mappedProductId,
+        vaccine_name: patch.vaccine_name !== undefined ? patch.vaccine_name : mappedProduct?.name || (typeChanged ? "" : item.vaccine_name),
         dose_stage: stage,
         next_dose_manual: nextDoseManual,
         next_dose_at: nextDoseAt,
@@ -617,7 +667,7 @@ export default function NewVisitPage() {
       setMessage(language === "ar" ? "حدد نوع التجميل" : "Enter a grooming type");
       return;
     }
-    if (createBill && consultationFee <= 0 && medicationBillLines.length === 0 && !visitServices.some((line) => line.name.trim() && line.price >= 0 && line.quantity > 0)) {
+    if (createBill && consultationFee <= 0 && medicationBillLines.length === 0 && vaccinations.every((item) => !item.vaccine_name.trim()) && !visitServices.some((line) => line.name.trim() && line.price >= 0 && line.quantity > 0)) {
       setMessage(language === "ar" ? "أضف خدمة واحدة على الأقل للفاتورة" : "Add at least one service to the bill");
       return;
     }
@@ -749,6 +799,7 @@ export default function NewVisitPage() {
             clinic_id: clinicContext.clinic_id,
             visit_id: visit.id,
             medication_id: draft.medication_id,
+            product_id: null,
             weight_kg: draft.weight_kg,
             calculated_dose: draft.calculated_dose,
             calculated_dose_unit: draft.calculated_dose_unit,
@@ -766,6 +817,31 @@ export default function NewVisitPage() {
           if (medError) throw medError;
         }
 
+        const prescriptionRows = [
+          ...formularyDrafts.map((draft) => ({
+            clinic_id: clinicContext.clinic_id,
+            visit_id: visit.id,
+            product_id: null,
+            medication_name: draft.drugName,
+            active_ingredient: draft.activeIngredient || null,
+            prescription: [draft.appliedDose || draft.doseExpression, draft.frequency, draft.route].filter(Boolean).join(" · "),
+            source: "bsava" as const,
+          })),
+          ...externalMedicationDrafts.map((draft) => ({
+            clinic_id: clinicContext.clinic_id,
+            visit_id: visit.id,
+            product_id: null,
+            medication_name: draft.productName,
+            active_ingredient: draft.activeIngredient || null,
+            prescription: [draft.doseText, draft.route, draft.frequency, draft.duration, draft.instructions].filter(Boolean).join(" · ") || null,
+            source: draft.source === "manual" ? "manual" as const : "drug_eye" as const,
+          })),
+        ];
+        if (prescriptionRows.length) {
+          const { error: prescriptionError } = await db.from("visit_prescriptions").insert(prescriptionRows);
+          if (prescriptionError) throw prescriptionError;
+        }
+
         const validVaccinations = vaccinations.filter((v) => v.vaccine_name.trim());
         if (validVaccinations.length) {
           const vaccineRows = validVaccinations.map((v) => ({
@@ -775,6 +851,7 @@ export default function NewVisitPage() {
             client_id: selectedClientId,
             vaccine_name: v.vaccine_name.trim(),
             vaccine_type: v.vaccine_type.trim() || null,
+            product_id: v.product_id,
             administered_at: v.administered_at ? new Date(v.administered_at).toISOString() : new Date().toISOString(),
             next_dose_at: v.next_dose_at ? new Date(v.next_dose_at).toISOString() : null,
             dose: v.dose.trim() || null,
@@ -796,13 +873,19 @@ export default function NewVisitPage() {
           const { data: { user } } = await vetraCore.auth.getUser();
           if (!user) throw new Error(language === "ar" ? "انتهت جلسة الدخول" : "Your session has expired");
           const invoiceLines = [
-            ...(consultationFee > 0 ? [{ name: "Consultation", quantity: 1, unit_price: consultationFee }] : []),
-            ...visitServices.filter((line) => line.name.trim()).map((line) => ({ name: line.name.trim(), quantity: line.quantity, unit_price: line.price })),
+            ...(consultationFee > 0 ? [{ item_type: "service" as const, product_id: null, name: "Consultation", quantity: 1, unit_price: consultationFee }] : []),
+            ...visitServices.filter((line) => line.name.trim()).map((line) => ({ item_type: "service" as const, product_id: null, name: line.name.trim(), quantity: line.quantity, unit_price: line.price })),
             ...medicationBillLines.map((line) => ({
+              item_type: "service" as const,
+              product_id: null,
               name: `${language === "ar" ? "حقنة دواء" : "Medication injection"}: ${line.name}`,
               quantity: medicationChargeQuantities[line.id] ?? 1,
               unit_price: medicationChargePrices[line.id] ?? injectionFee,
             })),
+            ...validVaccinations.flatMap((v) => {
+              const product = vaccineStockProducts.find((item) => item.id === v.product_id);
+              return product ? [{ item_type: "service" as const, product_id: null, name: product.name, quantity: 1, unit_price: Number(product.retail_price) || 0 }] : [];
+            }),
           ];
           if (!invoiceLines.length) throw new Error(language === "ar" ? "أضف خدمة واحدة على الأقل للفاتورة" : "Add at least one service to the bill");
           const subtotal = invoiceLines.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
@@ -815,11 +898,22 @@ export default function NewVisitPage() {
           if (invoiceError || !invoice) throw invoiceError || new Error(t.saveError);
           createdInvoiceId = invoice.id;
           const { error: itemError } = await db.from("invoice_items").insert(invoiceLines.map((line) => ({
-            clinic_id: clinicContext.clinic_id, invoice_id: invoice.id, item_type: "service", product_id: null,
-            service_name: line.name, description: line.name, quantity: line.quantity, unit_price: line.unit_price,
+            clinic_id: clinicContext.clinic_id, invoice_id: invoice.id, item_type: line.item_type, product_id: line.product_id,
+            service_name: line.item_type === "service" ? line.name : null, description: line.name, quantity: line.quantity, unit_price: line.unit_price,
             discount: 0, total: line.quantity * line.unit_price,
           })));
           if (itemError) throw itemError;
+        }
+        const dispenseItems = [
+          ...drawerMedications.map((item) => ({ product_id: item.product_id, quantity: item.quantity, source_type: "medication" })),
+          ...validVaccinations.filter((item) => item.product_id).map((item) => ({ product_id: item.product_id as string, quantity: 1, source_type: "vaccination" })),
+        ];
+        if (dispenseItems.length) {
+          const { error: dispenseError } = await db.rpc("vetra_dispense_visit_inventory", {
+            p_visit_id: visit.id,
+            p_items: dispenseItems,
+          });
+          if (dispenseError) throw dispenseError;
         }
         if (createBill && createdInvoiceId) {
           window.localStorage.setItem("vetra-data-version", String(Date.now()));
@@ -829,7 +923,9 @@ export default function NewVisitPage() {
 
       } catch (relatedSaveError) {
         await db.from("visit_medications").delete().eq("visit_id", visit.id);
+        await db.from("visit_prescriptions").delete().eq("visit_id", visit.id);
         await db.from("vaccinations").delete().eq("visit_id", visit.id);
+        await db.rpc("vetra_restore_visit_inventory", { p_visit_id: visit.id });
         await db.from("pet_medical_records").delete().eq("visit_id", visit.id);
         await db.from("visit_attachments").delete().eq("visit_id", visit.id);
         if (uploadedAttachmentPaths.length) await db.storage.from("visit-attachments").remove(uploadedAttachmentPaths);
@@ -862,6 +958,7 @@ export default function NewVisitPage() {
       setMedicationDrafts([]);
       setFormularyDrafts([]);
       setVaccinations([]);
+      setDrawerMedications([]);
       setMedicalRecordDraft(emptyMedicalRecordDraft);
 
       await loadVisits(selectedPetId);
@@ -914,10 +1011,18 @@ export default function NewVisitPage() {
     ...medicationDrafts.map((draft) => ({ id: `clinic:${draft.id}`, name: medications.find((medication) => medication.id === draft.medication_id)?.name || "Medication" })),
     ...formularyDrafts.map((draft) => ({ id: `bsava:${draft.id}`, name: draft.drugName })),
     ...externalMedicationDrafts.map((draft) => ({ id: `external:${draft.id}`, name: draft.productName })),
+    ...drawerMedications.map((item) => ({
+      id: `drawer:${item.id}`,
+      name: clinicStockProducts.find((product) => product.id === item.product_id)?.name || (language === "ar" ? "دواء من درج الأدوية" : "Medication drawer item"),
+    })),
   ];
   const visitServiceTotal = visitServices.reduce((sum, service) => sum + Math.max(0, service.quantity) * Math.max(0, service.price), 0);
   const medicationChargeTotal = medicationBillLines.reduce((sum, line) => sum + Math.max(1, medicationChargeQuantities[line.id] ?? 1) * Math.max(0, medicationChargePrices[line.id] ?? injectionFee), 0);
-  const visitBillTotal = consultationFee + visitServiceTotal + medicationChargeTotal;
+  const vaccinationChargeTotal = vaccinations.reduce((sum, vaccination) => {
+    const product = vaccineStockProducts.find((item) => item.id === vaccination.product_id);
+    return sum + (vaccination.vaccine_name.trim() && product ? Math.max(0, Number(product.retail_price) || 0) : 0);
+  }, 0);
+  const visitBillTotal = consultationFee + visitServiceTotal + medicationChargeTotal + vaccinationChargeTotal;
 
   const pageClasses = darkMode
     ? "min-h-screen bg-[#0F1115] text-slate-100"
@@ -1160,6 +1265,11 @@ export default function NewVisitPage() {
                 treatment={treatment}
                 setTreatment={setTreatment}
                 vaccinations={vaccinations}
+                vaccineStockProducts={vaccineStockProducts}
+                vaccineProductMappings={vaccineProductMappings}
+                clinicStockProducts={clinicStockProducts}
+                drawerMedications={drawerMedications}
+                setDrawerMedications={setDrawerMedications}
                 addVaccination={addVaccination}
                 updateVaccination={updateVaccination}
                 removeVaccination={removeVaccination}
@@ -1232,6 +1342,7 @@ export default function NewVisitPage() {
                   {consultationFee > 0 && <div className="flex justify-between"><span>{language === "ar" ? "الكشف" : "Consultation"}</span><span>{consultationFee.toFixed(2)} EGP</span></div>}
                   <div className="flex justify-between"><span>{language === "ar" ? "الخدمات" : "Services"}</span><span>{visitServiceTotal.toFixed(2)} EGP</span></div>
                   {medicationChargeTotal > 0 && <div className="flex justify-between"><span>{language === "ar" ? "الأدوية والحقن" : "Medications and injections"}</span><span>{medicationChargeTotal.toFixed(2)} EGP</span></div>}
+                  {vaccinationChargeTotal > 0 && <div className="flex justify-between"><span>{language === "ar" ? "التطعيمات" : "Vaccinations"}</span><span>{vaccinationChargeTotal.toFixed(2)} EGP</span></div>}
                   <div className="flex justify-between border-t pt-2 text-base font-bold text-cyan-700 dark:border-slate-700 dark:text-cyan-300"><span>{language === "ar" ? "الإجمالي" : "Total"}</span><span>{visitBillTotal.toFixed(2)} EGP</span></div>
                 </div>
               </section>
