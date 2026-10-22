@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { writeVetraThemeMode } from "@/lib/theme";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type Invoice = {
   id: string;
@@ -63,6 +64,7 @@ const statusLabel = (status: string) => {
 
 export default function InvoicesPage() {
   const router = useRouter();
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
 
   const [language, setLanguage] = useState<"ar" | "en">("ar");
   const [darkMode, setDarkMode] = useState(true);
@@ -93,6 +95,7 @@ export default function InvoicesPage() {
   }, [darkMode, language, ready]);
 
   async function checkAdminAndLoad() {
+    if (!permissionsLoaded) return;
     setLoading(true);
     setMessage("");
 
@@ -108,9 +111,7 @@ export default function InvoicesPage() {
 
       const context = await getClinicContext();
 
-      const allowedRoles = ["owner", "admin"];
-
-      if (!allowedRoles.includes(context.role)) {
+      if (!can("invoices_page", "view")) {
         setAuthorized(false);
         setLoading(false);
         return;
@@ -167,10 +168,10 @@ export default function InvoicesPage() {
   }
 
   useEffect(() => {
-    if (ready) {
-      checkAdminAndLoad();
-    }
-  }, [ready]);
+    if (!ready || !permissionsLoaded) return;
+    const timer = window.setTimeout(() => void checkAdminAndLoad(), 0);
+    return () => window.clearTimeout(timer);
+  }, [ready, permissionsLoaded, can]);
 
   const filteredInvoices = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -262,8 +263,8 @@ export default function InvoicesPage() {
 
           <p className="mt-3 text-sm text-slate-500">
             {language === "ar"
-              ? "الفواتير والبيانات المالية متاحة للـ Admin فقط."
-              : "Invoices and financial data are available to Admin users only."}
+              ? "لا تملك صلاحية عرض صفحة الفواتير. اطلب من مدير العيادة تفعيلها لحسابك."
+              : "You do not have permission to view invoices. Ask your clinic admin to enable this page for your account."}
           </p>
 
           <button
@@ -345,17 +346,15 @@ export default function InvoicesPage() {
                 : "عربي"}
             </button>
 
-            <button
-              onClick={() =>
-                router.push("/invoices/new")
-              }
+            {can("invoices", "create") && <button
+              onClick={() => router.push("/invoices/new")}
               className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700"
             >
               +{" "}
               {language === "ar"
                 ? "فاتورة جديدة"
                 : "New Invoice"}
-            </button>
+            </button>}
           </div>
         </header>
 

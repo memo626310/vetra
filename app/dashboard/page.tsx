@@ -112,6 +112,7 @@ const translations = {
       ["رسائل واتساب", "قوالب الرسائل ومشاركتها", "💬"],
       ["فريق العيادة", "الأطباء والمساعدون والاستقبال", "👩‍⚕️"],
       ["مشتريات المخزون", "إضافة مشتريات من مورد", "🧾"],
+      ["الفواتير", "عرض وإدارة الفواتير", "📄"],
     ],
 
     open: "فتح",
@@ -176,6 +177,7 @@ const translations = {
       ["WhatsApp Messages", "Templates and customer sharing", "💬"],
       ["Clinic Staff", "Doctors, assistants, and front desk", "👩‍⚕️"],
       ["Inventory Purchases", "Add stock from a supplier", "🧾"],
+      ["Invoices", "View and manage invoices", "📄"],
     ],
 
     open: "Open",
@@ -519,6 +521,7 @@ export default function Home() {
   ["💬", t.nav.messages, "/messages"],
   ["👩‍⚕️", t.nav.staff, "/staff"],
   ["📦", t.nav.inventory, "/inventory/products"],
+  ["🧾", isArabic ? "الفواتير" : "Invoices", "/invoices"],
   ["💰", t.nav.finance, "/finance"],
   ["📊", t.nav.reports, "/reports"],
   ["🟢", isArabic ? "نشاط العملاء" : "Client activity", "/dashboard/clients-activity"],
@@ -527,7 +530,7 @@ export default function Home() {
     return !required || (permissionsLoaded && can(required.key, required.action));
   });
   const visibleCards = t.cards.map((card, index) => ({ card, index })).filter(({ index }) => {
-    const cardPaths = ["/visits/new", "/invoices/new", "/clients", "/pets", "/appointments", "/vaccinations", "/inventory/products", "/barcode-test", "/finance", "/reports", "/dashboard/visits", "/messages", "/staff", "/inventory/purchases"];
+    const cardPaths = ["/visits/new", "/invoices/new", "/clients", "/pets", "/appointments", "/vaccinations", "/inventory/products", "/barcode-test", "/finance", "/reports", "/dashboard/visits", "/messages", "/staff", "/inventory/purchases", "/invoices"];
     const required = permissionForPath(cardPaths[index]);
     return !required || (permissionsLoaded && can(required.key, required.action));
   });
@@ -978,6 +981,9 @@ export default function Home() {
                         break;
                       case 13:
                         goTo("/inventory/purchases");
+                        break;
+                      case 14:
+                        goTo("/invoices");
                         break;
                       default:
                         goTo("/dashboard");

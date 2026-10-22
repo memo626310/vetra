@@ -6,6 +6,7 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { writeVetraThemeMode } from "@/lib/theme";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type Client = {
   id: string;
@@ -74,12 +75,14 @@ const normalizeProductName = (value: string) => value.toLocaleLowerCase().normal
 
 export default function NewInvoicePage() {
   const router = useRouter();
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
 
   const [language, setLanguage] = useState<"ar" | "en">("ar");
   const [darkMode, setDarkMode] = useState(true);
   const [ready, setReady] = useState(false);
 
   const [authorized, setAuthorized] = useState<boolean | null>(null);
+  const [canIssueInvoices, setCanIssueInvoices] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -141,6 +144,7 @@ export default function NewInvoicePage() {
   }, [darkMode, language, ready]);
 
   async function loadPage() {
+    if (!permissionsLoaded) return;
     setLoading(true);
     setMessage("");
 
@@ -156,12 +160,13 @@ export default function NewInvoicePage() {
     const context = await getClinicContext();
     const db = await getClinicDb();
 
-    const canCreateVisitInvoice = context.role === "reception" && Boolean(visitId);
-    if (!["owner", "admin"].includes(context.role) && !canCreateVisitInvoice) {
+    const canCreateInvoice = ["owner", "admin"].includes(context.role) || can("invoices", "create");
+    if (!canCreateInvoice) {
       setAuthorized(false);
       setLoading(false);
       return;
     }
+    setCanIssueInvoices(["owner", "admin"].includes(context.role) || can("invoices", "create"));
 
     setAuthorized(true);
 
@@ -388,8 +393,10 @@ export default function NewInvoicePage() {
   }
 
   useEffect(() => {
-    if (ready) loadPage();
-  }, [ready]);
+    if (!ready || !permissionsLoaded) return;
+    const timer = window.setTimeout(() => void loadPage(), 0);
+    return () => window.clearTimeout(timer);
+  }, [ready, permissionsLoaded, can]);
   useEffect(() => {
     if (!financialAccounts.length) {
       setFinancialAccountId("");
@@ -792,8 +799,14 @@ setSaving(true);
     const context = await getClinicContext();
     const db = await getClinicDb();
 
+    if (!permissionsLoaded || !can("invoices", "create")) {
+      setAuthorized(false);
+      setSaving(false);
+      return;
+    }
+
     const canCreateVisitInvoice = context.role === "reception" && Boolean(visitId);
-    if (!["owner", "admin"].includes(context.role) && !canCreateVisitInvoice) {
+    if (!["owner", "admin"].includes(context.role) && !can("invoices", "create")) {
       setAuthorized(false);
       setSaving(false);
       return;
@@ -995,8 +1008,8 @@ setSuccess(
           </h1>
           <p className="mt-3 text-sm text-slate-500">
             {language === "ar"
-              ? "إنشاء الفواتير متاح للـ Owner و Admin، والاستقبال لفواتير الزيارات فقط."
-              : "Invoice creation is available to Owner and Admin; reception can create visit invoices only."}
+              ? "لا تملك صلاحية إنشاء الفواتير. اطلب من مدير العيادة تفعيل صلاحية إضافة الفواتير لحسابك."
+              : "You do not have permission to create invoices. Ask your clinic admin to enable invoice creation."}
           </p>
           <button
             onClick={() => router.push("/")}
@@ -1669,7 +1682,7 @@ setSuccess(
                       : "Save as draft"}
                 </button>
 
-                <button
+                {canIssueInvoices && <button
                   disabled={saving}
                   onClick={() => saveInvoice(true)}
                   className="w-full rounded-2xl bg-blue-600 px-5 py-4 font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
@@ -1679,7 +1692,7 @@ setSuccess(
                     : language === "ar"
                       ? "إصدار الفاتورة"
                       : "Issue invoice"}
-                </button>
+                </button>}
               </div>
             </section>
           </aside>

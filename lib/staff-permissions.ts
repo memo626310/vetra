@@ -24,7 +24,9 @@ export const permissionDefinitions: PermissionDefinition[] = [
   { key: "medical_records", ar: "الملفات والسجلات الطبية", en: "Medical records", actions: ["view", "create", "edit", "delete", "export"] },
   { key: "prescriptions", ar: "الوصفات والأدوية", en: "Prescriptions and medications", actions: ["view", "create", "edit", "delete", "export"] },
   { key: "vaccinations", ar: "التطعيمات", en: "Vaccinations", actions: ["view", "create", "edit", "delete", "export"] },
+  { key: "invoices_page", ar: "صفحة الفواتير", en: "Invoices page", actions: ["view"] },
   { key: "invoices", ar: "الفواتير", en: "Invoices", actions: ["view", "create", "edit", "delete", "export"] },
+  { key: "finance_page", ar: "صفحة المالية", en: "Finance page", actions: ["view"] },
   { key: "payments", ar: "المدفوعات والخزينة", en: "Payments and cash register", actions: ["view", "create", "edit", "delete", "export"] },
   { key: "inventory", ar: "المخزون والمنتجات", en: "Inventory and products", actions: ["view", "create", "edit", "delete", "export"] },
   { key: "reports", ar: "التقارير", en: "Reports", actions: ["view", "export"] },
@@ -50,7 +52,9 @@ export function defaultStaffPermissions(staffType: "doctor" | "assistant" | "fro
     grant("patients", ["view", "create", "edit"]);
     grant("appointments", ["view", "create", "edit", "delete"]);
     grant("invoices", ["view", "create"]);
+    grant("invoices_page", ["view"]);
     grant("payments", ["view", "create"]);
+    grant("finance_page", ["view"]);
   }
   return result;
 }
@@ -63,10 +67,10 @@ export function fullStaffPermissions(): StaffPermissions {
 }
 
 export function permissionForPath(pathname: string): { key: string; action: PermissionAction } | null {
-  if (pathname.startsWith("/finance")) return { key: "payments", action: "view" };
+  if (pathname.startsWith("/finance")) return { key: "finance_page", action: "view" };
   if (pathname.startsWith("/visits/new")) return { key: "medical_records", action: "create" };
   if (pathname.startsWith("/invoices/new")) return { key: "invoices", action: "create" };
-  if (pathname.startsWith("/invoices")) return { key: "invoices", action: "view" };
+  if (pathname.startsWith("/invoices")) return { key: "invoices_page", action: "view" };
   if (pathname.startsWith("/inventory/purchases")) return { key: "inventory", action: "create" };
   if (pathname.startsWith("/inventory")) return { key: "inventory", action: "view" };
   if (pathname.startsWith("/barcode-test")) return { key: "inventory", action: "view" };

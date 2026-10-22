@@ -16,6 +16,7 @@ const MORE_ITEMS = [
   { icon: "📅", ar: "المواعيد", en: "Appointments", href: "/appointments" },
   { icon: "💉", ar: "التطعيمات", en: "Vaccinations", href: "/vaccinations" },
   { icon: "📦", ar: "المخزون", en: "Inventory", href: "/inventory/products" },
+  { icon: "🧾", ar: "الفواتير", en: "Invoices", href: "/invoices" },
   { icon: "💰", ar: "المالية", en: "Finance", href: "/finance" },
   { icon: "📊", ar: "التقارير", en: "Reports", href: "/reports" },
   { icon: "⚙️", ar: "الإعدادات", en: "Settings", href: "/settings" },

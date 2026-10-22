@@ -140,9 +140,14 @@ export default function ReceptionPage() {
             <h1 className="mt-1 text-2xl font-black">{isAr ? "استقبال وتحصيل" : "Reception & checkout"}</h1>
             <p className="mt-1 text-sm text-slate-500">{isAr ? "الزيارات المحفوظة التي تحتاج إلى فاتورة وتحصيل" : "Saved visits waiting for an invoice and checkout"}</p>
           </div>
-          <button type="button" onClick={() => void loadQueue()} className={`min-h-10 rounded-lg border px-3 text-sm font-semibold ${input}`}>
-            {isAr ? "تحديث القائمة" : "Refresh"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => router.push("/dashboard")} className="min-h-10 rounded-lg bg-teal-500 px-4 text-sm font-bold text-slate-950 transition hover:bg-teal-400">
+              {isAr ? "الداشبورد" : "Dashboard"}
+            </button>
+            <button type="button" onClick={() => void loadQueue()} className={`min-h-10 rounded-lg border px-3 text-sm font-semibold ${input}`}>
+              {isAr ? "تحديث القائمة" : "Refresh"}
+            </button>
+          </div>
         </header>
 
         <section className={`mb-4 grid grid-cols-2 gap-3 border p-4 sm:grid-cols-3 ${surface}`}>

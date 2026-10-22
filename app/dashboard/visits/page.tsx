@@ -21,7 +21,7 @@ type Visit = {
 };
 type Pet = { id: string; name: string; client_id: string | null };
 type Client = { id: string; name: string; client_code: string | null; phone: string | null };
-type Vaccination = { id: string; visit_id: string; vaccine_name: string | null; date_administered: string | null; next_due_date: string | null };
+type Vaccination = { id: string; visit_id: string; vaccine_name: string | null; administered_at: string | null; next_dose_at: string | null };
 type VisitDraft = {
   visit_date: string; reason: string; examination: string; diagnosis: string; treatment: string;
   weight: string; temperature: string; heart_rate: string; respiratory_rate: string; notes: string;
@@ -89,10 +89,13 @@ export default function VisitHistoryDashboardPage() {
       let vaccinations: Vaccination[] = [];
       if (visitIds.length) {
         const vaccinationResult = await db.from("vaccinations")
-          .select("id,visit_id,vaccine_name,date_administered,next_due_date")
+          .select("id,visit_id,vaccine_name,administered_at,next_dose_at")
           .in("visit_id", visitIds);
-        if (vaccinationResult.error) throw vaccinationResult.error;
-        vaccinations = (vaccinationResult.data || []) as Vaccination[];
+        if (vaccinationResult.error) {
+          console.error("DASHBOARD VISIT VACCINATIONS LOAD ERROR:", vaccinationResult.error);
+        } else {
+          vaccinations = (vaccinationResult.data || []) as Vaccination[];
+        }
       }
       const petIds = [...new Set(loaded.map((v) => v.pet_id).filter((id): id is string => Boolean(id)))];
       let pets: Pet[] = [];
@@ -295,7 +298,7 @@ export default function VisitHistoryDashboardPage() {
                     </tr>
                     {expandedId === visit.id && <tr><td colSpan={7} className="bg-[#24292a] px-4 py-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       {([[text.reason, visit.reason], [text.exam, visit.examination], [text.diagnosis, visit.diagnosis], [text.treatment, visit.treatment], [text.weight, visit.weight == null ? null : String(visit.weight)], [text.temp, visit.temperature == null ? null : String(visit.temperature)], [text.heart, visit.heart_rate == null ? null : String(visit.heart_rate)], [text.respiration, visit.respiratory_rate == null ? null : String(visit.respiratory_rate)], [text.notes, visit.notes]] as Array<[string, string | null]>).map(([label, value]) => <div key={label} className="min-w-0"><div className="text-xs font-bold text-slate-400">{label}</div><div className="mt-1 whitespace-pre-wrap break-words text-sm">{value || "—"}</div></div>)}
-                      {(vaccinationsByVisit[visit.id] || []).length > 0 && <div className="min-w-0 sm:col-span-2 lg:col-span-4"><div className="text-xs font-bold text-slate-400">{text.vaccines}</div><div className="mt-1 flex flex-wrap gap-2">{vaccinationsByVisit[visit.id].map((vaccination) => <span key={vaccination.id} className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1.5 text-sm text-cyan-100">{vaccination.vaccine_name || "—"}{vaccination.date_administered ? ` · ${new Date(vaccination.date_administered).toLocaleDateString(ar ? "ar-EG" : "en-GB")}` : ""}</span>)}</div></div>}
+                      {(vaccinationsByVisit[visit.id] || []).length > 0 && <div className="min-w-0 sm:col-span-2 lg:col-span-4"><div className="text-xs font-bold text-slate-400">{text.vaccines}</div><div className="mt-1 flex flex-wrap gap-2">{vaccinationsByVisit[visit.id].map((vaccination) => <span key={vaccination.id} className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1.5 text-sm text-cyan-100">{vaccination.vaccine_name || "—"}{vaccination.administered_at ? ` · ${new Date(vaccination.administered_at).toLocaleDateString(ar ? "ar-EG" : "en-GB")}` : ""}</span>)}</div></div>}
                     </div><div className="mt-4 flex justify-end"><button type="button" onClick={() => setDeleting(visit)} className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700">{text.delete}</button></div></td></tr>}
                   </Fragment>
                 );
