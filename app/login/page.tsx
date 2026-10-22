@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
+import { setClinicRememberMePreference } from "@/lib/clinic-auth-storage";
 import { clientPortalPhotos } from "../client-interface/pet-photos";
 
 export default function LoginPage() {
@@ -12,6 +13,7 @@ export default function LoginPage() {
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -20,6 +22,7 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setClinicRememberMePreference(rememberMe);
 
     const enteredIdentifier = identifier.trim();
     const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(enteredIdentifier);
@@ -163,6 +166,16 @@ export default function LoginPage() {
                   required
                   className="h-[62px] w-full rounded-[18px] border border-[#33283f] bg-[#211a2a] px-5 text-base text-white outline-none transition placeholder:text-[#aaa2b4] focus:border-[#76668d] focus:ring-4 focus:ring-[#211a2a]/10 sm:h-[74px] sm:px-6 sm:text-lg"
                 />
+              </label>
+
+              <label className="flex w-fit cursor-pointer items-center gap-3 text-sm font-semibold text-[#6b6472]">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                  className="h-4 w-4 accent-[#101a32]"
+                />
+                <span>Remember me</span>
               </label>
 
               {error && (
