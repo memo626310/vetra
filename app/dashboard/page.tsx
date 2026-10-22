@@ -360,15 +360,43 @@ export default function Home() {
       let displayContext = context;
       try {
         const db = await getClinicDb();
-        const { data: clinicProfile } = await db.from("clinic_profile_settings")
-          .select("doctor_name")
-          .eq("clinic_id", context.clinic_id)
-          .maybeSingle();
-        if (clinicProfile?.doctor_name) {
-          displayContext = { ...context, doctor_name: clinicProfile.doctor_name };
+        const [{ data: clinicProfile }, { data: staffMember }] = await Promise.all([
+          db.from("clinic_profile_settings")
+            .select("doctor_name")
+            .eq("clinic_id", context.clinic_id)
+            .maybeSingle(),
+          db.from("clinic_staff")
+            .select("full_name")
+            .eq("clinic_id", context.clinic_id)
+            .eq("auth_user_id", context.doctor_id)
+            .maybeSingle(),
+        ]);
+
+        const staffName = typeof staffMember?.full_name === "string"
+          ? staffMember.full_name.trim()
+          : "";
+        const profileName = typeof clinicProfile?.doctor_name === "string"
+          ? clinicProfile.doctor_name.trim()
+          : "";
+
+        if (staffName) {
+          displayContext = { ...context, doctor_name: staffName };
+        } else if (["owner", "admin"].includes(String(context.role || "").toLowerCase()) && profileName) {
+          displayContext = { ...context, doctor_name: profileName };
         }
       } catch {
-        // Keep the VETRA account name if the clinic profile is not configured yet.
+        // Fall back to the account identity below if optional clinic profile data is unavailable.
+      }
+
+      if (displayContext === context) {
+        const { data: userResult } = await vetraCore.auth.getUser();
+        const metadata = userResult.user?.user_metadata as Record<string, unknown> | undefined;
+        const accountName = [metadata?.full_name, metadata?.name, userResult.user?.email]
+          .find((value): value is string => typeof value === "string" && value.trim().length > 0)
+          ?.trim();
+        if (accountName) {
+          displayContext = { ...context, doctor_name: accountName };
+        }
       }
 
       if (mounted) {
