@@ -568,9 +568,14 @@ export default function Home() {
   return (
     <main
       dir={isArabic ? "rtl" : "ltr"}
-      className={`min-h-screen transition-colors duration-500 ${palette.page}`}
+      className={`relative isolate min-h-screen overflow-hidden bg-cover bg-center bg-fixed transition-colors duration-500 ${palette.page}`}
+      style={{ backgroundImage: "url('/vetra-tinder-hero.webp')" }}
     >
-      <div className="flex min-h-screen">
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-0 ${darkMode ? "bg-[#0F1115]/90" : "bg-white/82"}`}
+      />
+      <div className="relative z-10 flex min-h-screen">
 
         {/* ================= SIDEBAR ================= */}
 
