@@ -300,7 +300,7 @@ function addSixMonths(value: string) {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { hasPermission, permissionsLoaded } = useStaffPermissions();
+  const { hasPermission, loaded: permissionsLoaded } = useStaffPermissions();
   const [authorized, setAuthorized] = useState<boolean | null>(null);
 
   const [language, setLanguage] = useState<Language>("ar");

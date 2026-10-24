@@ -112,12 +112,13 @@ export default function StaffPage() {
     }, 0);
   }, [loadStaff]);
 
-  useEffect(() => {
+ 
+useEffect(() => {
   if (!permissionsLoaded) return;
 
-  setAuthorized(can("reports", "view"));
-  setLoading(false);
+  setAuthorized(can("staff", "view"));
 }, [permissionsLoaded, can]);
+
   const visibleStaff = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return staff.filter((person) => {
