@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { writeVetraThemeMode } from "@/lib/theme";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type Language = "ar" | "en";
 type RangeKey = "7" | "30" | "90" | "365" | "all";
@@ -419,6 +420,7 @@ function RankingCard({
 
 export default function ReportsPage() {
   const router = useRouter();
+  const { can, loaded: permissionsLoaded } = useStaffPermissions();
   const [language, setLanguage] = useState<Language>("ar");
   const [darkMode, setDarkMode] = useState(true);
   const [ready, setReady] = useState(false);
@@ -427,6 +429,7 @@ export default function ReportsPage() {
   const [message, setMessage] = useState("");
   const [range, setRange] = useState<RangeKey>("30");
   const [clinic, setClinic] = useState<ClinicContext | null>(null);
+  const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [data, setData] = useState<ReportData>({
     visits: [],
     invoices: [],
@@ -448,6 +451,12 @@ export default function ReportsPage() {
     writeVetraThemeMode(darkMode);
     localStorage.setItem("vetra-language", language);
   }, [darkMode, language, ready]);
+
+  useEffect(() => {
+  if (!permissionsLoaded) return;
+
+  setAuthorized(can("reports", "view"));
+}, [permissionsLoaded, can]);
 
   async function loadReports(showRefresh = false) {
     if (showRefresh) setRefreshing(true);
@@ -530,8 +539,8 @@ export default function ReportsPage() {
   }
 
   useEffect(() => {
-    if (ready) void loadReports(false);
-  }, [ready]);
+    if (ready && permissionsLoaded && authorized === true) void loadReports(false);
+  }, [ready, permissionsLoaded, authorized]);
 
   const t = translations[language];
   const direction = language === "ar" ? "rtl" : "ltr";
@@ -623,12 +632,31 @@ export default function ReportsPage() {
   const recentVisits = filtered.visits.slice(0, 8);
   const recentInvoiceRows = filtered.invoices.filter(isFinancialInvoice).slice(0, 6);
 
-  if (!ready || loading) {
+  if (!ready || !permissionsLoaded || loading) {
     return (
       <main className={darkMode ? "flex min-h-screen items-center justify-center bg-[#0F1115] text-white" : "flex min-h-screen items-center justify-center bg-[#F7F8FA] text-slate-800"}>
         <div className="text-center">
           <div className="mb-3 text-4xl">📊</div>
           <p className="text-sm text-slate-500">{language === "ar" ? "جاري تحميل التقارير..." : "Loading reports..."}</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (authorized === false) {
+    return (
+      <main dir={direction} className={`flex min-h-screen items-center justify-center px-6 ${darkMode ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"}`}>
+        <div className={`rounded-3xl border p-8 ${darkMode ? "border-white/[0.07] bg-[#13161B]" : "border-slate-100 bg-white shadow-sm"}`}>
+          <h1 className="text-2xl font-black">{language === "ar" ? "غير مصرح بالدخول" : "Access restricted"}</h1>
+          <p className="mt-3 text-sm text-slate-500">
+            {language === "ar" ? "لا تملك صلاحية عرض التقارير." : "You do not have permission to view reports."}
+          </p>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="mt-5 rounded-full bg-blue-500 px-6 py-2.5 text-sm font-medium text-white transition hover:bg-blue-600"
+          >
+            {language === "ar" ? "← العودة للرئيسية" : "← Back to dashboard"}
+          </button>
         </div>
       </main>
     );

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { writeVetraThemeMode } from "@/lib/theme";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type Lang = "ar" | "en";
 type Account = {
@@ -106,6 +107,7 @@ function sameLocalDay(value: string | null | undefined, now: Date) {
 
 export default function FinancePage() {
   const router = useRouter();
+  const { can, loaded: permissionsLoaded } = useStaffPermissions();
   const [lang, setLang] = useState<Lang>("ar");
   const [dark, setDark] = useState(true);
   const [ready, setReady] = useState(false);
@@ -193,6 +195,8 @@ export default function FinancePage() {
   }, [ready, lang, isAr, dark]);
 
   const loadData = useCallback(async () => {
+    if (!permissionsLoaded) return;
+
     setLoading(true);
     setError("");
     try {
@@ -202,10 +206,13 @@ export default function FinancePage() {
         return;
       }
       const context = await getClinicContext();
-      if (!["owner", "admin"].includes(context.role)) {
+
+      // Check permissions: owner/admin OR staff with finance.view permission
+      if (!["owner", "admin"].includes(context.role) && !can("finance", "view")) {
         setAuthorized(false);
         return;
       }
+
       setAuthorized(true);
       const db = await getClinicDb();
       const [accountResult, invoiceResult, transactionResult, creditResult] = await Promise.all([
@@ -243,11 +250,11 @@ export default function FinancePage() {
     } finally {
       setLoading(false);
     }
-  }, [router, isAr]);
+  }, [router, isAr, permissionsLoaded, can]);
 
   useEffect(() => {
-    if (ready) void loadData();
-  }, [ready, loadData]);
+    if (ready && permissionsLoaded) void loadData();
+  }, [ready, permissionsLoaded, loadData]);
 
   useEffect(() => {
     if (!selectedAccount) return;
@@ -376,7 +383,7 @@ export default function FinancePage() {
   const cardClass = `rounded-3xl border p-5 ${dark ? "border-white/[0.07] bg-[#13161B]" : "border-slate-100 bg-white shadow-sm"}`;
   const inputClass = `w-full rounded-xl border px-3 py-3 outline-none focus:border-blue-500 ${dark ? "border-white/10 bg-[#0F1115] text-white" : "border-slate-200 bg-slate-50 text-slate-900"}`;
 
-  if (!ready || loading) return <main className={`flex min-h-screen items-center justify-center ${dark ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"}`}><p>{isAr ? "جارٍ تحميل المالية..." : "Loading finance..."}</p></main>;
+  if (!ready || !permissionsLoaded || loading) return <main className={`flex min-h-screen items-center justify-center ${dark ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"}`}><p>{isAr ? "جارٍ تحميل المالية..." : "Loading finance..."}</p></main>;
   if (authorized === false) return <main dir={isAr ? "rtl" : "ltr"} className={`flex min-h-screen items-center justify-center p-6 ${dark ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"}`}><div className={cardClass}><h1 className="text-2xl font-black">{isAr ? "غير مصرح بالدخول" : "Access restricted"}</h1><p className="mt-3 text-sm text-slate-500">{isAr ? "إدارة المالية متاحة للمالك ومدير العيادة فقط." : "Finance is available to the clinic owner and admin only."}</p></div></main>;
 
   return (

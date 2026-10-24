@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { writeVetraThemeMode } from "@/lib/theme";
 import { defaultStaffPermissions, normalizeStaffPermissions, permissionActions, permissionDefinitions, type StaffPermissions, type PermissionAction } from "@/lib/staff-permissions";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type Language = "ar" | "en";
 type StaffType = "doctor" | "assistant" | "front_desk";
@@ -56,6 +58,8 @@ const roleLabels: Record<StaffType, Record<Language, string>> = {
 };
 
 export default function StaffPage() {
+  const router = useRouter();
+  const { can, loaded: permissionsLoaded } = useStaffPermissions();
   const [language, setLanguage] = useState<Language>("ar");
   const [dark, setDark] = useState(true);
   const [clinicId, setClinicId] = useState("");
@@ -77,6 +81,7 @@ export default function StaffPage() {
   const [permissionsSaving, setPermissionsSaving] = useState(false);
   const [accountBusyId, setAccountBusyId] = useState("");
   const [credentials, setCredentials] = useState<IssuedCredentials | null>(null);
+  const [authorized, setAuthorized] = useState<boolean | null>(null);
   const t = copy[language];
   const ar = language === "ar";
 
@@ -107,6 +112,12 @@ export default function StaffPage() {
     }, 0);
   }, [loadStaff]);
 
+  useEffect(() => {
+  if (!permissionsLoaded) return;
+
+  setAuthorized(can("reports", "view"));
+  setLoading(false);
+}, [permissionsLoaded, can]);
   const visibleStaff = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return staff.filter((person) => {
@@ -156,7 +167,15 @@ export default function StaffPage() {
   }
 
   function togglePermission(group: StaffPermissions, key: string, action: PermissionAction): StaffPermissions {
-    return { ...group, [key]: { ...group[key], [action]: group[key]?.[action] !== true } };
+    const currentGroup = group[key] || {};
+    const newValue = currentGroup[action] !== true;
+    return {
+      ...group,
+      [key]: {
+        ...currentGroup,
+        [action]: newValue
+      }
+    };
   }
 
   async function savePermissions(staffId: string) {
@@ -180,7 +199,38 @@ export default function StaffPage() {
   }
 
   function permissionEditor() {
-    return <fieldset className={`mt-5 rounded-lg border p-4 ${input}`}><legend className="px-2 text-sm font-bold">{t.permissions}</legend><p className="mb-3 text-xs text-slate-500">{t.permissionsHint}</p><div className="space-y-2">{permissionDefinitions.map((definition) => <div key={definition.key} className="grid gap-2 border-b border-slate-200/10 pb-2 last:border-0 sm:grid-cols-[minmax(0,1fr)_auto]"><span className="text-sm font-semibold">{ar ? definition.ar : definition.en}</span><div className="flex flex-wrap gap-x-4 gap-y-2">{definition.actions.map((action) => { const label = permissionActions.find((item) => item.key === action); return <label key={action} className="flex items-center gap-1.5 text-xs text-slate-500"><input type="checkbox" checked={permissions[definition.key]?.[action] === true} onChange={() => setPermissions((current) => togglePermission(current, definition.key, action))} className="h-4 w-4 accent-cyan-500" />{ar ? label?.ar : label?.en}</label>; })}</div></div>)}</div></fieldset>;
+    return (
+      <fieldset className={`mt-5 rounded-lg border p-4 ${input}`}>
+        <legend className="px-2 text-sm font-bold">{t.permissions}</legend>
+        <p className="mb-3 text-xs text-slate-500">{t.permissionsHint}</p>
+        <div className="space-y-2">
+          {permissionDefinitions.map((definition) => (
+            <div key={definition.key} className="grid gap-2 border-b border-slate-200/10 pb-2 last:border-0 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <span className="text-sm font-semibold">
+                {ar ? definition.ar : definition.en}
+              </span>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {definition.actions.map((action) => {
+                  const label = permissionActions.find((item) => item.key === action);
+                  const isChecked = permissions[definition.key]?.[action] === true;
+                  return (
+                    <label key={action} className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => setPermissions((current) => togglePermission(current, definition.key, action))}
+                        className="h-4 w-4 accent-cyan-500 cursor-pointer"
+                      />
+                      {ar ? label?.ar : label?.en}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </fieldset>
+    );
   }
 
   async function issueStaffLogin(person: StaffMember) {
@@ -264,6 +314,36 @@ export default function StaffPage() {
   const surface = dark ? "border-white/10 bg-[#181B21]" : "border-slate-200 bg-white";
   const input = dark ? "border-white/10 bg-[#111419] text-white placeholder:text-slate-500" : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400";
   const roles: (StaffType | "all")[] = ["all", "doctor", "assistant", "front_desk"];
+
+  if (!permissionsLoaded || loading) {
+    return (
+      <main className={dark ? "flex min-h-screen items-center justify-center bg-[#0F1115] text-white" : "flex min-h-screen items-center justify-center bg-[#F7F8FA] text-slate-800"}>
+        <div className="text-center">
+          <div className="mb-3 text-4xl">👥</div>
+          <p className="text-sm text-slate-500">{ar ? "جاري تحميل فريق العيادة..." : "Loading staff..."}</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (authorized === false) {
+    return (
+      <main dir={ar ? "rtl" : "ltr"} className={`flex min-h-screen items-center justify-center px-6 ${dark ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"}`}>
+        <div className={`rounded-3xl border p-8 ${dark ? "border-white/[0.07] bg-[#13161B]" : "border-slate-100 bg-white shadow-sm"}`}>
+          <h1 className="text-2xl font-black">{ar ? "غير مصرح بالدخول" : "Access restricted"}</h1>
+          <p className="mt-3 text-sm text-slate-500">
+            {ar ? "لا تملك صلاحية عرض أو إدارة الموظفين." : "You do not have permission to view or manage staff."}
+          </p>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="mt-5 rounded-full bg-blue-500 px-6 py-2.5 text-sm font-medium text-white transition hover:bg-blue-600"
+          >
+            {ar ? "← العودة للرئيسية" : "← Back to dashboard"}
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   return <main dir={ar ? "rtl" : "ltr"} className={`min-h-screen transition-colors ${dark ? "bg-[#0F1115] text-slate-100" : "bg-[#F7F8FA] text-slate-900"}`}>
     <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8">

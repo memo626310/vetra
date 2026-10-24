@@ -598,7 +598,21 @@ export default function Home() {
   ["🟢", isArabic ? "نشاط العملاء" : "Client activity", "/dashboard/clients-activity"],
   ].filter((item) => {
     const required = permissionForPath(item[2]);
-    return !required || (permissionsLoaded && can(required.key, required.action));
+    const hasPermission = !required || (permissionsLoaded && can(required.key, required.action));
+
+    // Debug logging
+    if (required) {
+      console.log('NAV PERMISSION CHECK:', {
+        path: item[2],
+        title: item[1],
+        required: required,
+        permissionsLoaded,
+        hasPermission: can(required.key, required.action),
+        finalResult: hasPermission
+      });
+    }
+
+    return hasPermission;
   });
   const visibleCards = t.cards.map((card, index) => ({ card, index })).filter(({ index }) => {
     const cardPaths = ["/visits/new", "/invoices/new", "/clients", "/pets", "/appointments", "/vaccinations", "/inventory/products", "/barcode-test", "/finance", "/reports", "/dashboard/visits", "/messages", "/staff", "/inventory/purchases", "/invoices"];
@@ -608,6 +622,22 @@ export default function Home() {
   const visibleStats = ["appointments", "vaccinations", "inventory", "inventory", "inventory"]
     .map((key, index) => ({ key, index }))
     .filter(({ key }) => permissionsLoaded && can(key, "view"));
+
+  // Show loading screen while permissions are being loaded
+  if (!permissionsLoaded) {
+    return (
+      <main
+        dir={isArabic ? "rtl" : "ltr"}
+        className={`flex min-h-screen items-center justify-center ${darkMode ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-900"}`}
+      >
+        <div className="text-center">
+          <div className="mb-4 inline-block h-12 w-12 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent"></div>
+          <p className="text-lg font-semibold">{isArabic ? "جارٍ التحميل..." : "Loading..."}</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main
       dir={isArabic ? "rtl" : "ltr"}
@@ -794,10 +824,10 @@ export default function Home() {
             tabIndex={headerCollapsed ? 0 : undefined}
             aria-label={headerCollapsed ? (isArabic ? "فتح معلومات العيادة" : "Expand clinic summary") : undefined}
             dir="ltr"
-            className={`relative mb-4 flex flex-wrap overflow-hidden rounded-2xl border shadow-sm transition-all duration-300 sm:mb-8 sm:rounded-3xl ${headerCollapsed ? "cursor-pointer items-center justify-between gap-2 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 sm:gap-3 sm:p-3" : "items-start justify-between gap-2 p-3 sm:grid sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-6 sm:p-7 lg:p-8"} ${palette.header}`}
+            className={`relative mb-4 flex flex-wrap overflow-hidden rounded-2xl border shadow-sm transition-[max-height,padding,box-shadow,background-color,border-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] sm:mb-8 sm:rounded-3xl ${headerCollapsed ? "max-h-[92px] cursor-pointer items-center justify-between gap-2 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 sm:max-h-[104px] sm:gap-3 sm:p-3" : "max-h-[440px] items-start justify-between gap-2 p-3 sm:max-h-[360px] sm:grid sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-6 sm:p-7 lg:p-8"} ${palette.header}`}
           >
 
-            {!headerCollapsed && <div className="order-2 min-w-0 flex-1" dir={isArabic ? "rtl" : "ltr"}>
+            {!headerCollapsed && <div className="order-2 min-w-0 flex-1 animate-[vetra-header-in_450ms_cubic-bezier(0.22,1,0.36,1)]" dir={isArabic ? "rtl" : "ltr"}>
 
               <p className={`mb-1 text-[9px] font-bold uppercase tracking-[0.16em] ${palette.accentText} sm:mb-2 sm:text-xs sm:tracking-[0.18em]`}>{t.workspace}</p>
               <h2 className="max-w-[190px] text-base font-black leading-tight tracking-tight sm:max-w-none sm:text-4xl sm:leading-normal lg:text-[2.65rem]">

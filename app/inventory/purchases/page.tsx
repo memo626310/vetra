@@ -6,6 +6,7 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { writeVetraThemeMode } from "@/lib/theme";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type Supplier = { id: string; name: string; phone: string | null; notes: string | null };
 type Category = { id: string; name: string };
@@ -19,6 +20,7 @@ function money(value: number) {
 
 export default function InventoryPurchasesPage() {
   const router = useRouter();
+  const { can, loaded: permissionsLoaded } = useStaffPermissions();
   const [language, setLanguage] = useState<"ar" | "en">("ar");
   const [dark, setDark] = useState(true);
   const [ready, setReady] = useState(false);

@@ -14,17 +14,48 @@ async function authorize(request: Request) {
 export async function GET(request: Request) {
   try {
     const actor = await resolveClinicPushContext(request);
+
+    // Owner and admin get full permissions
     if (["owner", "admin"].includes(actor.role)) {
       return Response.json({ id: null, permissions: fullStaffPermissions() }, { headers: { "Cache-Control": "no-store" } });
     }
+
     const url = new URL(request.url);
     const staffId = url.searchParams.get("staffId");
     if (staffId) throw new PushSetupError("لا يمكنك عرض صلاحيات موظف آخر.", 403);
-    const query = actor.clinicDb.from("clinic_staff").select("id,staff_type,permissions").eq("clinic_id", actor.clinicId);
-    const { data, error } = await query.eq("auth_user_id", actor.userId).maybeSingle();
-    if (error) throw error;
-    if (!data) throw new PushSetupError("الموظف غير موجود في هذه العيادة.", 404);
-    return Response.json({ id: data.id, permissions: normalizeStaffPermissions(data.permissions, data.staff_type) }, { headers: { "Cache-Control": "no-store" } });
+
+    // Get staff permissions from clinic_staff table
+    const { data, error } = await actor.clinicDb
+      .from("clinic_staff")
+      .select("id,staff_type,permissions")
+      .eq("clinic_id", actor.clinicId)
+      .eq("auth_user_id", actor.userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("STAFF PERMISSIONS QUERY ERROR:", error);
+      throw error;
+    }
+
+    if (!data) {
+      console.error("STAFF NOT FOUND:", {
+        clinicId: actor.clinicId,
+        userId: actor.userId,
+        role: actor.role,
+      });
+      throw new PushSetupError("الموظف غير موجود في هذه العيادة.", 404);
+    }
+
+    console.log("STAFF PERMISSIONS FOUND:", {
+      id: data.id,
+      staff_type: data.staff_type,
+      hasPermissions: !!data.permissions,
+    });
+
+    return Response.json({
+      id: data.id,
+      permissions: normalizeStaffPermissions(data.permissions, data.staff_type)
+    }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof PushSetupError) return Response.json({ error: error.message }, { status: error.status });
     console.error("STAFF PERMISSIONS GET ERROR:", error);

@@ -32,6 +32,7 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 
 
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 
 
@@ -163,6 +164,7 @@ const emptyProduct = {
 
 export default function ProductsPage() {
 
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
 
   const [products, setProducts] = useState<Product[]>([]);
 
@@ -279,13 +281,15 @@ export default function ProductsPage() {
 
   useEffect(() => {
 
+    // Wait for permissions to load before fetching data
+    if (!permissionsLoaded) return;
 
     const stock = new URLSearchParams(window.location.search).get("stock");
     if (stock === "low" || stock === "out") setStockFilter(stock);
     loadData();
 
 
-  }, []);
+  }, [permissionsLoaded]);
 
 
 
@@ -316,7 +320,11 @@ export default function ProductsPage() {
       return;
     }
 
-    if (!["owner", "admin"].includes(context.role)) {
+    // Check permissions using the staff permissions system
+    const isOwnerOrAdmin = ["owner", "admin"].includes(context.role);
+    const hasInventoryPermission = permissionsLoaded && can("inventory", "view");
+
+    if (!isOwnerOrAdmin && !hasInventoryPermission) {
       setMessage("ليس لديك صلاحية إدارة المخزون");
       setLoading(false);
       return;

@@ -7,6 +7,7 @@ import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { loadClinicProfile, type ClinicProfile } from "@/lib/clinic-profile";
 import { writeVetraThemeMode } from "@/lib/theme";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 const DASHBOARD_BACKGROUND_KEY = "vetra-dashboard-background";
 const DASHBOARD_BACKGROUND_TRANSPARENCY_KEY = "vetra-dashboard-background-transparency";
@@ -299,6 +300,8 @@ function addSixMonths(value: string) {
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { hasPermission, permissionsLoaded } = useStaffPermissions();
+  const [authorized, setAuthorized] = useState<boolean | null>(null);
 
   const [language, setLanguage] = useState<Language>("ar");
   const [darkMode, setDarkMode] = useState(true);
@@ -351,6 +354,12 @@ export default function SettingsPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (permissionsLoaded) {
+      setAuthorized(hasPermission("clinic_settings", "edit"));
+    }
+  }, [permissionsLoaded, hasPermission]);
 
   useEffect(() => {
     if (!ready) return;
@@ -839,7 +848,7 @@ export default function SettingsPage() {
     router.refresh();
   }
 
-  if (!ready || loading) {
+  if (!permissionsLoaded || authorized === null || !ready || loading) {
     return (
       <main
         dir={language === "ar" ? "rtl" : "ltr"}
@@ -850,6 +859,31 @@ export default function SettingsPage() {
         <div className="text-center">
           <div className="mb-3 text-4xl">⚙️</div>
           <p className="text-sm text-slate-500">{t.loading}</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!authorized) {
+    return (
+      <main
+        dir={language === "ar" ? "rtl" : "ltr"}
+        className={`flex min-h-screen items-center justify-center ${
+          darkMode ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-900"
+        }`}
+      >
+        <div className="text-center">
+          <div className="mb-4 text-6xl">🔒</div>
+          <h2 className="mb-2 text-2xl font-bold">{language === "ar" ? "غير مصرح" : "Unauthorized"}</h2>
+          <p className="mb-6 text-slate-500">
+            {language === "ar" ? "ليس لديك صلاحية لتعديل إعدادات العيادة" : "You do not have permission to edit clinic settings"}
+          </p>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="rounded-2xl bg-blue-500 px-6 py-3 font-bold text-white transition hover:bg-blue-600"
+          >
+            {language === "ar" ? "العودة للوحة التحكم" : "Back to Dashboard"}
+          </button>
         </div>
       </main>
     );
