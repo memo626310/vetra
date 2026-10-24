@@ -8,6 +8,8 @@ import { vetraCore } from "@/lib/vetra-core";
 import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
 import { loadClinicProfile } from "@/lib/clinic-profile";
 import { writeVetraThemeMode } from "@/lib/theme";
+import { clearClinicCache, readClinicCache, writeClinicCache } from "@/lib/clinic-cache";
+import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
 
 type Language = "ar" | "en";
 type Status =
@@ -24,6 +26,14 @@ type Client = {
   client_code: string;
   name: string;
   phone: string | null;
+};
+
+type AppointmentsCache = {
+  appointments: Appointment[];
+  clients: Client[];
+  pets: Pet[];
+  settings: Settings | null;
+  clinicName: string;
 };
 
 type Pet = {
@@ -112,6 +122,9 @@ const I = {
     addPet: "إضافة حيوان",
     addBoth: "عميل وحيوان جديد",
     chooseClient: "اختر العميل",
+    searchClient: "ابحث باسم العميل أو الهاتف أو Client ID",
+    changeClient: "تغيير العميل",
+    noMatchingClients: "لا يوجد عملاء مطابقون",
     choosePet: "اختر الحيوان",
     clientName: "اسم العميل",
     phone: "رقم الهاتف",
@@ -196,6 +209,9 @@ const I = {
     addPet: "Add pet",
     addBoth: "New client & pet",
     chooseClient: "Choose client",
+    searchClient: "Search by name, phone, or Client ID",
+    changeClient: "Change client",
+    noMatchingClients: "No matching clients",
     choosePet: "Choose pet",
     clientName: "Client name",
     phone: "Phone",
@@ -296,6 +312,7 @@ export default function AppointmentsPage() {
   const [language, setLanguage] = useState<Language>("ar");
   const [darkMode, setDarkMode] = useState(true);
   const [ready, setReady] = useState(false);
+  const [refreshingCache, setRefreshingCache] = useState(false);
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -318,6 +335,7 @@ export default function AppointmentsPage() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 
   const [clientId, setClientId] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
   const [petId, setPetId] = useState("");
   const [appointmentDate, setAppointmentDate] = useState(localDateInputValue());
   const [startTime, setStartTime] = useState("09:00");
@@ -358,7 +376,7 @@ export default function AppointmentsPage() {
     writeVetraThemeMode(darkMode);
   }, [language, darkMode, ready]);
 
-  async function loadData() {
+  async function loadData(forceRefresh = false) {
     setLoading(true);
     setError("");
 
@@ -366,6 +384,15 @@ export default function AppointmentsPage() {
       const context = await getClinicContext();
       setClinicName(context.clinic_name);
       setClinicId(context.clinic_id);
+
+      const cached = forceRefresh ? null : readClinicCache<AppointmentsCache>(context.clinic_id, "appointments");
+      if (cached) {
+        setAppointments(cached.appointments);
+        setClients(cached.clients);
+        setPets(cached.pets);
+        setSettings(cached.settings);
+        setClinicName(cached.clinicName || context.clinic_name);
+      }
 
       const db = await getClinicDb();
       const clinicProfile = await loadClinicProfile(db, context.clinic_id);
@@ -429,6 +456,14 @@ export default function AppointmentsPage() {
 
         setSettings(createdSettings as Settings);
       }
+
+      writeClinicCache(context.clinic_id, "appointments", {
+        appointments: rows,
+        clients: (cResult.data || []) as Client[],
+        pets: (pResult.data || []) as Pet[],
+        settings: (sResult.data || settings) as Settings | null,
+        clinicName: clinicProfile?.display_name || context.clinic_name,
+      } satisfies AppointmentsCache);
     } catch (e) {
       console.error("APPOINTMENTS LOAD ERROR:", e);
       setError(e instanceof Error ? e.message : t.error);
@@ -440,6 +475,22 @@ export default function AppointmentsPage() {
   useEffect(() => {
     if (ready) void loadData();
   }, [ready]);
+
+  async function refreshCache() {
+    if (!clinicId) return;
+    setRefreshingCache(true);
+    clearClinicCache(clinicId);
+    try {
+      await loadData(true);
+    } finally {
+      setRefreshingCache(false);
+    }
+  }
+
+  async function reloadAfterMutation() {
+    if (clinicId) clearClinicCache(clinicId);
+    await loadData(true);
+  }
 
   const today = localDateInputValue();
 
@@ -495,6 +546,7 @@ export default function AppointmentsPage() {
     setError("");
     setMessage("");
     setClientId("");
+    setClientSearch("");
     setPetId("");
     setAppointmentDate(today);
     setStartTime("09:00");
@@ -562,7 +614,7 @@ export default function AppointmentsPage() {
       }
 
       setMessage(t.appointmentSaved);
-      await loadData();
+      await reloadAfterMutation();
     } catch (e) {
       console.error("APPOINTMENT STATUS ERROR:", e);
       setError(e instanceof Error ? e.message : t.error);
@@ -681,7 +733,7 @@ export default function AppointmentsPage() {
 
       setModal(null);
       setMessage(t.appointmentSaved);
-      await loadData();
+      await reloadAfterMutation();
     } catch (e) {
       const dbError = e as { message?: string; code?: string; details?: string; hint?: string };
       console.error("APPOINTMENT SAVE ERROR:", {
@@ -719,7 +771,7 @@ export default function AppointmentsPage() {
       setNewClientPhone("");
       setMessage(t.clientSaved);
       setClientId(data.id);
-      await loadData();
+      await reloadAfterMutation();
 
       if (nextModal === "both") {
         setModal("pet");
@@ -761,7 +813,7 @@ export default function AppointmentsPage() {
       setNewPetGender("");
       setNewPetBirthDate("");
       setMessage(t.petSaved);
-      await loadData();
+      await reloadAfterMutation();
       setModal(nextModal);
     } catch (e) {
       console.error("NEW PET ERROR:", e);
@@ -818,7 +870,7 @@ export default function AppointmentsPage() {
       setNewPetBirthDate("");
       setMessage(t.clientSaved + " " + t.petSaved);
       setModal("appointment");
-      await loadData();
+      await reloadAfterMutation();
     } catch (e) {
       console.error("NEW CLIENT + PET ERROR:", e);
       setError(e instanceof Error ? e.message : t.error);
@@ -906,6 +958,7 @@ export default function AppointmentsPage() {
     setNewPetBreed("");
     setNewPetGender("");
     setNewPetBirthDate("");
+    setClientSearch("");
     setError("");
   };
 
@@ -933,6 +986,16 @@ export default function AppointmentsPage() {
     } as Record<Status, string>)[status];
   };
 
+  const selectedClient = clients.find((client) => client.id === clientId) || null;
+  const normalizedClientSearch = clientSearch.trim().toLocaleLowerCase();
+  const matchingClients = clients
+    .filter((client) => {
+      if (!normalizedClientSearch) return true;
+      return [client.name, client.phone || "", client.client_code || ""]
+        .some((value) => value.toLocaleLowerCase().includes(normalizedClientSearch));
+    })
+    .slice(0, 8);
+
   return (
     <main
       dir={language === "ar" ? "rtl" : "ltr"}
@@ -951,6 +1014,7 @@ export default function AppointmentsPage() {
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setLanguage(language === "ar" ? "en" : "ar")} className={`rounded-2xl border px-4 py-3 text-sm font-bold ${darkMode ? "border-white/10 bg-[#171A20]" : "border-slate-200 bg-white"}`}>🌐 {t.language}</button>
             <button onClick={() => setDarkMode((v) => !v)} className={`rounded-2xl border px-4 py-3 text-sm font-bold ${darkMode ? "border-white/10 bg-[#171A20]" : "border-slate-200 bg-white"}`}>{darkMode ? "☀️" : "🌙"}</button>
+            <ClinicCacheRefreshButton ar={language === "ar"} darkMode={darkMode} loading={refreshingCache} onRefresh={() => void refreshCache()} />
             <button onClick={openNewAppointment} className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-blue-700">+ {t.newAppointment}</button>
           </div>
         </header>
@@ -1173,10 +1237,50 @@ export default function AppointmentsPage() {
 
                   <div>
                     <label className="mb-2 block text-sm font-bold">{t.chooseClient}</label>
-                    <select value={clientId} onChange={(e) => { setClientId(e.target.value); setPetId(""); }} className={`w-full rounded-2xl border px-4 py-3 ${darkMode ? "border-white/10 bg-[#0F1115]" : "border-slate-200 bg-slate-50"}`}>
-                      <option value="">{t.chooseClient}</option>
-                      {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ""}</option>)}
-                    </select>
+                    {selectedClient ? (
+                      <div className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${darkMode ? "border-teal-400/30 bg-teal-500/10" : "border-teal-200 bg-teal-50"}`}>
+                        <div className="min-w-0">
+                          <p className="truncate font-bold">{selectedClient.name}</p>
+                          <p className="mt-1 truncate text-xs text-slate-500" dir="ltr">
+                            {selectedClient.client_code}{selectedClient.phone ? ` · ${selectedClient.phone}` : ""}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setClientId(""); setClientSearch(""); setPetId(""); }}
+                          className="shrink-0 rounded-xl px-3 py-2 text-xs font-bold text-teal-400 hover:bg-white/[0.06]"
+                        >
+                          {t.changeClient}
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <input
+                          value={clientSearch}
+                          onChange={(event) => setClientSearch(event.target.value)}
+                          placeholder={t.searchClient}
+                          autoComplete="off"
+                          className={`w-full rounded-2xl border px-4 py-3 outline-none transition focus:border-blue-500 ${darkMode ? "border-white/10 bg-[#0F1115]" : "border-slate-200 bg-slate-50"}`}
+                        />
+                        <div className={`mt-2 max-h-52 overflow-y-auto rounded-2xl border p-1 ${darkMode ? "border-white/10 bg-[#0F1115]" : "border-slate-200 bg-white"}`}>
+                          {matchingClients.length > 0 ? matchingClients.map((client) => (
+                            <button
+                              key={client.id}
+                              type="button"
+                              onClick={() => { setClientId(client.id); setClientSearch(""); setPetId(""); }}
+                              className={`w-full rounded-xl px-3 py-2.5 text-start transition ${darkMode ? "hover:bg-white/[0.06]" : "hover:bg-slate-50"}`}
+                            >
+                              <span className="block font-bold">{client.name}</span>
+                              <span className="mt-1 block text-xs text-slate-500" dir="ltr">
+                                {client.client_code}{client.phone ? ` · ${client.phone}` : ""}
+                              </span>
+                            </button>
+                          )) : (
+                            <p className="px-3 py-3 text-sm text-slate-500">{t.noMatchingClients}</p>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div>

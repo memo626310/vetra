@@ -108,7 +108,9 @@ export default function NewInvoicePage() {
   const [discount, setDiscount] = useState("0");
   const [discountMode, setDiscountMode] = useState<"amount" | "percentage">("amount");
   const [paidAmount, setPaidAmount] = useState("0");
+  const [paidAmountTouched, setPaidAmountTouched] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("");
+  const [billingMode, setBillingMode] = useState<"cash" | "credit">("cash");
   const [notes, setNotes] = useState("");
 
   const [showScanner, setShowScanner] = useState(false);
@@ -296,8 +298,27 @@ export default function NewInvoicePage() {
           details: [row.calculated_dose != null ? `${row.calculated_dose} ${row.calculated_dose_unit || ""}` : "", row.calculated_volume != null ? `${row.calculated_volume} ${row.volume_unit || "mL"}` : "", row.route, row.frequency, row.duration_days ? `${row.duration_days} days` : ""].filter(Boolean).join(" · "),
         }));
         const selectedNames = new Set(visitMedicationDrafts.map((draft) => normalizeProductName(draft.name)));
-        const structuredTreatmentDrafts = String(visitBillingData?.treatment || "").split(/\r?\n/).map((rawLine) => {
-          const line = rawLine.trim();
+        const treatmentLines = String(visitBillingData?.treatment || "").split(/\r?\n/).map((rawLine) => rawLine.trim()).filter(Boolean);
+        const serviceLines: InvoiceLine[] = treatmentLines.flatMap((line) => {
+          const match = line.match(/^(.+?)\s*[×x]\s*(\d+(?:\.\d+)?)\s*\((\d+(?:\.\d+)?)\s*EGP\)$/i);
+          if (!match) return [];
+          const name = match[1].trim();
+          const quantity = Number(match[2]);
+          const unitPrice = Number(match[3]);
+          if (!name || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0) return [];
+          return [{
+            key: crypto.randomUUID(),
+            item_type: "service",
+            product_id: null,
+            service_name: name,
+            description: name,
+            quantity,
+            unit_price: unitPrice,
+            discount: 0,
+            available_quantity: null,
+          }];
+        });
+        const structuredTreatmentDrafts = treatmentLines.map((line) => {
           const externalMatch = line.match(/^\[DrugEye\s*\/[^\]]*\]\s*(.+?)(?:\s+\([^)]*\))?:\s*(.*)$/i);
           if (externalMatch) return { name: externalMatch[1].trim(), details: externalMatch[2].trim() };
           if (line.includes(" - ") && /\b(?:IV|IM|SC|PO|oral|intravenous|intramuscular|subcutaneous)\b/i.test(line)) {
@@ -378,7 +399,7 @@ export default function NewInvoicePage() {
             autoMedication: false,
           }];
         });
-        setLines([consultationLine, ...billableVisitLines, ...drawerMedicationLines]);
+        setLines([consultationLine, ...serviceLines, ...billableVisitLines, ...drawerMedicationLines]);
         if (missing.length) setInvoiceMedicationNotice(language === "ar"
           ? `أُضيفت الأدوية غير المطابقة كبنود بدون سعر/مخزون: ${[...new Set(missing)].join("، ")}. اربط اسم الدواء بمنتج مخزون مطابق أو حدّد سعره قبل الإصدار.`
           : `Medications without a matching inventory product were added without price/stock: ${[...new Set(missing)].join(", ")}. Match them to an inventory product or enter their price before issuing.`);
@@ -402,6 +423,10 @@ export default function NewInvoicePage() {
       setFinancialAccountId("");
       return;
     }
+    if (billingMode === "credit") {
+      setFinancialAccountId("");
+      return;
+    }
     const preferredType = paymentMethod === "cash" ? "cash"
       : paymentMethod === "card" ? "card"
       : paymentMethod === "wallet" ? "wallet"
@@ -416,7 +441,7 @@ export default function NewInvoicePage() {
         ? current
         : preferred?.id || ""
     );
-  }, [paymentMethod, financialAccounts]);
+  }, [billingMode, paymentMethod, financialAccounts]);
 
   useEffect(() => {
     if (!clientId) {
@@ -519,6 +544,23 @@ export default function NewInvoicePage() {
   const total = Math.max(0, subtotal - invoiceDiscount);
   const paid = Math.max(0, Number(paidAmount) || 0);
   const remaining = Math.max(0, total - paid);
+  const clientCredit = Math.max(0, paid - total);
+
+  useEffect(() => {
+    if (billingMode === "cash") {
+      setPaymentMethod("cash");
+      if (!paidAmountTouched) setPaidAmount(total.toFixed(2));
+    } else {
+      setPaidAmount("0");
+      setPaymentMethod("");
+      setFinancialAccountId("");
+    }
+  }, [billingMode, paidAmountTouched, total]);
+
+  function changeBillingMode(mode: "cash" | "credit") {
+    setPaidAmountTouched(false);
+    setBillingMode(mode);
+  }
 
   function addProduct(product: Product) {
     setMessage("");
@@ -758,24 +800,9 @@ export default function NewInvoicePage() {
       }
     }
 
-    if (paid > total) {
-      setMessage(
-        language === "ar"
-          ? "المبلغ المدفوع لا يمكن أن يكون أكبر من الإجمالي."
-          : "Paid amount cannot exceed the invoice total."
-      );
-      return;
-    }
-    if (!issueAfterSave && paid > 0) {
-      setMessage(
-        language === "ar"
-          ? "التحصيل يتسجل مع إصدار الفاتورة فقط. صفّر المدفوع لحفظ مسودة، أو أصدر الفاتورة لتسجيله في الخزنة."
-          : "A receipt is posted only when the invoice is issued. Set paid amount to zero to save a draft, or issue the invoice to record the receipt."
-      );
-      return;
-    }
+    const amountToCollect = issueAfterSave && billingMode === "cash" ? paid : 0;
 
-    if (paid > 0 && (!paymentMethod || !financialAccountId)) {
+    if (amountToCollect > 0 && (!paymentMethod || !financialAccountId)) {
       setMessage(
         language === "ar"
           ? "اختار طريقة الدفع والحساب المالي قبل تسجيل التحصيل."
@@ -850,7 +877,7 @@ setSaving(true);
         pet_id: petId || null,
         visit_id: visitId || null,
         status: "draft",
-        payment_method: null,
+        payment_method: issueAfterSave ? billingMode : null,
         subtotal,
         discount: invoiceDiscount,
         total,
@@ -932,11 +959,12 @@ setSaving(true);
         setSaving(false);
         return;
       }
-    }    if (issueAfterSave && paid > 0) {
+    }
+    if (amountToCollect > 0) {
       const { error: receiptError } = await db.rpc("vetra_record_invoice_payment", {
         p_invoice_id: invoice.id,
         p_account_id: financialAccountId,
-        p_amount: paid,
+        p_amount: amountToCollect,
         p_payment_method: paymentMethod,
         p_reference: null,
         p_notes: notes.trim() || null,
@@ -1012,7 +1040,7 @@ setSuccess(
               : "You do not have permission to create invoices. Ask your clinic admin to enable invoice creation."}
           </p>
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/dashboard")}
             className="mt-6 rounded-2xl bg-blue-600 px-6 py-3 font-semibold text-white"
           >
             {language === "ar" ? "العودة للرئيسية" : "Back to dashboard"}
@@ -1569,28 +1597,31 @@ setSuccess(
 
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-500">
-                    {language === "ar" ? "طريقة الدفع" : "Payment method"}
+                    {language === "ar" ? "نوع الفاتورة" : "Billing type"}
                   </label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className={`w-full rounded-2xl border px-4 py-3 outline-none ${
-                      darkMode
-                        ? "border-white/[0.07] bg-[#0F1115]"
-                        : "border-slate-200 bg-slate-50"
-                    }`}
-                  >
-                    <option value="">
-                      {language === "ar" ? "لم يتم تحديدها" : "Not specified"}
-                    </option>
-                    <option value="cash">Cash</option>
-                    <option value="card">Card</option>
-                    <option value="wallet">Wallet</option>
-                    <option value="bank_transfer">Bank transfer</option>
-                    <option value="other">Other</option>
-                  </select>
+                  <div className={`grid grid-cols-2 gap-1 rounded-2xl p-1 ${darkMode ? "bg-[#0F1115]" : "bg-slate-100"}`}>
+                    <button
+                      type="button"
+                      onClick={() => changeBillingMode("cash")}
+                      className={`rounded-xl px-3 py-3 text-sm font-bold transition ${billingMode === "cash" ? (darkMode ? "bg-emerald-500/20 text-emerald-300" : "bg-white text-emerald-700 shadow-sm") : "text-slate-500"}`}
+                    >
+                      {language === "ar" ? "كاش" : "Cash"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => changeBillingMode("credit")}
+                      className={`rounded-xl px-3 py-3 text-sm font-bold transition ${billingMode === "credit" ? (darkMode ? "bg-amber-500/20 text-amber-300" : "bg-white text-amber-700 shadow-sm") : "text-slate-500"}`}
+                    >
+                      {language === "ar" ? "آجل" : "Credit"}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {billingMode === "cash"
+                      ? (language === "ar" ? "المدفوع قابل للتعديل؛ الأقل يترك مستحقًا، والأعلى يتحول لرصيد للعميل." : "Adjust the paid amount; a short payment remains due and an excess becomes client credit.")
+                      : (language === "ar" ? "سيتم إصدار الفاتورة برصيد مستحق بدون تحصيل." : "The invoice will be issued with an outstanding balance.")}
+                  </p>
                 </div>
-                <div>
+                {billingMode === "cash" && <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-500">
                     {language === "ar" ? "الحساب المستلم للمبلغ" : "Account receiving payment"}
                   </label>
@@ -1622,12 +1653,12 @@ setSuccess(
                   </select>
                   <p className="mt-2 text-xs text-slate-500">
                     {language === "ar"
-                      ? "سيتم فتح وردية الخزنة تلقائيًا عند إصدار الفاتورة أو تحصيل دفعة."
-                      : "Cash register sessions open automatically when a sales invoice is issued or a customer payment is collected."}
+                      ? "الخزنة الرئيسية النقدية يتم اختيارها تلقائيًا، وتُفتح ورديتها عند الإصدار إذا لزم."
+                      : "The default cash register is selected automatically and opens its session on issue if needed."}
                   </p>
-                </div>
+                </div>}
 
-                <div>
+                <div className={billingMode === "credit" ? "hidden" : ""}>
                   <label className="mb-2 block text-sm font-semibold text-slate-500">
                     {language === "ar" ? "المدفوع" : "Paid amount"}
                   </label>
@@ -1636,7 +1667,10 @@ setSuccess(
                     min="0"
                     step="0.01"
                     value={paidAmount}
-                    onChange={(e) => setPaidAmount(e.target.value)}
+                    onChange={(e) => {
+                      setPaidAmountTouched(true);
+                      setPaidAmount(e.target.value);
+                    }}
                     className={`w-full rounded-2xl border px-4 py-3 outline-none focus:border-blue-500 ${
                       darkMode
                         ? "border-white/[0.07] bg-[#0F1115]"
@@ -1652,6 +1686,14 @@ setSuccess(
                     </span>
                     <strong>{money(remaining)} EGP</strong>
                   </div>
+                  {clientCredit > 0 && (
+                    <div className="mt-2 flex justify-between text-sm">
+                      <span className="text-emerald-600 dark:text-emerald-300">
+                        {language === "ar" ? "رصيد للعميل" : "Client credit"}
+                      </span>
+                      <strong className="text-emerald-600 dark:text-emerald-300">{money(clientCredit)} EGP</strong>
+                    </div>
+                  )}
                 </div>
 
                 <div>

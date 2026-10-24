@@ -2,7 +2,9 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { getClinicDb } from "@/lib/clinic-db";
+import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
+import { clearClinicCache, readClinicCache, writeClinicCache } from "@/lib/clinic-cache";
+import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
 
 type Visit = {
   id: string;
@@ -27,6 +29,13 @@ type VisitDraft = {
   weight: string; temperature: string; heart_rate: string; respiratory_rate: string; notes: string;
 };
 const COLUMNS = "id,client_id,pet_id,visit_date,reason,examination,diagnosis,treatment,weight,temperature,heart_rate,respiratory_rate,notes";
+
+type VisitsCache = {
+  visits: Visit[];
+  petsById: Record<string, Pet>;
+  clientsById: Record<string, Client>;
+  vaccinationsByVisit: Record<string, Vaccination[]>;
+};
 
 function localDateTime(value: string) {
   const date = new Date(value);
@@ -75,12 +84,23 @@ export default function VisitHistoryDashboardPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Visit | null>(null);
   const [draft, setDraft] = useState<VisitDraft | null>(null);
+  const [clinicId, setClinicId] = useState("");
+  const [refreshingCache, setRefreshingCache] = useState(false);
   const ar = language === "ar";
 
-  const loadVisits = useCallback(async () => {
+  const loadVisits = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     setError("");
     try {
+      const context = await getClinicContext();
+      setClinicId(context.clinic_id);
+      const cached = forceRefresh ? null : readClinicCache<VisitsCache>(context.clinic_id, "visit-history");
+      if (cached) {
+        setVisits(cached.visits);
+        setPetsById(cached.petsById);
+        setClientsById(cached.clientsById);
+        setVaccinationsByVisit(cached.vaccinationsByVisit);
+      }
       const db = await getClinicDb();
       const { data, error: visitsError } = await db.from("visits").select(COLUMNS).order("visit_date", { ascending: false }).limit(500);
       if (visitsError) throw visitsError;
@@ -111,13 +131,17 @@ export default function VisitHistoryDashboardPage() {
         if (result.error) throw result.error;
         clients = (result.data || []) as Client[];
       }
-      setVisits(loaded);
-      setVaccinationsByVisit(vaccinations.reduce<Record<string, Vaccination[]>>((grouped, vaccination) => {
+      const nextVaccinations = vaccinations.reduce<Record<string, Vaccination[]>>((grouped, vaccination) => {
         (grouped[vaccination.visit_id] ||= []).push(vaccination);
         return grouped;
-      }, {}));
-      setPetsById(Object.fromEntries(pets.map((item) => [item.id, item])));
-      setClientsById(Object.fromEntries(clients.map((item) => [item.id, item])));
+      }, {});
+      const nextPetsById = Object.fromEntries(pets.map((item) => [item.id, item]));
+      const nextClientsById = Object.fromEntries(clients.map((item) => [item.id, item]));
+      setVisits(loaded);
+      setVaccinationsByVisit(nextVaccinations);
+      setPetsById(nextPetsById);
+      setClientsById(nextClientsById);
+      writeClinicCache(context.clinic_id, "visit-history", { visits: loaded, petsById: nextPetsById, clientsById: nextClientsById, vaccinationsByVisit: nextVaccinations } satisfies VisitsCache);
     } catch (err) {
       console.error("DASHBOARD VISITS LOAD ERROR:", err);
       setError(err instanceof Error ? err.message : "تعذر تحميل سجل الزيارات.");
@@ -125,6 +149,17 @@ export default function VisitHistoryDashboardPage() {
       setLoading(false);
     }
   }, []);
+
+  async function refreshCache() {
+    if (!clinicId) return;
+    setRefreshingCache(true);
+    clearClinicCache(clinicId);
+    try {
+      await loadVisits(true);
+    } finally {
+      setRefreshingCache(false);
+    }
+  }
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => { void loadVisits(); });
@@ -176,6 +211,7 @@ export default function VisitHistoryDashboardPage() {
       setVisits((current) => current.map((visit) => visit.id === editing.id ? data as Visit : visit));
       setEditing(null); setDraft(null);
       setMessage(ar ? "تم حفظ تعديلات الزيارة بنجاح." : "Visit changes saved.");
+      if (clinicId) clearClinicCache(clinicId);
     } catch (err) {
       console.error("DASHBOARD VISIT EDIT ERROR:", err);
       setError(err instanceof Error ? err.message : (ar ? "تعذر حفظ تعديلات الزيارة." : "Could not save visit changes."));
@@ -219,6 +255,7 @@ export default function VisitHistoryDashboardPage() {
       setVisits((current) => current.filter((visit) => visit.id !== deleting.id));
       setDeleting(null); setExpandedId(null);
       setMessage(ar ? "تم حذف الزيارة. الفواتير محفوظة كسجلات مالية منفصلة." : "Visit deleted. Bills remain as separate financial records.");
+      if (clinicId) clearClinicCache(clinicId);
     } catch (err) {
       console.error("DASHBOARD VISIT DELETE ERROR:", err);
       setError(err instanceof Error ? err.message : (ar ? "تعذر حذف الزيارة." : "Could not delete visit."));
@@ -259,6 +296,7 @@ export default function VisitHistoryDashboardPage() {
           <div className="min-w-0"><h1 className="text-2xl font-black sm:text-3xl">{text.title}</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{text.subtitle}</p></div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setLanguage(ar ? "en" : "ar")} className="rounded-lg border border-[#414849] bg-[#292e2f] px-3 py-2 text-sm font-bold">{ar ? "English" : "العربية"}</button>
+            <ClinicCacheRefreshButton ar={ar} darkMode loading={refreshingCache} onRefresh={() => void refreshCache()} />
             <Link href="/visits/new" className="rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-bold text-slate-950">{ar ? "بدء زيارة" : "Start visit"}</Link>
             <Link href="/dashboard" className="rounded-xl bg-[#0B2540] px-4 py-2.5 text-sm font-bold text-white">{text.back}</Link>
           </div>

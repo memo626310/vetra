@@ -105,7 +105,7 @@ export default function NewVisitClinicalFields(props: Props) {
                   )}
                 </div>
 
-                <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-4">
+                <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-4 lg:col-span-2 lg:grid-cols-4">
                 <div className="min-w-0">
                   <label
                     className={`mb-2 block text-sm font-semibold ${
@@ -147,9 +147,8 @@ export default function NewVisitClinicalFields(props: Props) {
                     darkMode={darkMode}
                   />
                 </div>
-                </div>
 
-                <div>
+                <div className="min-w-0">
                   <label
                     className={`mb-2 block text-sm font-semibold ${
                       darkMode ? "text-slate-300" : "text-slate-700"
@@ -157,21 +156,20 @@ export default function NewVisitClinicalFields(props: Props) {
                   >
                     {t.heartRate}
                   </label>
-                  <input
-                    type="number"
-                    min="0"
+                  <WheelPicker
                     value={heartRate}
-                    onChange={(e) => setHeartRate(e.target.value)}
-                    placeholder="120"
-                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
+                    onChange={setHeartRate}
+                    min={20}
+                    max={300}
+                    step={1}
+                    unit={t.bpm}
+                    defaultValue={120}
+                    hint={t.wheelSwipeHint}
+                    darkMode={darkMode}
                   />
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <label
                     className={`mb-2 block text-sm font-semibold ${
                       darkMode ? "text-slate-300" : "text-slate-700"
@@ -179,18 +177,18 @@ export default function NewVisitClinicalFields(props: Props) {
                   >
                     {t.respiratoryRate}
                   </label>
-                  <input
-                    type="number"
-                    min="0"
+                  <WheelPicker
                     value={respiratoryRate}
-                    onChange={(e) => setRespiratoryRate(e.target.value)}
-                    placeholder="30"
-                    className={`w-full rounded-xl border px-4 py-3 outline-none transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
-                      darkMode
-                        ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
-                        : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                    }`}
+                    onChange={setRespiratoryRate}
+                    min={5}
+                    max={120}
+                    step={1}
+                    unit={t.rpm}
+                    defaultValue={30}
+                    hint={t.wheelSwipeHint}
+                    darkMode={darkMode}
                   />
+                </div>
                 </div>
 
                 <div>

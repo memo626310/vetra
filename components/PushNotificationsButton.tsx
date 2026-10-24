@@ -163,7 +163,7 @@ export default function PushNotificationsButton({
     }
   }
 
-  async function enable() {
+  async function enable(): Promise<boolean> {
     setBusy(true);
     setNotice("");
     try {
@@ -187,8 +187,11 @@ export default function PushNotificationsButton({
       await sendRequest("/api/push/subscriptions", "POST", current);
       setSubscription(current);
       setNotice(t.enabled);
+      return true;
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Push notification setup failed.");
+      setOpen(true);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -205,9 +208,22 @@ export default function PushNotificationsButton({
       setNotice(language === "ar" ? "تم إيقاف الإشعارات على هذا الجهاز." : "Notifications are off on this device.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not turn notifications off.");
+      setOpen(true);
     } finally {
       setBusy(false);
     }
+  }
+
+  async function toggleNotifications() {
+    if (busy) return;
+
+    if (subscription) {
+      await disable();
+      return;
+    }
+
+    const enabled = await enable();
+    if (enabled) await sendTest();
   }
 
   async function sendTest() {
@@ -233,14 +249,13 @@ export default function PushNotificationsButton({
     <div className="relative">
       <button
         type="button"
-        onClick={() => {
-          setOpen((value) => !value);
-          setNotice("");
-        }}
-        aria-label={t.open}
+        onClick={() => void toggleNotifications()}
+        disabled={busy}
+        aria-label={subscription ? t.disable : t.enable}
+        aria-pressed={Boolean(subscription)}
         aria-expanded={open}
-        title={t.open}
-        className={`relative flex h-10 w-10 items-center justify-center rounded-2xl border transition active:scale-95 sm:h-12 sm:w-12 ${buttonClass}`}
+        title={subscription ? t.disable : t.enable}
+        className={`relative flex h-10 w-10 items-center justify-center rounded-2xl border transition active:scale-95 disabled:cursor-wait disabled:opacity-60 sm:h-12 sm:w-12 ${buttonClass}`}
       >
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />

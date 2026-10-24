@@ -501,7 +501,7 @@ export default function PrescriptionPage() {
             >
               Retry
             </button>
-            <Link href="/" className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
+            <Link href="/dashboard" className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
               Dashboard
             </Link>
           </div>

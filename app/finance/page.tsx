@@ -19,6 +19,7 @@ type Account = {
 };
 type Invoice = {
   id: string;
+  client_id: string | null;
   invoice_number: number;
   status: string;
   total: number | null;
@@ -30,10 +31,22 @@ type Invoice = {
 };
 type CustomerBalance = {
   key: string;
+  clientId: string | null;
   name: string;
   phone: string | null;
   due: number;
+  credit: number;
   invoices: Invoice[];
+};
+type ClientCredit = {
+  id: string;
+  client_id: string;
+  invoice_id: string | null;
+  direction: "credit" | "debit";
+  amount: number;
+  description: string | null;
+  created_at: string;
+  client?: { name?: string; phone?: string | null } | null;
 };
 type Transaction = {
   id: string;
@@ -103,6 +116,7 @@ export default function FinancePage() {
   const [notice, setNotice] = useState("");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [clientCredits, setClientCredits] = useState<ClientCredit[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showPayment, setShowPayment] = useState(false);
   const [invoiceId, setInvoiceId] = useState("");
@@ -127,14 +141,24 @@ export default function FinancePage() {
     for (const invoice of receivableInvoices) {
       const name = invoice.client?.name || (isAr ? "عميل غير محدد" : "Unknown client");
       const phone = invoice.client?.phone || null;
-      const key = `${name}|${phone || ""}`;
-      const current = grouped.get(key) || { key, name, phone, due: 0, invoices: [] };
+      const key = invoice.client_id || `${name}|${phone || ""}`;
+      const current = grouped.get(key) || { key, clientId: invoice.client_id, name, phone, due: 0, credit: 0, invoices: [] };
       current.due += Math.max(Number(invoice.total || 0) - Number(invoice.paid_amount || 0), 0);
       current.invoices.push(invoice);
       grouped.set(key, current);
     }
-    return [...grouped.values()].sort((a, b) => b.due - a.due);
-  }, [receivableInvoices, isAr]);
+    for (const credit of clientCredits) {
+      const name = credit.client?.name || (isAr ? "عميل غير محدد" : "Unknown client");
+      const phone = credit.client?.phone || null;
+      const key = credit.client_id || `${name}|${phone || ""}`;
+      const current = grouped.get(key) || { key, clientId: credit.client_id, name, phone, due: 0, credit: 0, invoices: [] };
+      current.credit += credit.direction === "credit" ? Number(credit.amount || 0) : -Number(credit.amount || 0);
+      grouped.set(key, current);
+    }
+    return [...grouped.values()]
+      .filter((customer) => customer.due > 0.009 || customer.credit > 0.009)
+      .sort((a, b) => (b.due - a.due) || (b.credit - a.credit));
+  }, [receivableInvoices, clientCredits, isAr]);
   const selectedInvoice = receivableInvoices.find((x) => x.id === invoiceId) || null;
   const selectedAccount = accounts.find((x) => x.id === accountId) || null;
   const today = new Date();
@@ -184,25 +208,32 @@ export default function FinancePage() {
       }
       setAuthorized(true);
       const db = await getClinicDb();
-      const [accountResult, invoiceResult, transactionResult] = await Promise.all([
+      const [accountResult, invoiceResult, transactionResult, creditResult] = await Promise.all([
         db.from("financial_account_balances")
           .select("id,clinic_id,name,account_type,requires_session,current_balance,is_active,is_default")
           .eq("clinic_id", context.clinic_id).eq("is_active", true).order("name"),
         db.from("invoices")
-          .select("id,invoice_number,status,total,paid_amount,payment_method,issued_at,created_at,client:clients(name,phone)")
+          .select("id,client_id,invoice_number,status,total,paid_amount,payment_method,issued_at,created_at,client:clients(name,phone)")
           .eq("clinic_id", context.clinic_id).order("created_at", { ascending: false }).limit(2000),
         db.from("financial_transactions")
           .select("id,account_id,direction,transaction_type,amount,description,category,payment_method,transaction_at,reference,counterparty_name,related_invoice_id")
           .eq("clinic_id", context.clinic_id).order("transaction_at", { ascending: false }).limit(200),
+        db.from("client_credit_ledger")
+          .select("id,client_id,invoice_id,direction,amount,description,created_at,client:clients(name,phone)")
+          .eq("clinic_id", context.clinic_id).order("created_at", { ascending: false }).limit(2000),
       ]);
       if (accountResult.error) throw new Error(`${isAr ? "تعذر تحميل الخزن" : "Could not load accounts"}: ${accountResult.error.message}`);
       if (invoiceResult.error) throw new Error(`${isAr ? "تعذر تحميل الفواتير" : "Could not load invoices"}: ${invoiceResult.error.message}`);
       if (transactionResult.error) throw new Error(`${isAr ? "تعذر تحميل حركة الخزنة" : "Could not load transactions"}: ${transactionResult.error.message}`);
+      if (creditResult.error && !/relation .*client_credit_ledger.*does not exist|client_credit_ledger.*not found/i.test(creditResult.error.message)) {
+        throw new Error(`${isAr ? "تعذر تحميل أرصدة العملاء" : "Could not load customer credits"}: ${creditResult.error.message}`);
+      }
       const accountRows = (accountResult.data || []) as Account[];
       const invoiceRows = (invoiceResult.data || []) as unknown as Invoice[];
       setAccounts(accountRows);
       setInvoices(invoiceRows);
       setTransactions((transactionResult.data || []) as Transaction[]);
+      setClientCredits((creditResult.error ? [] : (creditResult.data || [])) as ClientCredit[]);
       const defaultAccount = accountRows.find((a) => a.account_type === "cash" && a.is_default) || accountRows[0];
       setAccountId((current) => current && accountRows.some((a) => a.id === current) ? current : defaultAccount?.id || "");
       const due = invoiceRows.find((i) => !["draft", "cancelled", "returned"].includes(i.status) && Number(i.total || 0) > Number(i.paid_amount || 0));
@@ -437,7 +468,7 @@ export default function FinancePage() {
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
             {customerBalances.map((customer) => (
               <div key={customer.key} className={`rounded-2xl border p-4 ${dark ? "border-white/[0.06] bg-[#0F1115]" : "border-slate-100 bg-slate-50"}`}>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-black">{customer.name}</p>{customer.phone && <p dir="ltr" className="mt-1 text-xs text-slate-500">{customer.phone}</p>}<p className="mt-1 text-xs text-slate-500">{customer.invoices.length} {isAr ? "فواتير مستحقة" : "invoices due"}</p></div><div className="flex flex-wrap items-center gap-2 sm:justify-end"><p className="ml-2 font-black text-amber-500">{money(customer.due, lang)}</p><button type="button" onClick={() => openCustomerPayment(customer, false)} disabled={savingPayment} className="rounded-lg border border-amber-400/40 px-3 py-2 text-xs font-bold text-amber-500">{isAr ? "دفعة جزئية من الإجمالي" : "Partial total payment"}</button><button type="button" onClick={() => openCustomerPayment(customer, true)} disabled={savingPayment} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">{isAr ? "تسديد كل الفواتير" : "Pay all invoices"}</button></div></div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-black">{customer.name}</p>{customer.phone && <p dir="ltr" className="mt-1 text-xs text-slate-500">{customer.phone}</p>}<p className="mt-1 text-xs text-slate-500">{customer.invoices.length} {isAr ? "فواتير مستحقة" : "invoices due"}</p></div><div className="flex flex-wrap items-center gap-2 sm:justify-end">{customer.due > 0.009 && <><p className="ml-2 font-black text-amber-500">{isAr ? "عليه " : "Due "}{money(customer.due, lang)}</p><button type="button" onClick={() => openCustomerPayment(customer, false)} disabled={savingPayment} className="rounded-lg border border-amber-400/40 px-3 py-2 text-xs font-bold text-amber-500">{isAr ? "دفعة جزئية من الإجمالي" : "Partial total payment"}</button><button type="button" onClick={() => openCustomerPayment(customer, true)} disabled={savingPayment} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">{isAr ? "تسديد كل الفواتير" : "Pay all invoices"}</button></>}{customer.credit > 0.009 && <p className="font-black text-emerald-500">{isAr ? "رصيده " : "Client credit "}{money(customer.credit, lang)}</p>}</div></div>
                 <div className="mt-4 space-y-2">
                   {customer.invoices.map((invoice) => {
                     const due = Math.max(Number(invoice.total || 0) - Number(invoice.paid_amount || 0), 0);
@@ -455,7 +486,7 @@ export default function FinancePage() {
                 </div>}
               </div>
             ))}
-            {!customerBalances.length && <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-slate-500 lg:col-span-2">{isAr ? "لا توجد مبالغ مستحقة على العملاء." : "No customer balances are due."}</div>}
+            {!customerBalances.length && <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-slate-500 lg:col-span-2">{isAr ? "لا توجد مبالغ مستحقة أو أرصدة دائنة للعملاء." : "No customer balances or credits."}</div>}
           </div>
         </section>}
 

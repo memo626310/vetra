@@ -4,7 +4,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { getClinicDb } from "@/lib/clinic-db";
+import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
+import { clearClinicCache } from "@/lib/clinic-cache";
 
 type ClientForm = {
   client_code: string;
@@ -140,6 +141,8 @@ export default function EditClientPage() {
       setSuccess(
         "تم حفظ بيانات العميل بنجاح ✓ جاري الرجوع إلى ملف العميل..."
       );
+      const context = await getClinicContext();
+      clearClinicCache(context.clinic_id);
       setSaving(false);
 
       window.setTimeout(() => {

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getClinicDb } from "@/lib/clinic-db";
+import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
+import { clearClinicCache } from "@/lib/clinic-cache";
 
 type Pet = {
   id: string;
@@ -308,6 +309,8 @@ export default function EditPetPage() {
       }
 
       setPet(data as Pet);
+      const context = await getClinicContext();
+      clearClinicCache(context.clinic_id);
 
       setPhotoUrl(
         finalPhotoUrl

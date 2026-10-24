@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getClinicDb } from "@/lib/clinic-db";
+import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
+import { clearClinicCache, readClinicCache, writeClinicCache } from "@/lib/clinic-cache";
+import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
 
 type Pet = {
   id: string;
@@ -35,18 +37,24 @@ type SortOption = "newest" | "name" | "lastVisit";
 
 export default function PetsPage() {
   const [pets, setPets] = useState<PetWithClient[]>([]);
+  const [clinicId, setClinicId] = useState("");
   const [search, setSearch] = useState("");
   const [speciesFilter, setSpeciesFilter] =
     useState<SpeciesFilter>("all");
   const [sortBy, setSortBy] =
     useState<SortOption>("newest");
   const [loading, setLoading] = useState(true);
+  const [refreshingCache, setRefreshingCache] = useState(false);
 
-  useEffect(() => {
-    async function loadPets() {
+  async function loadPets(forceRefresh = false) {
       setLoading(true);
 
       try {
+        const context = await getClinicContext();
+        setClinicId(context.clinic_id);
+        const cached = forceRefresh ? null : readClinicCache<PetWithClient[]>(context.clinic_id, "pets-list");
+        if (cached) setPets(cached);
+
         const db = await getClinicDb();
 
         const { data, error } = await db
@@ -65,6 +73,7 @@ export default function PetsPage() {
 
         if (error) {
           console.error("LOAD PETS ERROR:", error);
+          if (!cached) setPets([]);
           return;
         }
 
@@ -72,6 +81,7 @@ export default function PetsPage() {
 
         if (basePets.length === 0) {
           setPets([]);
+          writeClinicCache(context.clinic_id, "pets-list", []);
           return;
         }
 
@@ -135,6 +145,7 @@ export default function PetsPage() {
           });
 
         setPets(enrichedPets);
+        writeClinicCache(context.clinic_id, "pets-list", enrichedPets);
       } catch (error) {
         console.error(
           "LOAD PETS ERROR:",
@@ -143,10 +154,22 @@ export default function PetsPage() {
       } finally {
         setLoading(false);
       }
-    }
+  }
 
+  useEffect(() => {
     void loadPets();
   }, []);
+
+  async function refreshCache() {
+    if (!clinicId) return;
+    setRefreshingCache(true);
+    clearClinicCache(clinicId);
+    try {
+      await loadPets(true);
+    } finally {
+      setRefreshingCache(false);
+    }
+  }
 
   function normalizeSpecies(
     species: string
@@ -368,7 +391,7 @@ export default function PetsPage() {
         {/* Header */}
         <div className="mb-6 sm:mb-8">
           <Link
-            href="/"
+            href="/dashboard"
             className="mb-3 inline-block rounded-xl px-1 py-2 text-sm text-slate-500 transition hover:text-slate-900"
           >
             ← الرئيسية
@@ -385,8 +408,11 @@ export default function PetsPage() {
               </p>
             </div>
 
-            <div className="w-fit rounded-2xl bg-white px-5 py-3 text-sm font-semibold shadow-sm">
-              {pets.length} حيوان
+            <div className="flex flex-wrap items-center gap-2">
+              <ClinicCacheRefreshButton ar darkMode={false} loading={refreshingCache} onRefresh={() => void refreshCache()} />
+              <div className="w-fit rounded-2xl bg-white px-5 py-3 text-sm font-semibold shadow-sm">
+                {pets.length} حيوان
+              </div>
             </div>
           </div>
         </div>

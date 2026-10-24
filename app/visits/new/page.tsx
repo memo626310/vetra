@@ -6,6 +6,8 @@ import Link from "next/link";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { readVetraTheme, writeVetraThemeMode } from "@/lib/theme";
+import { clearClinicCache, readClinicCache, writeClinicCache } from "@/lib/clinic-cache";
+import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
 import type { FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
 import type {
   Language, Client, Pet, Visit, Medication, MedicationDraft, ExternalMedicationDraft,
@@ -59,6 +61,7 @@ export default function NewVisitPage() {
   const [loadingClients, setLoadingClients] = useState(true);
   const [loadingPets, setLoadingPets] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [refreshingCache, setRefreshingCache] = useState(false);
 
   const [started, setStarted] = useState(false);
   const [showVisitStartModal, setShowVisitStartModal] = useState(false);
@@ -162,13 +165,15 @@ export default function NewVisitPage() {
     loadPetFromUrl(petFromUrl);
   }, [petFromUrl]);
 
-  async function loadClients() {
+  async function loadClients(forceRefresh = false) {
     setLoadingClients(true);
 
     try {
       const context = await getClinicContext();
       setClinicId(context.clinic_id || "");
       setPerformingDoctor(context.doctor_name || "");
+      const cachedClients = forceRefresh ? null : readClinicCache<Client[]>(context.clinic_id, "visit-clients");
+      if (cachedClients) setClients(cachedClients);
       const db = await getClinicDb();
       const { data: doctorRows } = await db.from("clinic_staff")
         .select("id, full_name, specialty")
@@ -235,7 +240,9 @@ export default function NewVisitPage() {
         console.error("LOAD CLIENTS ERROR:", error);
         setMessage(error.message);
       } else {
-        setClients(data || []);
+        const nextClients = data || [];
+        setClients(nextClients);
+        writeClinicCache(context.clinic_id, "visit-clients", nextClients);
       }
     } catch (error) {
       console.error("LOAD CLIENTS ERROR:", error);
@@ -245,11 +252,13 @@ export default function NewVisitPage() {
     }
   }
 
-  async function loadPets(clientId: string) {
+  async function loadPets(clientId: string, forceRefresh = false) {
     setLoadingPets(true);
 
     try {
       const db = await getClinicDb();
+      const cachedPets = forceRefresh ? null : readClinicCache<Pet[]>(clinicId, `visit-pets:${clientId}`);
+      if (cachedPets) setPets(cachedPets);
 
       const { data, error } = await db
         .from("pets")
@@ -261,7 +270,9 @@ export default function NewVisitPage() {
         console.error("LOAD PETS ERROR:", error);
         setMessage(error.message);
       } else {
-        setPets(data || []);
+        const nextPets = data || [];
+        setPets(nextPets);
+        writeClinicCache(clinicId, `visit-pets:${clientId}`, nextPets);
       }
     } catch (error) {
       console.error("LOAD PETS ERROR:", error);
@@ -321,9 +332,11 @@ export default function NewVisitPage() {
     }
   }
 
-  async function loadVisits(petId: string) {
+  async function loadVisits(petId: string, forceRefresh = false) {
     try {
       const db = await getClinicDb();
+      const cachedVisits = forceRefresh ? null : readClinicCache<Visit[]>(clinicId, `visit-history:${petId}`);
+      if (cachedVisits) setVisits(cachedVisits);
 
       const { data, error } = await db
         .from("visits")
@@ -337,9 +350,25 @@ export default function NewVisitPage() {
         return;
       }
 
-      setVisits(data || []);
+      const nextVisits = data || [];
+      setVisits(nextVisits);
+      writeClinicCache(clinicId, `visit-history:${petId}`, nextVisits);
     } catch (error) {
       console.error("LOAD VISITS ERROR:", error);
+    }
+  }
+
+  async function refreshCache() {
+    if (!clinicId) return;
+    setRefreshingCache(true);
+    clearClinicCache(clinicId);
+    try {
+      await loadClients(true);
+      await loadMedications(true);
+      if (selectedClientId) await loadPets(selectedClientId, true);
+      if (selectedPetId) await loadVisits(selectedPetId, true);
+    } finally {
+      setRefreshingCache(false);
     }
   }
 
@@ -436,8 +465,11 @@ export default function NewVisitPage() {
     setStarted(true);
   }
 
-  async function loadMedications() {
+  async function loadMedications(forceRefresh = false) {
     try {
+      const context = await getClinicContext();
+      const cachedMedications = forceRefresh ? null : readClinicCache<Medication[]>(context.clinic_id, "medication-catalog");
+      if (cachedMedications) setMedications(cachedMedications);
       const db = await getClinicDb();
       const { data, error } = await db
         .from("medications")
@@ -449,7 +481,9 @@ export default function NewVisitPage() {
         .eq("active", true)
         .order("name");
       if (error) throw error;
-      setMedications((data || []) as Medication[]);
+      const nextMedications = (data || []) as Medication[];
+      setMedications(nextMedications);
+      writeClinicCache(context.clinic_id, "medication-catalog", nextMedications);
     } catch (error) {
       console.error("LOAD MEDICATIONS ERROR:", error);
     }
@@ -961,7 +995,8 @@ export default function NewVisitPage() {
       setDrawerMedications([]);
       setMedicalRecordDraft(emptyMedicalRecordDraft);
 
-      await loadVisits(selectedPetId);
+      clearClinicCache(clinicId);
+      await loadVisits(selectedPetId, true);
 
       router.push(`/visits/${encodeURIComponent(visit.id)}`);
     } catch (error) {
@@ -1071,7 +1106,7 @@ export default function NewVisitPage() {
 
           <div className="flex items-center gap-2">
             <Link
-              href="/"
+              href="/dashboard"
               className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
                 darkMode
                   ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
@@ -1094,6 +1129,8 @@ export default function NewVisitPage() {
             >
               {t.language}
             </button>
+
+            <ClinicCacheRefreshButton ar={language === "ar"} darkMode={darkMode} loading={refreshingCache} onRefresh={() => void refreshCache()} />
 
             <button
               type="button"

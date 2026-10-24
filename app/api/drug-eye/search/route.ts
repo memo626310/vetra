@@ -176,7 +176,7 @@ function directCells(rowHtml: string): Cell[] {
   return cells;
 }
 
-export function parseDrugEyeResults(html: string): DrugEyeResult[] {
+function parseDrugEyeResults(html: string): DrugEyeResult[] {
   const table = getMainTable(html);
   if (!table) return [];
 

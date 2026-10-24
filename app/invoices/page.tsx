@@ -268,7 +268,7 @@ export default function InvoicesPage() {
           </p>
 
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/dashboard")}
             className="mt-6 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
           >
             {language === "ar"
@@ -293,7 +293,7 @@ export default function InvoicesPage() {
         <header className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <button
-              onClick={() => router.push("/")}
+              onClick={() => router.push("/dashboard")}
               className="mb-3 text-sm font-medium text-slate-500 transition hover:text-blue-600"
             >
               ←{" "}

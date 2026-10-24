@@ -78,6 +78,17 @@ type ProductReturn = {
   quantity: string;
 };
 
+type CreditLedgerEntry = {
+  direction: "credit" | "debit";
+  amount: number;
+};
+
+type InvoicePaymentEntry = {
+  amount: number;
+  direction: "in" | "out";
+  status: "posted" | "voided";
+};
+
 const statusLabel: Record<string, { en: string; ar: string }> = {
   draft: { en: "Draft", ar: "مسودة" },
   issued: { en: "Issued", ar: "صادرة" },
@@ -91,6 +102,7 @@ const statusLabel: Record<string, { en: string; ar: string }> = {
 
 const paymentLabel: Record<string, { en: string; ar: string }> = {
   cash: { en: "Cash", ar: "نقدي" },
+  credit: { en: "Credit", ar: "آجل" },
   card: { en: "Card", ar: "بطاقة" },
   wallet: { en: "Wallet", ar: "محفظة" },
   bank_transfer: { en: "Bank Transfer", ar: "تحويل بنكي" },
@@ -122,6 +134,8 @@ export default function InvoiceDetailsPage() {
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [items, setItems] = useState<InvoiceItem[]>([]);
+  const [clientCredit, setClientCredit] = useState(0);
+  const [receivedAmount, setReceivedAmount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [isReception, setIsReception] = useState(false);
@@ -235,8 +249,50 @@ export default function InvoiceDetailsPage() {
 
       if (itemError) throw itemError;
 
+      const { data: paymentData, error: paymentError } = await db
+        .from("financial_transactions")
+        .select("amount, direction, status")
+        .eq("clinic_id", context.clinic_id)
+        .eq("related_invoice_id", invoiceId)
+        .eq("transaction_type", "invoice_payment");
+
+      if (paymentError) throw paymentError;
+
+      const { data: creditData, error: creditError } = await db
+        .from("client_credit_ledger")
+        .select("direction, amount")
+        .eq("clinic_id", context.clinic_id)
+        .eq("client_id", data.client_id);
+
+      if (
+        creditError &&
+        !/relation .*client_credit_ledger.*does not exist|client_credit_ledger.*not found/i.test(
+          creditError.message || ""
+        )
+      ) {
+        throw creditError;
+      }
+
+      const creditTotal = (creditData || []).reduce(
+        (total, entry: CreditLedgerEntry) =>
+          total +
+          (entry.direction === "credit"
+            ? Number(entry.amount || 0)
+            : -Number(entry.amount || 0)),
+        0
+      );
+
+      const receivedTotal = (paymentData || [])
+        .filter(
+          (entry: InvoicePaymentEntry) =>
+            entry.direction === "in" && entry.status === "posted"
+        )
+        .reduce((total, entry: InvoicePaymentEntry) => total + Number(entry.amount || 0), 0);
+
       setInvoice(data as Invoice);
       setItems((itemData || []) as InvoiceItem[]);
+      setClientCredit(Math.max(creditTotal, 0));
+      setReceivedAmount(Math.max(receivedTotal, Number(data.paid_amount || 0)));
     } catch (err: any) {
       setError(err?.message || (isAr ? "حدث خطأ أثناء تحميل الفاتورة." : "Failed to load invoice."));
     } finally {
@@ -248,6 +304,11 @@ export default function InvoiceDetailsPage() {
     if (!invoice) return 0;
     return Math.max(Number(invoice.total || 0) - Number(invoice.paid_amount || 0), 0);
   }, [invoice]);
+
+  const currentOverpayment = useMemo(() => {
+    if (!invoice) return 0;
+    return Math.max(receivedAmount - Number(invoice.paid_amount || 0), 0);
+  }, [invoice, receivedAmount]);
 
   const productReturns = useMemo<ProductReturn[]>(() => {
     return items
@@ -962,14 +1023,33 @@ export default function InvoiceDetailsPage() {
                 </div>
 
                 <div className="flex justify-between text-sm text-emerald-600 dark:text-emerald-400">
-                  <span>{isAr ? "المدفوع" : "Paid"}</span>
+                  <span>{isAr ? "المبلغ المستلم" : "Amount received"}</span>
+                  <span>{money(receivedAmount)}</span>
+                </div>
+
+                <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+                  <span>{isAr ? "المطبق على الفاتورة" : "Applied to invoice"}</span>
                   <span>{money(invoice.paid_amount)}</span>
                 </div>
+
+                {currentOverpayment > 0 && (
+                  <div className="flex justify-between text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                    <span>{isAr ? "الزيادة من هذا التحصيل" : "Excess from this receipt"}</span>
+                    <span>{money(currentOverpayment)}</span>
+                  </div>
+                )}
 
                 <div className="flex justify-between text-sm font-bold text-amber-600 dark:text-amber-400">
                   <span>{isAr ? "المتبقي" : "Remaining"}</span>
                   <span>{money(remaining)}</span>
                 </div>
+
+                {clientCredit > 0 && (
+                  <div className="flex justify-between text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                    <span>{isAr ? "إجمالي رصيد العميل" : "Total client credit"}</span>
+                    <span>{money(clientCredit)}</span>
+                  </div>
+                )}
               </div>
             </div>
 

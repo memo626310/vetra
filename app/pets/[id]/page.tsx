@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { readVetraTheme, writeVetraThemeMode } from "@/lib/theme";
+import { clearClinicCache, readClinicCache, writeClinicCache } from "@/lib/clinic-cache";
+import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
 
 type Pet = {
   id: string;
@@ -63,6 +65,14 @@ type VaccineCircle = {
   due: string | null;
 };
 
+type PetPageCache = {
+  pet: Pet;
+  client: Client | null;
+  visits: Visit[];
+  vaccinations: Vaccination[];
+  medicalRecords: PetMedicalRecord[];
+};
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default function PetPage() {
@@ -81,6 +91,8 @@ export default function PetPage() {
 
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [deletingPet, setDeletingPet] = useState(false);
+  const [clinicId, setClinicId] = useState("");
+  const [refreshingCache, setRefreshingCache] = useState(false);
 
   const [darkMode, setDarkMode] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
@@ -129,6 +141,17 @@ export default function PetPage() {
           setError("رقم الحيوان غير موجود.");
           setLoading(false);
           return;
+        }
+
+        const clinic = await getClinicContext();
+        setClinicId(clinic.clinic_id);
+        const cached = readClinicCache<PetPageCache>(clinic.clinic_id, `pet-page:${petId}`);
+        if (cached) {
+          setPet(cached.pet);
+          setClient(cached.client);
+          setVisits(cached.visits);
+          setVaccinations(cached.vaccinations);
+          setMedicalRecords(cached.medicalRecords);
         }
 
         const db = await getClinicDb();
@@ -252,6 +275,13 @@ export default function PetPage() {
           );
         }
 
+        writeClinicCache(clinic.clinic_id, `pet-page:${petId}`, {
+          pet: petData as Pet,
+          client: (clientData || null) as Client | null,
+          visits: (visitsData || []) as Visit[],
+          vaccinations: (vaccinationsData || []) as Vaccination[],
+          medicalRecords: (medicalRecordsData || []) as PetMedicalRecord[],
+        } satisfies PetPageCache);
         setLoading(false);
       } catch (err) {
         console.error("PET PAGE ERROR:", err);
@@ -269,6 +299,13 @@ export default function PetPage() {
     void loadPet();
   }, []);
 
+  async function refreshCache() {
+    if (!clinicId) return;
+    setRefreshingCache(true);
+    clearClinicCache(clinicId);
+    window.location.reload();
+  }
+
   async function addLabTest() {
     if (!newLabTest.trim() || !pet) return;
     setSavingLab(true);
@@ -281,6 +318,7 @@ export default function PetPage() {
       }).select("id,pet_id,client_id,visit_id,record_type,title,status,result,notes,performed_at,created_at").single();
       if (insertError) throw insertError;
       setMedicalRecords((current) => [data as PetMedicalRecord, ...current]);
+      clearClinicCache(clinicId);
       setNewLabTest(""); setNewLabNotes("");
     } catch (saveError) {
       setLabError(saveError instanceof Error ? saveError.message : "تعذر حفظ التحليل. شغّل ملف SQL الخاص بالسجلات الطبية على قاعدة العيادة.");
@@ -845,6 +883,7 @@ export default function PetPage() {
       }
 
       setPet(data as Pet);
+      clearClinicCache(clinicId);
     } catch (err) {
       console.error("DECEASED UPDATE ERROR:", err);
 
@@ -1057,6 +1096,7 @@ export default function PetPage() {
         throw deleteError;
       }
 
+      clearClinicCache(clinicId);
       window.location.href = "/pets";
     } catch (err) {
       console.error(
@@ -1142,7 +1182,7 @@ export default function PetPage() {
 
             <div className="flex gap-2">
               <Link
-                href="/"
+                href="/dashboard"
                 className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
                   darkMode
                     ? "bg-slate-800 text-white"
@@ -1237,7 +1277,7 @@ export default function PetPage() {
 
           <div className="flex flex-wrap gap-2">
             <Link
-              href="/"
+              href="/dashboard"
               className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
                 darkMode
                   ? "bg-slate-800 text-white hover:bg-slate-700"
@@ -1341,6 +1381,7 @@ export default function PetPage() {
             </div>
 
             <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:flex-wrap">
+              <ClinicCacheRefreshButton ar darkMode={darkMode} loading={refreshingCache} onRefresh={() => void refreshCache()} />
               <Link
                 href={`/pets/${pet.id}/edit`}
                 className={`rounded-2xl px-5 py-3 text-center text-sm font-semibold transition ${
@@ -1872,7 +1913,7 @@ export default function PetPage() {
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <Link
-            href="/"
+            href="/dashboard"
             className={`flex-1 rounded-2xl px-5 py-4 text-center text-sm font-bold transition ${
               darkMode
                 ? "bg-slate-800 text-white hover:bg-slate-700"

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
+import { clearClinicCache, readClinicCache, writeClinicCache } from "@/lib/clinic-cache";
+import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
 
 type Client = {
   id: string;
@@ -26,6 +28,11 @@ type ClientSummary = {
   dueBalance: number;
   visits: number;
   upcomingVisit: AppointmentSummary | null;
+};
+
+type ClientsCache = {
+  clients: Client[];
+  summaries: Record<string, ClientSummary>;
 };
 
 type ClinicContext = {
@@ -59,6 +66,7 @@ export default function ClientsPage() {
     useState<ClinicContext | null>(null);
 
   const [errorMessage, setErrorMessage] = useState("");
+  const [refreshingCache, setRefreshingCache] = useState(false);
 
   const loadClinicContext = useCallback(async () => {
     setClinicLoading(true);
@@ -73,7 +81,7 @@ export default function ClientsPage() {
       setErrorMessage("جلسة VETRA Core غير صالحة.");
       setClinicLoading(false);
       setLoading(false);
-      return false;
+      return null;
     }
 
     const { data, error } = await vetraCore.rpc(
@@ -94,7 +102,7 @@ export default function ClientsPage() {
       setClinicLoading(false);
       setLoading(false);
 
-      return false;
+      return null;
     }
 
     const context = Array.isArray(data)
@@ -110,24 +118,30 @@ export default function ClientsPage() {
       setClinicLoading(false);
       setLoading(false);
 
-      return false;
+      return null;
     }
 
     setClinicContext(context as ClinicContext);
     setClinicLoading(false);
 
-    return true;
+    return context as ClinicContext;
   }, []);
 
-  const loadClients = useCallback(async () => {
+  const loadClients = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     setErrorMessage("");
 
-    const contextReady =
+    const context =
       await loadClinicContext();
 
-    if (!contextReady) {
+    if (!context) {
       return;
+    }
+
+    const cached = forceRefresh ? null : readClinicCache<ClientsCache>(context.clinic_id, "clients");
+    if (cached) {
+      setClients(cached.clients);
+      setSummaries(cached.summaries);
     }
 
     const db = await getClinicDb();
@@ -150,7 +164,7 @@ export default function ClientsPage() {
           error.message
       );
 
-      setClients([]);
+      if (!cached) setClients([]);
       setLoading(false);
 
       return;
@@ -178,7 +192,7 @@ export default function ClientsPage() {
         new Date(`${appointment.appointment_date}T${appointment.start_time || "00:00"}`).getTime() >= now.getTime()
       );
 
-      setSummaries(Object.fromEntries(clientIds.map((clientId) => {
+      const nextSummaries = Object.fromEntries(clientIds.map((clientId) => {
         const clientVisits = visits.filter((visit) => visit.client_id === clientId);
         const clientAppointments = nextAppointments
           .filter((appointment) => appointment.client_id === clientId)
@@ -194,9 +208,12 @@ export default function ClientsPage() {
           visits: clientVisits.length,
           upcomingVisit: clientAppointments[0] || null,
         } satisfies ClientSummary];
-      })));
+      }));
+      setSummaries(nextSummaries);
+      writeClinicCache(context.clinic_id, "clients", { clients: loadedClients, summaries: nextSummaries } satisfies ClientsCache);
     } else {
       setSummaries({});
+      writeClinicCache(context.clinic_id, "clients", { clients: loadedClients, summaries: {} } satisfies ClientsCache);
     }
     setLoading(false);
   }, [loadClinicContext]);
@@ -205,6 +222,17 @@ export default function ClientsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadClients();
   }, [loadClients]);
+
+  const refreshCache = async () => {
+    if (!clinicContext?.clinic_id) return;
+    setRefreshingCache(true);
+    clearClinicCache(clinicContext.clinic_id);
+    try {
+      await loadClients(true);
+    } finally {
+      setRefreshingCache(false);
+    }
+  };
 
   const filteredClients = clients.filter(
     (client) => {
@@ -368,6 +396,7 @@ export default function ClientsPage() {
           >
             + عميل جديد
           </button>
+          <ClinicCacheRefreshButton ar darkMode={false} loading={refreshingCache} onRefresh={() => void refreshCache()} />
         </div>
 
         {/* Search */}

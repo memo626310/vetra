@@ -10,6 +10,8 @@ import ReceptionCheckoutNotice from "@/components/ReceptionCheckoutNotice";
 import { writeVetraTheme } from "@/lib/theme";
 import { permissionForPath } from "@/lib/staff-permissions";
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
+import { clearClinicCache } from "@/lib/clinic-cache";
+import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
 // VETRA_DASHBOARD_CURRENT_DESIGN_POLISH_V1
 
 type Language = "ar" | "en";
@@ -264,6 +266,8 @@ export default function Home() {
   const [language, setLanguage] = useState<Language>("ar");
   const [ready, setReady] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [refreshingCache, setRefreshingCache] = useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
 
   const [clinicContext, setClinicContext] =
     useState<ClinicContext | null>(null);
@@ -300,6 +304,21 @@ export default function Home() {
       language
     );
   }, [theme, language, ready]);
+
+  useEffect(() => {
+    let previousScrollY = window.scrollY;
+
+    function collapseHeaderOnScroll() {
+      const currentScrollY = window.scrollY;
+      if (currentScrollY > previousScrollY && currentScrollY > 24) {
+        setHeaderCollapsed(true);
+      }
+      previousScrollY = currentScrollY;
+    }
+
+    window.addEventListener("scroll", collapseHeaderOnScroll, { passive: true });
+    return () => window.removeEventListener("scroll", collapseHeaderOnScroll);
+  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -522,6 +541,11 @@ export default function Home() {
     }
   );
 
+  const formattedTime = new Date().toLocaleTimeString(
+    language === "ar" ? "ar-EG" : "en-US",
+    { hour: "numeric", minute: "2-digit" }
+  );
+
   const goTo = (href: string) => {
     if (href !== "#") {
       router.push(href);
@@ -537,6 +561,12 @@ export default function Home() {
     ]);
 
     router.replace("/login");
+  };
+
+  const refreshCache = () => {
+    setRefreshingCache(true);
+    clearClinicCache(clinicContext?.clinic_id);
+    window.location.reload();
   };
 
   const navItems = [
@@ -736,22 +766,27 @@ export default function Home() {
 
           {/* ================= HEADER ================= */}
 
-          <header className={`relative mb-6 flex flex-wrap items-start justify-between gap-4 overflow-hidden rounded-3xl border p-4 shadow-sm sm:mb-8 sm:gap-6 sm:p-7 lg:p-8 ${palette.header}`}>
+          <header
+            onClick={() => {
+              if (headerCollapsed) setHeaderCollapsed(false);
+            }}
+            onKeyDown={(event) => {
+              if (headerCollapsed && (event.key === "Enter" || event.key === " ")) {
+                event.preventDefault();
+                setHeaderCollapsed(false);
+              }
+            }}
+            role={headerCollapsed ? "button" : undefined}
+            tabIndex={headerCollapsed ? 0 : undefined}
+            aria-label={headerCollapsed ? (isArabic ? "فتح معلومات العيادة" : "Expand clinic summary") : undefined}
+            dir="ltr"
+            className={`relative mb-4 flex flex-wrap overflow-hidden rounded-2xl border shadow-sm transition-all duration-300 sm:mb-8 sm:rounded-3xl ${headerCollapsed ? "cursor-pointer items-center justify-between gap-2 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 sm:gap-3 sm:p-3" : "items-start justify-between gap-2 p-3 sm:grid sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-6 sm:p-7 lg:p-8"} ${palette.header}`}
+          >
 
-            <div className="min-w-0">
+            {!headerCollapsed && <div className="order-2 min-w-0 flex-1" dir={isArabic ? "rtl" : "ltr"}>
 
-              <p
-                className={`mb-2 text-xs font-semibold tracking-wide transition-colors duration-500 sm:mb-3 sm:text-sm ${
-                  darkMode
-                    ? "text-slate-500"
-                    : "text-slate-400"
-                }`}
-              >
-                {formattedDate}
-              </p>
-
-              <p className={`mb-2 text-xs font-bold uppercase tracking-[0.18em] ${palette.accentText}`}>{t.workspace}</p>
-              <h2 className="text-2xl font-black tracking-tight sm:text-4xl lg:text-[2.65rem]">
+              <p className={`mb-1 text-[9px] font-bold uppercase tracking-[0.16em] ${palette.accentText} sm:mb-2 sm:text-xs sm:tracking-[0.18em]`}>{t.workspace}</p>
+              <h2 className="max-w-[190px] text-base font-black leading-tight tracking-tight sm:max-w-none sm:text-4xl sm:leading-normal lg:text-[2.65rem]">
                 {t.welcome}، {doctorName}{" "}
 
                 <span className="inline-block transition-transform duration-300 hover:rotate-12">
@@ -760,7 +795,7 @@ export default function Home() {
               </h2>
 
               <p
-                className={`mt-2 max-w-2xl text-sm font-medium leading-6 transition-all duration-500 sm:mt-3 sm:text-base sm:leading-7 ${
+                className={`mt-1 max-w-2xl text-[11px] font-medium leading-4 transition-all duration-500 sm:mt-3 sm:text-base sm:leading-7 ${
                   darkMode
                     ? "text-slate-400"
                     : "text-slate-500"
@@ -772,10 +807,10 @@ export default function Home() {
               {/* Core status */}
 
               {!clinicLoading && clinicContext && (
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-2 flex max-w-full flex-wrap gap-1.5 sm:mt-4 sm:gap-2">
 
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${
+                    className={`max-w-[140px] truncate rounded-full px-2 py-0.5 text-[9px] font-bold sm:max-w-none sm:px-3 sm:py-1 sm:text-xs ${
                       darkMode
                         ? "bg-white/[0.05] text-slate-300"
                         : "bg-white text-slate-600 shadow-sm"
@@ -785,7 +820,7 @@ export default function Home() {
                   </span>
 
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${
+                    className={`rounded-full px-2 py-0.5 text-[9px] font-bold sm:px-3 sm:py-1 sm:text-xs ${
                       darkMode
                         ? "bg-blue-500/10 text-blue-400"
                         : "bg-blue-50 text-blue-700"
@@ -811,11 +846,37 @@ export default function Home() {
                 </div>
               )}
 
-            </div>
+            </div>}
 
             {/* ================= ACTIONS ================= */}
 
-            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <div className={`${isArabic ? "order-1" : "order-3"} shrink-0 self-center ${headerCollapsed ? "flex max-w-[48%] items-center gap-2 text-xs" : "text-xs"} ${isArabic ? "text-right" : "text-left"}`} dir={isArabic ? "rtl" : "ltr"}>
+              {headerCollapsed ? (
+                <>
+                  <span className={`truncate font-semibold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{formattedDate}</span>
+                  <span className={`font-black ${darkMode ? "text-white" : "text-slate-900"}`}>{formattedTime}</span>
+                </>
+              ) : (
+                <>
+                  <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${palette.accentText}`}>
+                    {isArabic ? "التاريخ والوقت" : "Date and time"}
+                  </p>
+                  <p className={`mt-2 text-sm font-bold leading-5 sm:text-base ${darkMode ? "text-slate-200" : "text-slate-700"}`}>
+                    {formattedDate}
+                  </p>
+                  <p className={`mt-1 text-lg font-black sm:text-2xl ${darkMode ? "text-white" : "text-slate-900"}`}>
+                    {formattedTime}
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div
+              onClick={(event) => {
+                if (headerCollapsed) event.stopPropagation();
+              }}
+              className={`${isArabic ? "order-3" : "order-1"} flex shrink-0 items-center gap-1 sm:gap-2 ${headerCollapsed ? "w-auto justify-center rounded-2xl bg-black/[0.08] p-1.5 sm:gap-1.5" : "w-full justify-end sm:w-auto"}`}
+            >
 
               {/* Language */}
 
@@ -825,7 +886,7 @@ export default function Home() {
                     isArabic ? "en" : "ar"
                   )
                 }
-                className={`flex h-10 items-center gap-2 rounded-2xl border px-3 text-sm font-bold transition-all duration-300 active:scale-95 sm:h-12 sm:px-4 sm:hover:-translate-y-0.5 ${
+                className={`flex h-8 items-center gap-1 rounded-xl border px-2 text-xs font-bold transition-all duration-300 active:scale-95 sm:h-12 sm:gap-2 sm:rounded-2xl sm:px-4 sm:text-sm sm:hover:-translate-y-0.5 ${
                   darkMode
                     ? "border-white/[0.06] bg-[#181B21] hover:bg-[#1D2128]"
                     : "border-slate-100 bg-white hover:bg-slate-50"
@@ -835,21 +896,21 @@ export default function Home() {
                   🌐
                 </span>
 
-                <span className="hidden sm:inline">
+                <span className={headerCollapsed ? "hidden" : "hidden sm:inline"}>
                   {t.language}
                 </span>
               </button>
 
               {/* Theme */}
 
-              <label className={`flex h-10 items-center gap-2 rounded-2xl border px-2.5 text-xs font-bold transition sm:h-12 sm:px-3 ${darkMode ? "border-white/[0.06] bg-[#181B21]" : "border-slate-100 bg-white"}`}>
+              {!headerCollapsed && <label className={`flex h-8 items-center gap-1 rounded-xl border px-2 text-[10px] font-bold transition sm:h-12 sm:gap-2 sm:rounded-2xl sm:px-3 sm:text-xs ${darkMode ? "border-white/[0.06] bg-[#181B21]" : "border-slate-100 bg-white"}`}>
                 <span aria-hidden="true">🎨</span>
                 <span className="sr-only">{t.theme}</span>
                 <select
                   aria-label={t.theme}
                   value={theme}
                   onChange={(event) => selectTheme(event.target.value as DashboardTheme)}
-                  className={`max-w-[92px] cursor-pointer bg-transparent outline-none sm:max-w-[118px] ${darkMode ? "text-slate-200" : "text-slate-700"}`}
+                  className={`${headerCollapsed ? "hidden" : ""} max-w-[64px] cursor-pointer bg-transparent outline-none sm:max-w-[118px] ${darkMode ? "text-slate-200" : "text-slate-700"}`}
                 >
                   {(Object.keys(dashboardThemes) as DashboardTheme[]).map((key) => (
                     <option key={key} value={key} className={darkMode ? "bg-[#181B21] text-white" : "bg-white text-slate-800"}>
@@ -857,13 +918,13 @@ export default function Home() {
                     </option>
                   ))}
                 </select>
-              </label>
+              </label>}
 
-              <button
+              {!headerCollapsed && <button
                 onClick={() =>
                   selectTheme(darkMode ? "light" : lastDarkTheme)
                 }
-                className={`flex h-10 w-10 items-center justify-center rounded-2xl border text-xl transition-all duration-500 active:scale-90 sm:h-12 sm:w-12 sm:hover:-translate-y-0.5 ${
+                className={`flex h-8 w-8 items-center justify-center rounded-xl border text-base transition-all duration-500 active:scale-90 sm:h-12 sm:w-12 sm:rounded-2xl sm:text-xl sm:hover:-translate-y-0.5 ${
                   darkMode
                     ? "border-white/[0.06] bg-[#181B21] hover:bg-[#1D2128]"
                     : "border-slate-100 bg-white hover:bg-slate-50"
@@ -875,7 +936,15 @@ export default function Home() {
                     ? "☀️"
                     : "🌙"}
                 </span>
-              </button>
+              </button>}
+
+              <ClinicCacheRefreshButton
+                ar={isArabic}
+                darkMode={darkMode}
+                loading={refreshingCache}
+                compact={headerCollapsed}
+                onRefresh={refreshCache}
+              />
 
               {/* Notifications */}
 
@@ -888,7 +957,7 @@ export default function Home() {
               {/* Profile */}
 
               <div
-                className={`hidden items-center gap-3 rounded-2xl border px-4 py-2 transition-all duration-300 hover:-translate-y-0.5 md:flex ${
+                className={`${headerCollapsed ? "hidden" : "md:flex"} items-center gap-3 rounded-2xl border px-4 py-2 transition-all duration-300 hover:-translate-y-0.5 ${
                   darkMode
                     ? "border-white/[0.06] bg-[#181B21]"
                     : "border-slate-100 bg-white"
@@ -938,6 +1007,7 @@ export default function Home() {
                   {loggingOut ? "…" : "↪"}
                 </button>
               </div>
+
             </div>
           </header>
 
@@ -960,7 +1030,7 @@ export default function Home() {
             <span className={`hidden rounded-full px-3 py-1.5 text-xs font-bold sm:inline-flex ${darkMode ? "bg-white/[0.04] text-slate-400" : "bg-white text-slate-500 shadow-sm"}`}>{visibleCards.length} {isArabic ? "أدوات" : "tools"}</span>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
 
             {visibleCards.map(({ card, index }) => {
               const [title, subtitle, icon] = card;
@@ -1022,7 +1092,7 @@ export default function Home() {
                         goTo("/dashboard");
                     }
                   }}
-                  className={`group relative flex min-h-[118px] items-center gap-4 overflow-hidden rounded-2xl p-4 text-start transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 ${palette.focus} focus-visible:ring-offset-2 active:scale-[0.99] sm:min-h-[152px] sm:gap-5 sm:rounded-3xl sm:p-5 lg:min-h-[166px] lg:p-6 sm:hover:-translate-y-1 ${
+                  className={`group relative flex aspect-square min-h-0 flex-col items-start justify-between gap-2 overflow-hidden rounded-xl p-2.5 text-start transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 ${palette.focus} focus-visible:ring-offset-2 active:scale-[0.98] sm:aspect-auto sm:min-h-[152px] sm:flex-row sm:items-center sm:justify-start sm:gap-5 sm:rounded-3xl sm:p-5 sm:hover:-translate-y-1 lg:min-h-[166px] lg:p-6 ${
                     isArabic
                       ? "text-right"
                       : "text-left"
@@ -1040,7 +1110,7 @@ export default function Home() {
                   {/* Glow */}
 
                   <div
-                    className={`pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full blur-3xl transition-all duration-700 group-hover:scale-150 ${
+                    className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl transition-all duration-700 group-hover:scale-150 sm:-right-10 sm:-top-10 sm:h-32 sm:w-32 sm:blur-3xl ${
                       featured
                         ? "bg-white/10"
                         : darkMode
@@ -1052,7 +1122,7 @@ export default function Home() {
                   {/* Icon */}
 
                   <div
-                    className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 sm:h-14 sm:w-14 sm:rounded-2xl sm:text-3xl ${
+                    className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 sm:h-14 sm:w-14 sm:rounded-2xl sm:text-3xl ${
                       featured
                         ? "bg-white/15"
                         : quickSale
@@ -1068,13 +1138,13 @@ export default function Home() {
                   {/* Title */}
 
                   <div className="relative min-w-0 flex-1">
-                    <h3 className="text-base font-black tracking-tight transition-transform duration-300 group-hover:translate-x-0.5 sm:text-lg lg:text-xl">
+                    <h3 className="line-clamp-2 text-xs font-black leading-tight tracking-tight transition-transform duration-300 group-hover:translate-x-0.5 sm:text-lg sm:leading-normal lg:text-xl">
                       {title}
                     </h3>
-                    <p className={`mt-1.5 text-xs font-medium leading-5 transition-colors duration-300 sm:text-sm ${featured ? "text-blue-100/80" : darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                    <p className={`mt-1.5 hidden text-xs font-medium leading-5 transition-colors duration-300 sm:block sm:text-sm ${featured ? "text-blue-100/80" : darkMode ? "text-slate-400" : "text-slate-500"}`}>
                       {subtitle}
                     </p>
-                    <div className={`mt-3 text-xs font-bold transition-colors duration-300 ${featured ? "text-white" : quickSale ? palette.quickSaleText : palette.accentText}`}>
+                    <div className={`mt-2 hidden text-xs font-bold transition-colors duration-300 sm:mt-3 sm:block ${featured ? "text-white" : quickSale ? palette.quickSaleText : palette.accentText}`}>
                       {t.open}{" "}{isArabic ? "←" : "→"}
                     </div>
                   </div>
@@ -1085,12 +1155,12 @@ export default function Home() {
 
           </div>
 
-          <section className="mt-8">
-            <div className="mb-4">
-              <h3 className="text-lg font-black tracking-tight sm:text-xl">{t.todayStatsTitle}</h3>
+          <section className="mt-5 sm:mt-8">
+            <div className="mb-3 sm:mb-4">
+              <h3 className="text-base font-black tracking-tight sm:text-xl">{t.todayStatsTitle}</h3>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-5">
               {[
                 ["📅", t.todayStats[0], "text-blue-400", "bg-blue-500/10"],
                 ["💉", t.todayStats[1], "text-emerald-400", "bg-emerald-500/10"],
@@ -1105,13 +1175,13 @@ export default function Home() {
                   type="button"
                   onClick={() => goTo(["/appointments", "/vaccinations", "/inventory/products?stock=low", "/inventory/products?stock=out", "/inventory/products"][index])}
                   aria-label={`${label}: ${todayStats[index] ?? "—"}`}
-                  className={`group min-h-[132px] rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-500/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 sm:p-5 ${darkMode ? "border-white/[0.06] bg-[#181B21]" : "border-slate-100 bg-white shadow-sm"}`}
+                    className={`group flex aspect-square min-h-0 flex-col justify-between rounded-xl border p-2.5 text-left transition hover:-translate-y-0.5 hover:border-cyan-500/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 sm:aspect-auto sm:min-h-[132px] sm:rounded-2xl sm:p-5 ${darkMode ? "border-white/[0.06] bg-[#181B21]" : "border-slate-100 bg-white shadow-sm"}`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <span className={`flex h-10 w-10 items-center justify-center rounded-xl text-xl ${iconBg}`}>{icon}</span>
-                    <span className={`text-3xl font-black ${accent}`}>{todayStats[index] ?? "—"}</span>
+                    <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm sm:h-10 sm:w-10 sm:rounded-xl sm:text-xl ${iconBg}`}>{icon}</span>
+                    <span className={`text-2xl font-black sm:text-3xl ${accent}`}>{todayStats[index] ?? "—"}</span>
                   </div>
-                  <div className="mt-4 flex items-center justify-between gap-2"><p className={`text-sm font-bold ${darkMode ? "text-slate-300" : "text-slate-600"}`}>{label}</p><span aria-hidden="true" className="text-xs text-slate-400 transition group-hover:translate-x-0.5">{isArabic ? "←" : "→"}</span></div>
+                  <div className="mt-2 flex items-end justify-between gap-1 sm:mt-4"><p className={`line-clamp-2 text-[11px] font-bold leading-tight sm:text-sm ${darkMode ? "text-slate-300" : "text-slate-600"}`}>{label}</p><span aria-hidden="true" className="hidden text-xs text-slate-400 transition group-hover:translate-x-0.5 sm:inline">{isArabic ? "←" : "→"}</span></div>
                 </button>
               ))}
             </div>

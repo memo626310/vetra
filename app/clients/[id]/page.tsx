@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { getClinicDb } from "@/lib/clinic-db";
+import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
+import { clearClinicCache, readClinicCache, writeClinicCache } from "@/lib/clinic-cache";
+import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
 
 type Client = {
   id: string;
@@ -40,6 +42,12 @@ type ClientInvoice = {
   created_at: string;
 };
 
+type ClientPageCache = {
+  client: Client;
+  pets: Pet[];
+  clientInvoices: ClientInvoice[];
+};
+
 export default function ClientPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -54,6 +62,8 @@ export default function ClientPage() {
   const [savingPet, setSavingPet] = useState(false);
   const [generatingClientCode, setGeneratingClientCode] = useState(false);
   const [deletingClient, setDeletingClient] = useState(false);
+  const [clinicId, setClinicId] = useState("");
+  const [refreshingCache, setRefreshingCache] = useState(false);
 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -70,7 +80,7 @@ export default function ClientPage() {
   const [microchip, setMicrochip] = useState("");
   const [petNotes, setPetNotes] = useState("");
 
-  async function loadClient() {
+  async function loadClient(forceRefresh = false) {
     setLoading(true);
     setError("");
     setMessage("");
@@ -80,6 +90,15 @@ export default function ClientPage() {
         setError("Client ID غير موجود.");
         setLoading(false);
         return;
+      }
+
+      const context = await getClinicContext();
+      setClinicId(context.clinic_id);
+      const cached = forceRefresh ? null : readClinicCache<ClientPageCache>(context.clinic_id, `client:${clientId}`);
+      if (cached) {
+        setClient(cached.client);
+        setPets(cached.pets);
+        setClientInvoices(cached.clientInvoices);
       }
 
       const db = await getClinicDb();
@@ -150,6 +169,12 @@ export default function ClientPage() {
         setClientInvoices((invoicesData || []) as ClientInvoice[]);
       }
 
+      writeClinicCache(context.clinic_id, `client:${clientId}`, {
+        client: clientData as Client,
+        pets: (petsData || []) as Pet[],
+        clientInvoices: (invoicesData || []) as ClientInvoice[],
+      } satisfies ClientPageCache);
+
       setLoading(false);
     } catch (err) {
       console.error("CLIENT PAGE ERROR:", err);
@@ -161,6 +186,17 @@ export default function ClientPage() {
       );
 
       setLoading(false);
+    }
+  }
+
+  async function refreshCache() {
+    if (!clinicId) return;
+    setRefreshingCache(true);
+    clearClinicCache(clinicId);
+    try {
+      await loadClient(true);
+    } finally {
+      setRefreshingCache(false);
     }
   }
 
@@ -279,6 +315,7 @@ export default function ClientPage() {
         }
 
         setClient((current) => current ? { ...current, client_code: updated.client_code } : current);
+        clearClinicCache(clinicId);
         setMessage(
           clinicPrefix
             ? "تم تغيير Client ID بنجاح مع الحفاظ على كود العيادة: " + updated.client_code
@@ -324,6 +361,7 @@ export default function ClientPage() {
       if (result.cleanupPending) {
         window.alert("تم حذف ملف العميل وبيانات العيادة. تعذر تنظيف بعض بيانات الإشعارات أو الصور؛ تواصل مع مسؤول النظام لإتمام التنظيف.");
       }
+      clearClinicCache(clinicId);
       router.replace("/clients");
       router.refresh();
     } catch (err) {
@@ -387,6 +425,7 @@ export default function ClientPage() {
           data as Pet,
           ...current,
         ]);
+        clearClinicCache(clinicId);
       }
 
       setPetName("");
@@ -568,6 +607,7 @@ export default function ClientPage() {
               <span aria-hidden="true">🗑️</span>
               <span>{deletingClient ? "جاري حذف العميل..." : "حذف العميل وكل بياناته نهائيًا"}</span>
             </button>
+            <ClinicCacheRefreshButton ar darkMode={false} loading={refreshingCache} onRefresh={() => void refreshCache()} />
 
           </div>
 

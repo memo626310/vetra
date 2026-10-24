@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { getClinicDb } from "@/lib/clinic-db";
+import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
+import { clearClinicCache } from "@/lib/clinic-cache";
 
 export default function NewClientPage() {
   const router = useRouter();
@@ -50,6 +51,8 @@ export default function NewClientPage() {
       }
 
       if (data?.id) {
+        const context = await getClinicContext();
+        clearClinicCache(context.clinic_id);
         // The Clinic Database trigger generates the 4-digit Client ID.
         router.push(`/clients/${data.id}`);
         return;
