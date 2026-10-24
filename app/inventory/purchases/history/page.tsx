@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { writeVetraThemeMode } from "@/lib/theme";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type Purchase = {
   id: string;
@@ -39,6 +40,7 @@ function errorText(error: unknown, fallback: string) {
 
 export default function PurchaseHistoryPage() {
   const router = useRouter();
+  const { can, loaded: permissionsLoaded } = useStaffPermissions();
   const [language, setLanguage] = useState<"ar" | "en">("ar");
   const [dark, setDark] = useState(true);
   const [ready, setReady] = useState(false);
@@ -92,7 +94,7 @@ export default function PurchaseHistoryPage() {
       const { data: { user } } = await vetraCore.auth.getUser();
       if (!user) { router.replace("/login"); return; }
       const context = await getClinicContext();
-      if (!["owner", "admin"].includes(context.role)) { setAuthorized(false); return; }
+      if (!["owner", "admin"].includes(context.role) && !can("inventory", "view")) { setAuthorized(false); return; }
       setAuthorized(true);
       const db = await getClinicDb();
       const [purchaseResult, accountResult] = await Promise.all([
@@ -111,13 +113,13 @@ export default function PurchaseHistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [isAr, router]);
+  }, [isAr, router, can, permissionsLoaded]);
 
   useEffect(() => {
     // Data loading synchronizes this view with the active clinic database.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (ready) void loadData();
-  }, [ready, loadData]);
+    if (ready && permissionsLoaded) void loadData();
+  }, [ready, permissionsLoaded, loadData]);
 
   const filteredPurchases = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -134,6 +136,7 @@ export default function PurchaseHistoryPage() {
   const editTotal = editLines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unit_cost || 0), 0);
 
   async function startEdit(purchase: Purchase) {
+    if (!can("inventory", "edit") || !can("payments", "edit")) { setError(isAr ? "لا تملك صلاحية تعديل فواتير الشراء والخزنة." : "You do not have permission to edit purchase invoices."); return; }
     setEditError("");
     setLoadingDetails(purchase.id);
     try {
@@ -160,6 +163,7 @@ export default function PurchaseHistoryPage() {
   }
 
   async function saveEdit() {
+    if (!can("inventory", "edit") || !can("payments", "edit")) { setEditError(isAr ? "لا تملك صلاحية تعديل فواتير الشراء والخزنة." : "You do not have permission to edit purchase invoices."); return; }
     if (!editingPurchase || !editSupplier.trim() || !editAccountId || !editLines.length) {
       setEditError(isAr ? "أكمل المورد والخزنة وأضف صنفًا واحدًا على الأقل." : "Enter a supplier, choose a vault, and add at least one item.");
       return;
@@ -220,7 +224,7 @@ export default function PurchaseHistoryPage() {
     return new Intl.DateTimeFormat(isAr ? "ar-EG" : "en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
   }
 
-  if (!ready || loading) return <main className={`flex min-h-screen items-center justify-center ${dark ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"}`}><p>{isAr ? "جارٍ تحميل سجل المشتريات..." : "Loading purchase history..."}</p></main>;
+  if (!ready || !permissionsLoaded || authorized === null || loading) return <main className={`flex min-h-screen items-center justify-center ${dark ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"}`}><p>{isAr ? "جارٍ تحميل سجل المشتريات..." : "Loading purchase history..."}</p></main>;
   if (authorized === false) return <main className={`flex min-h-screen items-center justify-center p-6 ${dark ? "bg-[#0F1115] text-white" : "bg-[#F7F8FA] text-slate-800"}`}><div className={`${cardClass} p-6`}><h1 className="text-2xl font-black">{isAr ? "غير مصرح بالدخول" : "Access restricted"}</h1><p className="mt-3 text-sm text-slate-500">{isAr ? "سجل المشتريات متاح للمالك ومدير العيادة فقط." : "Purchase history is available to the clinic owner and admin only."}</p></div></main>;
 
   return (
@@ -268,7 +272,7 @@ export default function PurchaseHistoryPage() {
               </tr></thead>
               <tbody>
                 {filteredPurchases.map((purchase) => (
-                  <FragmentPurchase key={purchase.id} purchase={purchase} accountName={accounts.find((account) => account.id === purchase.account_id)?.name || "—"} expanded={expandedId === purchase.id} items={itemsByPurchase[purchase.id]} loadingDetails={loadingDetails === purchase.id} dark={dark} isAr={isAr} onToggle={() => void toggleDetails(purchase.id)} onEdit={() => void startEdit(purchase)} dateText={dateText} />
+                  <FragmentPurchase key={purchase.id} purchase={purchase} accountName={accounts.find((account) => account.id === purchase.account_id)?.name || "—"} expanded={expandedId === purchase.id} items={itemsByPurchase[purchase.id]} loadingDetails={loadingDetails === purchase.id} dark={dark} isAr={isAr} onToggle={() => void toggleDetails(purchase.id)} onEdit={() => void startEdit(purchase)} canEdit={can("inventory", "edit") && can("payments", "edit")} dateText={dateText} />
                 ))}
                 {!filteredPurchases.length && <tr><td colSpan={6} className="px-4 py-16 text-center text-slate-500">{isAr ? (search ? "لا توجد فواتير تطابق البحث." : "لا توجد فواتير شراء مسجلة حتى الآن.") : (search ? "No purchase invoices match your search." : "No purchase invoices have been recorded yet.")}</td></tr>}
               </tbody>
@@ -288,7 +292,7 @@ export default function PurchaseHistoryPage() {
   );
 }
 
-function FragmentPurchase({ purchase, accountName, expanded, items, loadingDetails, dark, isAr, onToggle, onEdit, dateText }: {
+function FragmentPurchase({ purchase, accountName, expanded, items, loadingDetails, dark, isAr, onToggle, onEdit, canEdit, dateText }: {
   purchase: Purchase;
   accountName: string;
   expanded: boolean;
@@ -298,6 +302,7 @@ function FragmentPurchase({ purchase, accountName, expanded, items, loadingDetai
   isAr: boolean;
   onToggle: () => void;
   onEdit: () => void;
+  canEdit: boolean;
   dateText: (value: string) => string;
 }) {
   return <>
@@ -307,7 +312,7 @@ function FragmentPurchase({ purchase, accountName, expanded, items, loadingDetai
       <td className="px-4 py-4">{purchase.invoice_reference || "—"}</td>
       <td className="px-4 py-4">{accountName}</td>
       <td className="px-4 py-4 whitespace-nowrap font-black">{money(Number(purchase.total_amount || 0))}</td>
-      <td className="px-4 py-4"><div className="flex gap-2"><button type="button" onClick={onToggle} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-500">{expanded ? (isAr ? "إخفاء" : "Hide") : (isAr ? "التفاصيل" : "Details")}</button><button type="button" onClick={onEdit} className="rounded-lg border border-amber-500/30 px-3 py-2 text-xs font-bold text-amber-500">{isAr ? "تعديل" : "Edit"}</button></div></td>
+      <td className="px-4 py-4"><div className="flex gap-2"><button type="button" onClick={onToggle} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-500">{expanded ? (isAr ? "إخفاء" : "Hide") : (isAr ? "التفاصيل" : "Details")}</button>{canEdit && <button type="button" onClick={onEdit} className="rounded-lg border border-amber-500/30 px-3 py-2 text-xs font-bold text-amber-500">{isAr ? "تعديل" : "Edit"}</button>}</div></td>
     </tr>
     {expanded && <tr className={dark ? "bg-[#0F1115]" : "bg-slate-50"}><td colSpan={6} className="px-4 py-4">
       {purchase.notes && <p className="mb-3 text-xs text-slate-500">{isAr ? "ملاحظات:" : "Notes:"} {purchase.notes}</p>}

@@ -40,7 +40,7 @@ drop policy if exists vetra_clinic_staff_delete on public.clinic_staff;
 create policy vetra_clinic_staff_delete on public.clinic_staff
   for delete to authenticated using (clinic_id = public.vetra_current_clinic_id());
 
-grant select, insert, update, delete on public.clinic_staff to authenticated;
+grant select, insert, delete on public.clinic_staff to authenticated;
 revoke all on public.clinic_staff from anon, public;
 
 commit;

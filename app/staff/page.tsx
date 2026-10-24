@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
+
 import { vetraCore } from "@/lib/vetra-core";
 import { writeVetraThemeMode } from "@/lib/theme";
 import { defaultStaffPermissions, normalizeStaffPermissions, permissionActions, permissionDefinitions, type StaffPermissions, type PermissionAction } from "@/lib/staff-permissions";
@@ -62,7 +62,7 @@ export default function StaffPage() {
   const { can, loaded: permissionsLoaded } = useStaffPermissions();
   const [language, setLanguage] = useState<Language>("ar");
   const [dark, setDark] = useState(true);
-  const [clinicId, setClinicId] = useState("");
+
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -87,15 +87,17 @@ export default function StaffPage() {
 
   const loadStaff = useCallback(async () => {
     try {
-      const context = await getClinicContext();
-      const db = await getClinicDb();
-      const { data, error: queryError } = await db.from("clinic_staff")
-        .select("id,clinic_id,full_name,staff_type,phone,email,specialty,created_at,auth_user_id,login_email,must_change_password,permissions")
-        .eq("clinic_id", context.clinic_id)
-        .order("created_at", { ascending: false });
-      if (queryError) throw queryError;
-      setClinicId(context.clinic_id);
-      setStaff((data || []).map((item) => ({ ...item, permissions: normalizeStaffPermissions(item.permissions, item.staff_type) })) as StaffMember[]);
+      const { data: sessionData, error: sessionError } = await vetraCore.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (sessionError || !token) throw new Error(copy.ar.loadError);
+
+      const response = await fetch("/api/staff/directory", {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      const result = await response.json().catch(() => null) as { staff?: StaffMember[]; error?: string } | null;
+      if (!response.ok || !result?.staff) throw new Error(result?.error || copy.ar.loadError);
+      setStaff(result.staff);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : copy.ar.loadError);
     } finally {
@@ -104,20 +106,21 @@ export default function StaffPage() {
   }, []);
 
   useEffect(() => {
-    window.setTimeout(() => {
-      void loadStaff();
+    const timer = window.setTimeout(() => {
       const savedLanguage = localStorage.getItem("vetra-language");
       setLanguage(savedLanguage === "en" ? "en" : "ar");
       setDark(localStorage.getItem("vetra-theme") !== "light");
     }, 0);
-  }, [loadStaff]);
+    return () => window.clearTimeout(timer);
+  }, []);
 
- 
-useEffect(() => {
-  if (!permissionsLoaded) return;
-
-  setAuthorized(can("staff", "view"));
-}, [permissionsLoaded, can]);
+  useEffect(() => {
+    if (!permissionsLoaded) return;
+    const allowed = can("staff", "view");
+    setAuthorized(allowed);
+    if (allowed) void loadStaff();
+    else setLoading(false);
+  }, [permissionsLoaded, can, loadStaff]);
 
   const visibleStaff = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -131,7 +134,11 @@ useEffect(() => {
 
   async function addStaff(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!clinicId || saving) return;
+    if (!can("staff", "create")) {
+      setError(language === "ar" ? "لا تملك صلاحية إضافة الموظفين." : "You do not have permission to add staff.");
+      return;
+    }
+    if (saving) return;
     if (!fullName.trim()) {
       setError(t.required);
       return;
@@ -140,18 +147,20 @@ useEffect(() => {
     setError("");
     setNotice("");
     try {
-      const db = await getClinicDb();
-      const { data, error: insertError } = await db.from("clinic_staff").insert({
-        clinic_id: clinicId,
-        full_name: fullName.trim(),
-        staff_type: staffType,
-        phone: phone.trim() || null,
-        email: email.trim() || null,
-        specialty: staffType === "doctor" ? specialty.trim() || null : null,
-      permissions: normalizeStaffPermissions(permissions, staffType),
-      }).select("id,clinic_id,full_name,staff_type,phone,email,specialty,created_at,auth_user_id,login_email,must_change_password,permissions").single();
-      if (insertError) throw insertError;
-      setStaff((current) => [data as StaffMember, ...current]);
+      const { data: sessionData, error: sessionError } = await vetraCore.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (sessionError || !token) throw new Error(t.accountError);
+      const response = await fetch("/api/staff/directory", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: fullName.trim(), staffType, phone: phone.trim(), email: email.trim(), specialty,
+          permissions: normalizeStaffPermissions(permissions, staffType),
+        }),
+      });
+      const result = await response.json().catch(() => null) as { staff?: StaffMember; error?: string } | null;
+      if (!response.ok || !result?.staff) throw new Error(result?.error || t.setupError);
+      setStaff((current) => [result.staff as StaffMember, ...current]);
       setFullName("");
       setPhone("");
       setEmail("");
@@ -166,7 +175,6 @@ useEffect(() => {
       setSaving(false);
     }
   }
-
   function togglePermission(group: StaffPermissions, key: string, action: PermissionAction): StaffPermissions {
     const currentGroup = group[key] || {};
     const newValue = currentGroup[action] !== true;
@@ -180,6 +188,10 @@ useEffect(() => {
   }
 
   async function savePermissions(staffId: string) {
+    if (!can("staff", "edit")) {
+      setError(language === "ar" ? "لا تملك صلاحية تعديل صلاحيات الموظفين." : "You do not have permission to edit staff permissions.");
+      return;
+    }
     setPermissionsSaving(true);
     setError("");
     try {
@@ -235,6 +247,11 @@ useEffect(() => {
   }
 
   async function issueStaffLogin(person: StaffMember) {
+    const requiredAccountAction: PermissionAction = person.auth_user_id ? "edit" : "create";
+    if (!can("staff", requiredAccountAction)) {
+      setError(language === "ar" ? "لا تملك صلاحية إدارة حسابات الموظفين." : "You do not have permission to manage staff accounts.");
+      return;
+    }
     const hasEmail = Boolean(person.email?.trim());
     const hasPhone = Boolean(person.phone?.trim());
     if (!hasEmail && !hasPhone) {
@@ -286,25 +303,28 @@ useEffect(() => {
   }
 
   async function removeStaff(person: StaffMember) {
+    if (!can("staff", "delete")) {
+      setError(language === "ar" ? "Ù„Ø§ ØªÙ…Ù„Ùƒ ØµÙ„Ø§Ø­ÙŠØ© Ø­Ø°Ù Ø§Ù„Ù…ÙˆØ¸ÙÙŠÙ†." : "You do not have permission to delete staff.");
+      return;
+    }
     if (!window.confirm(t.confirmRemove)) return;
     setError("");
     setNotice("");
     try {
       const { data: sessionData, error: sessionError } = await vetraCore.auth.getSession();
-      const hasLogin = Boolean(person.auth_user_id || person.login_email);
-      if (hasLogin && (sessionError || !sessionData.session?.access_token)) throw new Error(t.loadError);
-      if (hasLogin && sessionData.session?.access_token) {
-        const response = await fetch("/api/staff/accounts", {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${sessionData.session.access_token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ staffId: person.id }),
-        });
-        if (!response.ok) throw new Error(t.loadError);
-      }
-      const db = await getClinicDb();
-      const { error: deleteError } = await db.from("clinic_staff").delete()
-        .eq("id", person.id).eq("clinic_id", clinicId);
-      if (deleteError) throw deleteError;
+      const token = sessionData.session?.access_token;
+      if (sessionError || !token) throw new Error(t.loadError);
+
+      // Delete/suspend and remove the staff-directory row through the authorized server API.
+      // This path works whether or not the staff member has a login account.
+      const response = await fetch("/api/staff/accounts", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ staffId: person.id }),
+      });
+      const result = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(result?.error || t.loadError);
+
       setStaff((current) => current.filter((item) => item.id !== person.id));
       setNotice(t.removed);
     } catch (deleteFailure) {
@@ -316,7 +336,7 @@ useEffect(() => {
   const input = dark ? "border-white/10 bg-[#111419] text-white placeholder:text-slate-500" : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400";
   const roles: (StaffType | "all")[] = ["all", "doctor", "assistant", "front_desk"];
 
-  if (!permissionsLoaded || loading) {
+  if (!permissionsLoaded || authorized === null || (authorized && loading)) {
     return (
       <main className={dark ? "flex min-h-screen items-center justify-center bg-[#0F1115] text-white" : "flex min-h-screen items-center justify-center bg-[#F7F8FA] text-slate-800"}>
         <div className="text-center">
@@ -367,10 +387,10 @@ useEffect(() => {
 
       <section className={`mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4 ${surface}`}>
         <div><div className="text-sm font-semibold">{t.list}</div><p className="mt-1 text-xs text-slate-500">{staff.length} {ar ? "موظف" : staff.length === 1 ? "member" : "members"}</p></div>
-        <button type="button" onClick={() => { setShowForm((value) => !value); setError(""); }} className="rounded-lg bg-cyan-500 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-cyan-400">{showForm ? t.cancel : `+ ${t.add}`}</button>
+        {can("staff", "create") && <button type="button" onClick={() => { setShowForm((value) => !value); setError(""); }} className="rounded-lg bg-cyan-500 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-cyan-400">{showForm ? t.cancel : `+ ${t.add}`}</button>}
       </section>
 
-      {showForm && <form onSubmit={(event) => void addStaff(event)} className={`mb-5 rounded-xl border p-4 sm:p-6 ${surface}`}>
+      {can("staff", "create") && showForm && <form onSubmit={(event) => void addStaff(event)} className={`mb-5 rounded-xl border p-4 sm:p-6 ${surface}`}>
         <h2 className="mb-4 text-base font-bold">{t.add}</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-semibold">{t.name}<input required maxLength={120} value={fullName} onChange={(event) => setFullName(event.target.value)} className={`mt-2 w-full rounded-lg border px-3 py-3 ${input}`} /></label>
@@ -390,8 +410,8 @@ useEffect(() => {
         </div>
         {loading ? <p className="p-10 text-center text-sm text-slate-500">{ar ? "جارٍ تحميل الفريق..." : "Loading team..."}</p> : visibleStaff.length ? <ul className="divide-y divide-slate-200/10">{visibleStaff.map((person) => <li key={person.id} className="flex flex-wrap items-center justify-between gap-4 p-4 sm:px-5">
           <div className="flex min-w-0 items-center gap-3"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 font-bold text-cyan-500">{person.full_name.trim().slice(0, 1).toLocaleUpperCase()}</div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-sm font-bold">{person.full_name}</h3><span className="rounded-full bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold text-cyan-600 dark:text-cyan-300">{roleLabels[person.staff_type][language]}</span></div><p className="mt-1 text-xs text-slate-500">{[person.specialty, person.phone, person.email].filter(Boolean).join(" · ") || "—"}</p></div></div>
-          <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setEditingPermissionsId((current) => current === person.id ? "" : person.id); setPermissions(normalizeStaffPermissions(person.permissions, person.staff_type)); setError(""); }} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-600 hover:bg-cyan-500/10">{t.editPermissions}</button><button type="button" onClick={() => void issueStaffLogin(person)} disabled={accountBusyId === person.id} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-600 hover:bg-cyan-500/10 disabled:opacity-50">{accountBusyId === person.id ? t.accountWorking : person.auth_user_id || person.login_email ? t.reset : t.account}</button><button type="button" onClick={() => void removeStaff(person)} className="rounded-lg px-3 py-2 text-xs font-bold text-rose-500 hover:bg-rose-500/10">{t.remove}</button></div>
-          {editingPermissionsId === person.id && <div className="w-full">{permissionEditor()}<div className="mt-3 flex justify-end"><button type="button" onClick={() => void savePermissions(person.id)} disabled={permissionsSaving} className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-50">{permissionsSaving ? t.saving : t.savePermissions}</button></div></div>}
+          <div className="flex flex-wrap items-center gap-2">{can("staff", "edit") && <button type="button" onClick={() => { setEditingPermissionsId((current) => current === person.id ? "" : person.id); setPermissions(normalizeStaffPermissions(person.permissions, person.staff_type)); setError(""); }} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-600 hover:bg-cyan-500/10">{t.editPermissions}</button>}{(person.auth_user_id ? can("staff", "edit") : can("staff", "create")) && <button type="button" onClick={() => void issueStaffLogin(person)} disabled={accountBusyId === person.id} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-600 hover:bg-cyan-500/10 disabled:opacity-50">{accountBusyId === person.id ? t.accountWorking : person.auth_user_id ? t.reset : t.account}</button>}{can("staff", "delete") && <button type="button" onClick={() => void removeStaff(person)} className="rounded-lg px-3 py-2 text-xs font-bold text-rose-500 hover:bg-rose-500/10">{t.remove}</button>}</div>
+          {can("staff", "edit") && editingPermissionsId === person.id && <div className="w-full">{permissionEditor()}<div className="mt-3 flex justify-end"><button type="button" onClick={() => void savePermissions(person.id)} disabled={permissionsSaving} className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-50">{permissionsSaving ? t.saving : t.savePermissions}</button></div></div>}
         </li>)}</ul> : <p className="p-10 text-center text-sm text-slate-500">{t.empty}</p>}
       </section>
     </div>

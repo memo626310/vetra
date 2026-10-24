@@ -91,13 +91,16 @@ export default function InventoryPurchasesPage() {
   }, [ready, isAr, dark, language]);
 
   async function loadData() {
+    if (!permissionsLoaded) return;
     setLoading(true);
     setError("");
     try {
       const { data: { user } } = await vetraCore.auth.getUser();
       if (!user) { router.replace("/login"); return; }
       const context = await getClinicContext();
-      if (!["owner", "admin"].includes(context.role)) { setAuthorized(false); return; }
+      const isOwnerOrAdmin = ["owner", "admin"].includes(context.role);
+      const canCreatePurchase = permissionsLoaded && can("inventory", "view") && can("inventory", "create") && can("payments", "view") && can("payments", "create");
+      if (!isOwnerOrAdmin && !canCreatePurchase) { setAuthorized(false); return; }
       setAuthorized(true);
       const db = await getClinicDb();
       const [supplierResult, productResult, categoryResult, accountResult] = await Promise.all([
@@ -128,13 +131,13 @@ export default function InventoryPurchasesPage() {
   }
 
   useEffect(() => {
-    if (ready) {
+    if (ready && permissionsLoaded) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       void loadData();
     }
     // loadData reads the current session and clinic context when the page becomes ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
+  }, [ready, permissionsLoaded]);
 
   function selectProduct(nextId: string) {
     setProductId(nextId);
@@ -195,6 +198,7 @@ export default function InventoryPurchasesPage() {
   }
 
   async function saveCategory() {
+    if (!can("inventory", "create")) { setError(isAr ? "لا تملك صلاحية إنشاء مشتريات أو أصناف المخزون." : "You do not have permission to create inventory records."); return; }
     const name = newCategoryName.trim();
     if (!name) {
       setError(isAr ? "اكتب اسم التصنيف." : "Enter a category name.");
@@ -228,6 +232,7 @@ export default function InventoryPurchasesPage() {
   }
 
   async function saveSupplier() {
+    if (!can("inventory", "create")) { setError(isAr ? "لا تملك صلاحية إنشاء مشتريات أو أصناف المخزون." : "You do not have permission to create inventory records."); return; }
     if (!newSupplierName.trim()) { setError(isAr ? "اكتب اسم المورد." : "Enter a supplier name."); return; }
     setSavingSupplier(true);
     setError("");
@@ -263,6 +268,7 @@ export default function InventoryPurchasesPage() {
   }
 
   async function saveProduct() {
+    if (!can("inventory", "create")) { setError(isAr ? "لا تملك صلاحية إنشاء مشتريات أو أصناف المخزون." : "You do not have permission to create inventory records."); return; }
     if (!newProductName.trim()) {
       setError(isAr ? "اكتب اسم الصنف." : "Enter an item name.");
       return;
@@ -320,6 +326,8 @@ export default function InventoryPurchasesPage() {
   }
 
   async function savePurchase() {
+    if (!can("payments", "create")) { setError(isAr ? "تحتاج صلاحية تسجيل حركة الخزنة لتسجيل فاتورة الشراء." : "Payment creation permission is required to post a purchase bill."); return; }
+    if (!can("inventory", "create")) { setError(isAr ? "لا تملك صلاحية إنشاء مشتريات أو أصناف المخزون." : "You do not have permission to create inventory records."); return; }
     setError("");
     setNotice("");
     if (!selectedSupplier || !accountId || !lines.length || total <= 0) {

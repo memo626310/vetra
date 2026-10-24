@@ -663,7 +663,13 @@ export default function ProductsPage() {
 
 
 
+  function requireInventoryPermission(action: "create" | "edit" | "delete") {
+    if (can("inventory", action)) return true;
+    setMessage("ليس لديك صلاحية تنفيذ هذه العملية في المخزون.");
+    return false;
+  }
   async function saveProduct() {
+    if (!requireInventoryPermission(editingProduct ? "edit" : "create")) return;
 
 
     if (!productForm.name.trim()) {
@@ -1024,6 +1030,7 @@ const payload = {
 
 
   async function addCategoryInsideProduct() {
+    if (!requireInventoryPermission("create")) return;
     const name = inlineCategoryName.trim();
 
     if (!name) {
@@ -1103,6 +1110,7 @@ const { data, error } = await db
   }
 
   async function deleteProduct(product: Product) {
+    if (!requireInventoryPermission("delete") || !requireInventoryPermission("edit")) return;
     const confirmed = window.confirm(
       `هل أنت متأكد إنك عايز تحذف "${product.name}"؟\n\nالحذف نهائي من قائمة المنتجات.`
     );
@@ -1137,6 +1145,7 @@ const { error } = await db
   }
 
   async function addCategory() {
+    if (!requireInventoryPermission("create")) return;
 
 
     const name =
@@ -1279,6 +1288,7 @@ const { error } =
   }
 
   async function moveCategoryProducts() {
+    if (!requireInventoryPermission("edit")) return;
     if (!manageCategoryId || !categoryDestinationId || manageCategoryId === categoryDestinationId) return;
     const source = categories.find((category) => category.id === manageCategoryId);
     const destination = categories.find((category) => category.id === categoryDestinationId);
@@ -1307,6 +1317,7 @@ const { error } =
   }
 
   async function deleteCategory() {
+    if (!requireInventoryPermission("delete") || !requireInventoryPermission("edit")) return;
     if (!manageCategoryId) return;
     const source = categories.find((category) => category.id === manageCategoryId);
     const destination = categoryDestinationId

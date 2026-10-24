@@ -81,7 +81,7 @@ export function permissionForPath(pathname: string): { key: string; action: Perm
   if (pathname.startsWith("/reports")) return { key: "reports", action: "view" };
   if (pathname.startsWith("/messages")) return { key: "messages", action: "view" };
   if (pathname.startsWith("/staff")) return { key: "staff", action: "view" };
-  if (pathname.startsWith("/settings")) return { key: "clinic_settings", action: "view" };
+  if (pathname.startsWith("/settings")) return { key: "clinic_settings", action: "edit" };
   if (pathname.startsWith("/dashboard/clients-activity")) return { key: "patients", action: "view" };
   return null;
 }

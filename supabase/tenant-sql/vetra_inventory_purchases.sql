@@ -81,6 +81,7 @@ declare
   v_id uuid;
 begin
   if v_clinic_id is null then raise exception 'No active VETRA clinic found in token'; end if;
+  if not public.vetra_has_clinic_staff_permission('inventory', 'create') then raise exception 'Inventory creation permission is required'; end if;
   if nullif(trim(p_name), '') is null then raise exception 'Supplier name is required'; end if;
 
   insert into public.inventory_suppliers (clinic_id, name, phone, notes, created_by)
@@ -121,6 +122,7 @@ declare
   v_existing public.inventory_purchases%rowtype;
 begin
   if v_clinic_id is null then raise exception 'No active VETRA clinic found in token'; end if;
+  if not public.vetra_has_clinic_staff_permission('inventory', 'create') or not public.vetra_has_clinic_staff_permission('payments', 'create') then raise exception 'Inventory and payment creation permissions are required'; end if;
   if nullif(trim(p_supplier_name), '') is null then raise exception 'Supplier name is required'; end if;
   if nullif(trim(p_idempotency_key), '') is null then raise exception 'Purchase idempotency key is required'; end if;
   if jsonb_typeof(coalesce(p_items, '[]'::jsonb)) <> 'array' then raise exception 'Purchase items must be an array'; end if;
@@ -234,6 +236,7 @@ declare
   v_financial_transaction_id uuid;
 begin
   if v_clinic_id is null then raise exception 'No active VETRA clinic found in token'; end if;
+  if not public.vetra_has_clinic_staff_permission('inventory', 'edit') or not public.vetra_has_clinic_staff_permission('payments', 'edit') then raise exception 'Inventory and payment edit permissions are required'; end if;
   if p_purchase_id is null then raise exception 'Purchase invoice is required'; end if;
   if nullif(trim(p_supplier_name), '') is null then raise exception 'Supplier name is required'; end if;
   if nullif(trim(p_idempotency_key), '') is null then raise exception 'Edit idempotency key is required'; end if;

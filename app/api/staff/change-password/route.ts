@@ -23,8 +23,7 @@ export async function POST(request: Request) {
     const { error: updateError } = await admin.from("clinic_members")
       .update({ must_change_password: false }).eq("id", member.id);
     if (updateError) throw updateError;
-    await actor.clinicDb.from("clinic_staff").update({ must_change_password: false })
-      .eq("clinic_id", actor.clinicId).eq("auth_user_id", actor.userId);
+    await actor.clinicDb.rpc("vetra_mark_clinic_staff_password_changed");
     return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof PushSetupError) return Response.json({ error: error.message }, { status: error.status });

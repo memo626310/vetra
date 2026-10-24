@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { getCoreAdminClient, PushSetupError, resolveClinicPushContext } from "@/lib/push-server";
+import { assertClinicStaffPermission, requireClinicStaffPermission } from "@/lib/staff-api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,10 +50,8 @@ function errorResponse(error: unknown) {
   return Response.json({ error: "تعذر إنشاء حساب الموظف. راجع إعدادات VETRA CORE وسجل الخادم." }, { status: 500, headers: { "Cache-Control": "no-store" } });
 }
 
-async function authorize(request: Request) {
-  const actor = await resolveClinicPushContext(request);
-  if (!["owner", "admin"].includes(actor.role)) throw new PushSetupError("إدارة حسابات الفريق متاحة للمالك أو مدير العيادة فقط.", 403);
-  return actor;
+async function authorize(request: Request, action: "create" | "edit" | "delete" = "create") {
+  return requireClinicStaffPermission(request, action);
 }
 
 async function findStaff(db: Awaited<ReturnType<typeof resolveClinicPushContext>>["clinicDb"], clinicId: string, staffId: string) {
@@ -70,8 +69,9 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => null) as { staffId?: unknown; language?: unknown } | null;
     if (typeof body?.staffId !== "string") throw new PushSetupError("معرف الموظف غير صالح.", 400);
-    const actor = await authorize(request);
+    const actor = await resolveClinicPushContext(request);
     const person = await findStaff(actor.clinicDb, actor.clinicId, body.staffId);
+    await assertClinicStaffPermission(actor, person.auth_user_id ? "edit" : "create");
     const email = (person.email || "").trim().toLowerCase();
     const authPhone = person.phone ? normalizeAuthPhone(person.phone) : "";
     if (!email && !authPhone) {
@@ -147,10 +147,12 @@ export async function POST(request: Request) {
         throw passwordError;
       }
 
-      const { error: staffUpdateError } = await actor.clinicDb.from("clinic_staff").update({
-        login_email: authEmail,
-        must_change_password: true,
-      }).eq("id", person.id).eq("clinic_id", actor.clinicId);
+      const { error: staffUpdateError } = await actor.clinicDb.rpc("vetra_link_clinic_staff_account", {
+        p_staff_id: person.id,
+        p_auth_user_id: person.auth_user_id,
+        p_login_email: authEmail,
+        p_must_change_password: true,
+      });
       if (staffUpdateError) throw staffUpdateError;
     } else {
       const { data: userData, error: userError } = await admin.auth.admin.createUser({
@@ -181,11 +183,12 @@ export async function POST(request: Request) {
       if (memberError) throw memberError;
       createdMembershipId = member.id;
 
-      const { error: linkError } = await actor.clinicDb.from("clinic_staff").update({
-        auth_user_id: userData.user.id,
-        login_email: authEmail,
-        must_change_password: true,
-      }).eq("id", person.id).eq("clinic_id", actor.clinicId);
+      const { error: linkError } = await actor.clinicDb.rpc("vetra_link_clinic_staff_account", {
+        p_staff_id: person.id,
+        p_auth_user_id: userData.user.id,
+        p_login_email: authEmail,
+        p_must_change_password: true,
+      });
       if (linkError) throw linkError;
     }
 
@@ -222,7 +225,7 @@ export async function DELETE(request: Request) {
   try {
     const body = await request.json().catch(() => null) as { staffId?: unknown } | null;
     if (typeof body?.staffId !== "string") throw new PushSetupError("معرف الموظف غير صالح.", 400);
-    const actor = await authorize(request);
+    const actor = await authorize(request, "delete");
     const person = await findStaff(actor.clinicDb, actor.clinicId, body.staffId);
     if (person.auth_user_id) {
       const { error } = await getCoreAdminClient().from("clinic_members")
@@ -230,6 +233,8 @@ export async function DELETE(request: Request) {
         .eq("clinic_id", actor.clinicId).eq("doctor_id", person.auth_user_id);
       if (error) throw error;
     }
+    const { error: directoryDeleteError } = await actor.clinicDb.from("clinic_staff").delete().eq("id", person.id).eq("clinic_id", actor.clinicId);
+    if (directoryDeleteError) throw directoryDeleteError;
     return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return errorResponse(error);

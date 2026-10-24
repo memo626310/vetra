@@ -36,6 +36,137 @@ $$;
 revoke all on function public.vetra_has_clinic_staff_permission(text, text) from public, anon;
 grant execute on function public.vetra_has_clinic_staff_permission(text, text) to authenticated;
 
+-- Only the following checked routines may update clinic_staff after the raw UPDATE grant is revoked.
+create or replace function public.vetra_update_clinic_staff_permissions(
+  p_staff_id uuid,
+  p_permissions jsonb
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_clinic_id uuid := public.vetra_current_clinic_id();
+  v_group record;
+  v_action record;
+  v_saved jsonb;
+  v_allowed_groups text[] := array['patients','all_patients','appointments','medical_records','prescriptions','vaccinations','invoices_page','invoices','finance_page','payments','inventory','reports','messages','staff','clinic_settings'];
+  v_allowed_actions text[] := array['view','create','edit','delete','export'];
+begin
+  if v_clinic_id is null or auth.uid() is null then
+    raise exception 'No active VETRA clinic found in token';
+  end if;
+  if p_staff_id is null or jsonb_typeof(p_permissions) <> 'object' then
+    raise exception 'Invalid staff permissions payload';
+  end if;
+  if not public.vetra_has_clinic_staff_permission('staff', 'view')
+     or not public.vetra_has_clinic_staff_permission('staff', 'edit') then
+    raise exception 'Staff edit permission is required';
+  end if;
+
+  for v_group in select key, value from jsonb_each(p_permissions)
+  loop
+    if not (v_group.key = any(v_allowed_groups)) or jsonb_typeof(v_group.value) <> 'object' then
+      raise exception 'Invalid staff permission group';
+    end if;
+    for v_action in select key, value from jsonb_each(v_group.value)
+    loop
+      if not (v_action.key = any(v_allowed_actions)) or jsonb_typeof(v_action.value) <> 'boolean' then
+        raise exception 'Invalid staff permission action';
+      end if;
+      if v_action.value = 'true'::jsonb
+         and not public.vetra_has_clinic_staff_permission(v_group.key, v_action.key) then
+        raise exception 'Cannot grant a permission the current user does not have';
+      end if;
+    end loop;
+  end loop;
+
+  update public.clinic_staff
+  set permissions = p_permissions, updated_at = now()
+  where id = p_staff_id and clinic_id = v_clinic_id
+  returning permissions into v_saved;
+  if not found then raise exception 'Staff member not found in this clinic'; end if;
+  return v_saved;
+end;
+$$;
+
+create or replace function public.vetra_link_clinic_staff_account(
+  p_staff_id uuid,
+  p_auth_user_id uuid,
+  p_login_email text,
+  p_must_change_password boolean
+) returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_clinic_id uuid := public.vetra_current_clinic_id();
+  v_existing_auth_user_id uuid;
+begin
+  if v_clinic_id is null or auth.uid() is null then
+    raise exception 'No active VETRA clinic found in token';
+  end if;
+  if p_staff_id is null or p_auth_user_id is null or nullif(trim(p_login_email), '') is null then
+    raise exception 'Invalid staff account link';
+  end if;
+
+  select auth_user_id into v_existing_auth_user_id
+  from public.clinic_staff
+  where id = p_staff_id and clinic_id = v_clinic_id
+  for update;
+  if not found then raise exception 'Staff member not found in this clinic'; end if;
+
+  if v_existing_auth_user_id is null then
+    if not public.vetra_has_clinic_staff_permission('staff', 'view')
+       or not public.vetra_has_clinic_staff_permission('staff', 'create') then
+      raise exception 'Staff create permission is required';
+    end if;
+  else
+    if p_auth_user_id <> v_existing_auth_user_id then
+      raise exception 'An existing staff login cannot be relinked';
+    end if;
+    if not public.vetra_has_clinic_staff_permission('staff', 'view')
+       or not public.vetra_has_clinic_staff_permission('staff', 'edit') then
+      raise exception 'Staff edit permission is required';
+    end if;
+  end if;
+
+  update public.clinic_staff
+  set auth_user_id = p_auth_user_id,
+      login_email = trim(p_login_email),
+      must_change_password = coalesce(p_must_change_password, true),
+      updated_at = now()
+  where id = p_staff_id and clinic_id = v_clinic_id;
+end;
+$$;
+
+create or replace function public.vetra_mark_clinic_staff_password_changed()
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_clinic_id uuid := public.vetra_current_clinic_id();
+begin
+  if v_clinic_id is null or auth.uid() is null then
+    raise exception 'No active VETRA clinic found in token';
+  end if;
+  update public.clinic_staff
+  set must_change_password = false, updated_at = now()
+  where clinic_id = v_clinic_id and auth_user_id = auth.uid();
+end;
+$$;
+
+revoke all on function public.vetra_update_clinic_staff_permissions(uuid, jsonb) from public, anon;
+revoke all on function public.vetra_link_clinic_staff_account(uuid, uuid, text, boolean) from public, anon;
+revoke all on function public.vetra_mark_clinic_staff_password_changed() from public, anon;
+grant execute on function public.vetra_update_clinic_staff_permissions(uuid, jsonb) to authenticated;
+grant execute on function public.vetra_link_clinic_staff_account(uuid, uuid, text, boolean) to authenticated;
+grant execute on function public.vetra_mark_clinic_staff_password_changed() to authenticated;
+revoke update on public.clinic_staff from authenticated;
+
 alter table public.invoices enable row level security;
 drop policy if exists vetra_staff_invoices_select_guard on public.invoices;
 create policy vetra_staff_invoices_select_guard on public.invoices
@@ -44,7 +175,8 @@ create policy vetra_staff_invoices_select_guard on public.invoices
     clinic_id = public.vetra_current_clinic_id()
     and (
       public.vetra_has_clinic_staff_permission('invoices_page', 'view')
-      or public.vetra_has_clinic_staff_permission('invoices', 'create')
+        or public.vetra_has_clinic_staff_permission('finance_page', 'view')
+        or public.vetra_has_clinic_staff_permission('invoices', 'create')
     )
   );
 drop policy if exists vetra_staff_invoices_select on public.invoices;
@@ -113,7 +245,8 @@ create policy vetra_staff_invoice_items_select_guard on public.invoice_items
     clinic_id = public.vetra_current_clinic_id()
     and (
       public.vetra_has_clinic_staff_permission('invoices_page', 'view')
-      or public.vetra_has_clinic_staff_permission('invoices', 'create')
+        or public.vetra_has_clinic_staff_permission('finance_page', 'view')
+        or public.vetra_has_clinic_staff_permission('invoices', 'create')
     )
   );
 drop policy if exists vetra_staff_invoice_items_select on public.invoice_items;

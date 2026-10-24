@@ -208,7 +208,7 @@ export default function FinancePage() {
       const context = await getClinicContext();
 
       // Check permissions: owner/admin OR staff with finance.view permission
-      if (!["owner", "admin"].includes(context.role) && !can("finance", "view")) {
+      if (!["owner", "admin"].includes(context.role) && !can("finance_page", "view")) {
         setAuthorized(false);
         return;
       }
@@ -275,6 +275,10 @@ export default function FinancePage() {
   }
 
   async function recordPayment() {
+    if (!can("payments", "create")) {
+      setError(isAr ? "لا تملك صلاحية تسجيل التحصيل." : "You do not have permission to record payments.");
+      return;
+    }
     setError("");
     setNotice("");
     if (!invoiceId || !accountId || !selectedInvoice) {
@@ -323,6 +327,10 @@ export default function FinancePage() {
   }
 
   async function recordCustomerPayment(customer: CustomerBalance) {
+    if (!can("payments", "create")) {
+      setError(isAr ? "لا تملك صلاحية تسجيل التحصيل." : "You do not have permission to record payments.");
+      return;
+    }
     setError("");
     setNotice("");
     const value = Number(customerPayAmount);
@@ -398,7 +406,7 @@ export default function FinancePage() {
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setDark((v) => !v)} className={`rounded-xl border px-3 py-2 ${dark ? "border-white/10 bg-[#171A20]" : "border-slate-200 bg-white"}`}>{dark ? "☀️" : "🌙"}</button>
             <button onClick={() => setLang((v) => v === "ar" ? "en" : "ar")} className={`rounded-xl border px-3 py-2 ${dark ? "border-white/10 bg-[#171A20]" : "border-slate-200 bg-white"}`}>{isAr ? "English" : "عربي"}</button>
-            <button onClick={() => router.push("/cash-register")} className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white">{isAr ? "الخزن وحركة النقدية" : "Cash registers"}</button>
+            {can("payments", "view") && <button onClick={() => router.push("/cash-register")} className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white">{isAr ? "الخزن وحركة النقدية" : "Cash registers"}</button>}
             <button onClick={() => router.push("/invoices/new")} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white">+ {isAr ? "فاتورة بيع" : "New sale"}</button>
             <button onClick={() => router.push("/invoices")} className={`rounded-xl border px-4 py-3 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200 bg-white"}`}>{isAr ? "كل الفواتير" : "All invoices"}</button>
           </div>
@@ -437,15 +445,15 @@ export default function FinancePage() {
         </section>}
 
         {activeTab === "overview" && <section className={`${cardClass} flex flex-wrap gap-3`}>
-          <button type="button" onClick={() => { setActiveTab("collections"); setShowPayment(true); }} className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">{isAr ? "تحصيل دفعة من عميل" : "Collect customer payment"}</button>
-          <button type="button" onClick={() => router.push("/cash-register")} className="rounded-xl bg-rose-600 px-4 py-3 text-sm font-bold text-white">{isAr ? "تسجيل مصروف أو مقبوض" : "Record expense or income"}</button>
+          {can("payments", "create") && <button type="button" onClick={() => { setActiveTab("collections"); setShowPayment(true); }} className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">{isAr ? "تحصيل دفعة من عميل" : "Collect customer payment"}</button>}
+          {can("payments", "create") && <button type="button" onClick={() => router.push("/cash-register")} className="rounded-xl bg-rose-600 px-4 py-3 text-sm font-bold text-white">{isAr ? "تسجيل مصروف أو مقبوض" : "Record expense or income"}</button>}
           <button type="button" onClick={() => router.push("/invoices/new")} className={`rounded-xl border px-4 py-3 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200 bg-white"}`}>{isAr ? "إنشاء فاتورة بيع" : "Create sales invoice"}</button>
           <button type="button" onClick={() => router.push("/inventory/purchases")} className={`rounded-xl border px-4 py-3 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200 bg-white"}`}>{isAr ? "مشتريات المخزون" : "Inventory purchases"}</button>
         </section>}
 
         {(activeTab === "accounts" || activeTab === "collections") && <section className={`grid gap-6 ${activeTab === "accounts" ? "" : "xl:grid-cols-1"}`}>
           {activeTab === "accounts" && <div className={cardClass}>
-            <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-black">{isAr ? "الحسابات والخزن" : "Accounts & registers"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "الرصيد الحالي محسوب من سجل الحركات." : "Current balances are calculated from the movement ledger."}</p></div><button onClick={() => router.push("/cash-register")} className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white">{isAr ? "إدارة" : "Manage"}</button></div>
+            <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-black">{isAr ? "الحسابات والخزن" : "Accounts & registers"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "الرصيد الحالي محسوب من سجل الحركات." : "Current balances are calculated from the movement ledger."}</p></div>{can("payments", "view") && <button onClick={() => router.push("/cash-register")} className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white">{isAr ? "إدارة" : "Manage"}</button>}</div>
             <div className="mt-5 space-y-3">
               {accounts.map((account) => <div key={account.id} className={`flex items-center justify-between gap-3 rounded-2xl border p-4 ${dark ? "border-white/[0.06] bg-[#0F1115]" : "border-slate-100 bg-slate-50"}`}><div><p className="font-bold">{account.name}</p><p className="mt-1 text-xs text-slate-500">{cashName[account.account_type]?.[isAr ? "ar" : "en"] || account.account_type}{account.requires_session ? ` · ${isAr ? "وردية خزنة" : "Register sessions"}` : ""}</p></div><p className="text-left font-black">{money(account.current_balance, lang)}</p></div>)}
               {!accounts.length && <p className="rounded-xl border border-dashed p-5 text-sm text-slate-500">{isAr ? "لا توجد حسابات مالية. افتح إدارة الخزن لإنشاء الحسابات الافتراضية." : "No financial accounts yet. Open cash register management to create accounts."}</p>}
@@ -453,7 +461,7 @@ export default function FinancePage() {
           </div>}
 
           {activeTab === "collections" && <div className={cardClass}>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="text-xl font-black">{isAr ? "تحصيل من فاتورة" : "Collect an invoice payment"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "يدوّن التحصيل ويحدّث المتبقي على الفاتورة داخل معاملة واحدة." : "Posts the receipt and updates the invoice balance atomically."}</p></div><button onClick={() => { setShowPayment((v) => !v); setError(""); }} className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">{showPayment ? (isAr ? "إغلاق" : "Close") : (isAr ? "+ تسجيل تحصيل" : "+ Record receipt")}</button></div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="text-xl font-black">{isAr ? "تحصيل من فاتورة" : "Collect an invoice payment"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "يدوّن التحصيل ويحدّث المتبقي على الفاتورة داخل معاملة واحدة." : "Posts the receipt and updates the invoice balance atomically."}</p></div>{can("payments", "create") && <button onClick={() => { setShowPayment((v) => !v); setError(""); }} className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">{showPayment ? (isAr ? "إغلاق" : "Close") : (isAr ? "+ تسجيل تحصيل" : "+ Record receipt")}</button>}</div>
             {showPayment && <div className="mt-5 space-y-4">
               <div><label className="mb-2 block text-sm font-semibold">{isAr ? "الفاتورة والعميل" : "Invoice & client"}</label><select value={invoiceId} onChange={(e) => { setInvoiceId(e.target.value); setAmount(""); }} className={inputClass}><option value="">{isAr ? "اختار الفاتورة" : "Select invoice"}</option>{receivableInvoices.map((x) => <option key={x.id} value={x.id}>#{x.invoice_number} · {x.client?.name || (isAr ? "عميل غير محدد" : "Unknown client")} · {isAr ? "متبقي" : "Due"} {money(Math.max(Number(x.total || 0) - Number(x.paid_amount || 0), 0), lang)}</option>)}</select></div>
               {selectedInvoice && <div className={`rounded-xl p-3 text-sm ${dark ? "bg-[#0F1115]" : "bg-slate-50"}`}><div className="flex justify-between"><span>{isAr ? "إجمالي الفاتورة" : "Invoice total"}</span><strong>{money(selectedInvoice.total, lang)}</strong></div><div className="mt-2 flex justify-between"><span>{isAr ? "المدفوع سابقًا" : "Previously paid"}</span><strong>{money(selectedInvoice.paid_amount, lang)}</strong></div><div className="mt-2 flex justify-between"><span>{isAr ? "المتبقي" : "Remaining"}</span><strong className="text-amber-500">{money(Math.max(Number(selectedInvoice.total || 0) - Number(selectedInvoice.paid_amount || 0), 0), lang)}</strong></div></div>}
@@ -498,7 +506,7 @@ export default function FinancePage() {
         </section>}
 
         {activeTab === "activity" && <section className={cardClass}>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-black">{isAr ? "آخر حركات الخزنة" : "Latest ledger movements"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "آخر 200 حركة مالية مسجلة." : "Latest 200 posted transactions."}</p></div><button onClick={() => router.push("/cash-register")} className={`rounded-xl border px-4 py-2 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200"}`}>{isAr ? "كشف حساب كامل" : "Full account statement"}</button></div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-black">{isAr ? "آخر حركات الخزنة" : "Latest ledger movements"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "آخر 200 حركة مالية مسجلة." : "Latest 200 posted transactions."}</p></div>{can("payments", "view") && <button onClick={() => router.push("/cash-register")} className={`rounded-xl border px-4 py-2 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200"}`}>{isAr ? "كشف حساب كامل" : "Full account statement"}</button>}</div>
           <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[780px] text-sm"><thead><tr className="border-b text-right text-xs text-slate-500"><th className="px-3 py-3">{isAr ? "التاريخ" : "Date"}</th><th className="px-3 py-3">{isAr ? "الحركة" : "Movement"}</th><th className="px-3 py-3">{isAr ? "الوصف" : "Description"}</th><th className="px-3 py-3">{isAr ? "الحساب" : "Account"}</th><th className="px-3 py-3">{isAr ? "المبلغ" : "Amount"}</th></tr></thead><tbody>{transactions.slice(0, 20).map((t) => <tr key={t.id} className="border-b last:border-0"><td className="px-3 py-3 whitespace-nowrap text-slate-500">{dateText(t.transaction_at, lang)}</td><td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${t.direction === "in" ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"}`}>{transactionName[t.transaction_type]?.[isAr ? "ar" : "en"] || t.transaction_type}</span></td><td className="px-3 py-3"><p className="font-semibold">{t.description}</p>{t.reference && <p className="mt-1 text-xs text-slate-500">{isAr ? "مرجع" : "Ref"}: {t.reference}</p>}</td><td className="px-3 py-3">{accounts.find((a) => a.id === t.account_id)?.name || "—"}</td><td className={`px-3 py-3 whitespace-nowrap font-black ${t.direction === "in" ? "text-emerald-500" : "text-rose-500"}`}>{t.direction === "in" ? "+" : "−"}{money(t.amount, lang)}</td></tr>)}{!transactions.length && <tr><td colSpan={5} className="px-3 py-12 text-center text-slate-500">{isAr ? "لا توجد حركات مالية حتى الآن." : "No financial movements yet."}</td></tr>}</tbody></table></div>
         </section>}
       </div>
