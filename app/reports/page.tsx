@@ -632,7 +632,14 @@ export default function ReportsPage() {
   const recentVisits = filtered.visits.slice(0, 8);
   const recentInvoiceRows = filtered.invoices.filter(isFinancialInvoice).slice(0, 6);
 
-  if (!ready || !permissionsLoaded || loading) {
+  
+if (
+  !ready ||
+  !permissionsLoaded ||
+  authorized === null ||
+  (authorized && loading)
+) {
+
     return (
       <main className={darkMode ? "flex min-h-screen items-center justify-center bg-[#0F1115] text-white" : "flex min-h-screen items-center justify-center bg-[#F7F8FA] text-slate-800"}>
         <div className="text-center">
