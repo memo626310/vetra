@@ -162,7 +162,7 @@ export default function VisitDetailsPage() {
                 <p className="pt-1 text-xs text-slate-500">{ar ? `فاتورة #${invoice.invoice_number} · ${label(invoice.status)}` : `Invoice #${invoice.invoice_number} · ${label(invoice.status)}`}</p>
                 <Link href={`/invoices/${invoice.id}`} className="mt-2 block rounded-lg bg-cyan-600 px-4 py-3 text-center text-sm font-bold text-white">{ar ? "فتح الفاتورة" : "Open bill"}</Link>
               </div>
-            </> : <div className="p-4"><p className="text-sm text-slate-500">{ar ? "لا توجد فاتورة مرتبطة بهذه الزيارة." : "No bill is linked to this visit."}</p><Link href={`/invoices/new?visit=${id}`} className="mt-3 block rounded-lg bg-cyan-600 px-4 py-3 text-center text-sm font-bold text-white">{ar ? "إنشاء فاتورة" : "Create bill"}</Link></div>}
+            </> : <div className="p-4"><p className="text-sm text-slate-500">{ar ? "لا توجد فاتورة مرتبطة بهذه الزيارة." : "No bill is linked to this visit."}</p><Link href={`/invoices/new?visit=${id}&client=${visit.client_id}&pet=${visit.pet_id}`} className="mt-3 block rounded-lg bg-cyan-600 px-4 py-3 text-center text-sm font-bold text-white">{ar ? "إنشاء فاتورة" : "Create bill"}</Link></div>}
           </aside>
         </div>
       </>}

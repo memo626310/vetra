@@ -9,6 +9,7 @@ import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type Invoice = {
   id: string;
+  clinic_id: string;
   invoice_number: number;
   status: string;
   subtotal: number;
@@ -74,6 +75,7 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [message, setMessage] = useState("");
+  const [draftActionId, setDraftActionId] = useState("");
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
@@ -164,6 +166,46 @@ export default function InvoicesPage() {
       setInvoices([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function issueDraft(invoice: Invoice) {
+    if (invoice.status !== "draft") return;
+    if (!can("invoices", "edit") && !can("invoices", "create")) return;
+    setDraftActionId(invoice.id);
+    setMessage("");
+    try {
+      const db = await getClinicDb();
+      const { error } = await db.rpc("issue_invoice", { p_invoice_id: invoice.id });
+      if (error) throw error;
+      await checkAdminAndLoad();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : (language === "ar" ? "تعذر إصدار المسودة." : "Could not issue this draft."));
+    } finally {
+      setDraftActionId("");
+    }
+  }
+
+  async function deleteDraft(invoice: Invoice) {
+    if (invoice.status !== "draft") return;
+    if (!can("invoices", "delete")) return;
+    const confirmed = window.confirm(language === "ar"
+      ? `حذف المسودة رقم ${invoice.invoice_number}؟ لا يمكن التراجع عن ذلك.`
+      : `Delete draft invoice ${invoice.invoice_number}? This cannot be undone.`);
+    if (!confirmed) return;
+    setDraftActionId(invoice.id);
+    setMessage("");
+    try {
+      const db = await getClinicDb();
+      const { error: itemsError } = await db.from("invoice_items").delete().eq("invoice_id", invoice.id).eq("clinic_id", invoice.clinic_id);
+      if (itemsError) throw itemsError;
+      const { error } = await db.from("invoices").delete().eq("id", invoice.id).eq("clinic_id", invoice.clinic_id).eq("status", "draft");
+      if (error) throw error;
+      await checkAdminAndLoad();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : (language === "ar" ? "تعذر حذف المسودة." : "Could not delete this draft."));
+    } finally {
+      setDraftActionId("");
     }
   }
 
@@ -316,6 +358,26 @@ export default function InvoicesPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => setStatus((current) => current === "draft" ? "all" : "draft")}
+              aria-label={language === "ar" ? "عرض مسودات الفواتير" : "Show invoice drafts"}
+              aria-pressed={status === "draft"}
+              title={language === "ar" ? "مسودات الفواتير" : "Invoice drafts"}
+              className={`relative inline-flex h-12 w-12 items-center justify-center rounded-2xl border transition ${
+                status === "draft"
+                  ? "border-amber-400/50 bg-amber-500/15 text-amber-500"
+                  : darkMode
+                    ? "border-white/10 bg-[#171A20] text-slate-300 hover:bg-[#1D2129]"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 3.75h7l4.25 4.5v11A1.75 1.75 0 0 1 16.5 21h-9A1.75 1.75 0 0 1 5.75 19.25v-13.5A2 2 0 0 1 7.75 3.75Z" />
+                <path d="M14 4v5h4M8.5 13h7M8.5 16.5h7" />
+              </svg>
+              <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-amber-500 px-1 text-[10px] font-bold leading-5 text-slate-950">{invoices.filter((invoice) => invoice.status === "draft").length}</span>
+            </button>
             <button
               onClick={() => {
                 setDarkMode((value) => !value);
@@ -512,8 +574,8 @@ export default function InvoicesPage() {
 
                   <th className="px-5 py-4">
                     {language === "ar"
-                      ? "فتح"
-                      : "Open"}
+                      ? "الإجراءات"
+                      : "Actions"}
                   </th>
                 </tr>
               </thead>
@@ -571,18 +633,34 @@ export default function InvoicesPage() {
                     </td>
 
                     <td className="px-5 py-5">
-                      <button
-                        onClick={() =>
-                          router.push(
-                            `/invoices/${invoice.id}`
-                          )
-                        }
-                        className="rounded-xl bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/20"
-                      >
-                        {language === "ar"
-                          ? "فتح"
-                          : "Open"}
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => router.push(`/invoices/${invoice.id}`)}
+                          className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/20"
+                        >
+                          {language === "ar" ? "فتح" : "Open"}
+                        </button>
+                        {invoice.status === "draft" && can("invoices", "edit") && <button
+                          onClick={() => router.push(`/invoices/new?draft=${encodeURIComponent(invoice.id)}`)}
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
+                        >
+                          {language === "ar" ? "تعديل" : "Edit"}
+                        </button>}
+                        {invoice.status === "draft" && (can("invoices", "edit") || can("invoices", "create")) && <button
+                          disabled={draftActionId === invoice.id}
+                          onClick={() => void issueDraft(invoice)}
+                          className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          {draftActionId === invoice.id ? "…" : language === "ar" ? "إصدار" : "Issue"}
+                        </button>}
+                        {invoice.status === "draft" && can("invoices", "delete") && <button
+                          disabled={draftActionId === invoice.id}
+                          onClick={() => void deleteDraft(invoice)}
+                          className="rounded-xl border border-rose-300/40 px-3 py-2 text-xs font-bold text-rose-600 transition hover:bg-rose-500/10 disabled:opacity-50 dark:text-rose-300"
+                        >
+                          {language === "ar" ? "حذف" : "Delete"}
+                        </button>}
+                      </div>
                     </td>
                   </tr>
                 ))}

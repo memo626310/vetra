@@ -14,6 +14,11 @@ import { clearClinicCache } from "@/lib/clinic-cache";
 import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
 // VETRA_DASHBOARD_CURRENT_DESIGN_POLISH_V1
 
+const DASHBOARD_BACKGROUND_KEY = "vetra-dashboard-background";
+const DASHBOARD_BACKGROUND_TRANSPARENCY_KEY = "vetra-dashboard-background-transparency";
+const DEFAULT_DASHBOARD_BACKGROUND = "/vetra-dashboard-background.jpg";
+const DEFAULT_DASHBOARD_BACKGROUND_TRANSPARENCY = 32;
+
 type Language = "ar" | "en";
 type DashboardTheme = "midnight" | "ocean" | "violet" | "light";
 
@@ -268,6 +273,8 @@ export default function Home() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [refreshingCache, setRefreshingCache] = useState(false);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const [dashboardBackground, setDashboardBackground] = useState(DEFAULT_DASHBOARD_BACKGROUND);
+  const [dashboardBackgroundTransparency, setDashboardBackgroundTransparency] = useState(DEFAULT_DASHBOARD_BACKGROUND_TRANSPARENCY);
 
   const [clinicContext, setClinicContext] =
     useState<ClinicContext | null>(null);
@@ -278,6 +285,8 @@ export default function Home() {
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
     const savedLanguage = localStorage.getItem("vetra-language");
+    const savedBackground = localStorage.getItem(DASHBOARD_BACKGROUND_KEY);
+    const savedTransparency = Number(localStorage.getItem(DASHBOARD_BACKGROUND_TRANSPARENCY_KEY));
 
     if (savedTheme && Object.hasOwn(dashboardThemes, savedTheme)) {
       const selectedTheme = savedTheme as DashboardTheme;
@@ -290,6 +299,9 @@ export default function Home() {
     if (savedLanguage === "en") {
       setLanguage("en");
     }
+
+    if (savedBackground?.startsWith("data:image/") || savedBackground?.startsWith("/")) setDashboardBackground(savedBackground);
+    if (Number.isFinite(savedTransparency)) setDashboardBackgroundTransparency(Math.min(100, Math.max(0, savedTransparency)));
 
     setReady(true);
   }, []);
@@ -492,6 +504,7 @@ export default function Home() {
   const isArabic = language === "ar";
   const darkMode = theme !== "light";
   const palette = dashboardThemes[theme];
+  const overlayOpacity = (100 - dashboardBackgroundTransparency) / 100;
 
   const selectTheme = (nextTheme: DashboardTheme) => {
     if (nextTheme !== "light") setLastDarkTheme(nextTheme);
@@ -599,11 +612,12 @@ export default function Home() {
     <main
       dir={isArabic ? "rtl" : "ltr"}
       className={`relative isolate min-h-screen overflow-hidden bg-cover bg-center bg-fixed transition-colors duration-500 ${palette.page}`}
-      style={{ backgroundImage: "url('/vetra-tinder-hero.webp')" }}
+      style={{ backgroundImage: `url("${dashboardBackground}")` }}
     >
       <div
         aria-hidden="true"
-        className={`pointer-events-none absolute inset-0 ${darkMode ? "bg-[#0F1115]/90" : "bg-white/82"}`}
+        className="pointer-events-none absolute inset-0"
+        style={{ backgroundColor: darkMode ? `rgba(15, 17, 21, ${overlayOpacity})` : `rgba(255, 255, 255, ${overlayOpacity})` }}
       />
       <div className="relative z-10 flex min-h-screen">
 

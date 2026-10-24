@@ -18,11 +18,12 @@ type Props = {
   darkMode: boolean;
   t: VisitTranslations;
   resetSelection: () => void;
+  canChangeSelection?: boolean;
   onOldVisitSelect: (visit: Visit) => void;
 };
 
 export default function NewVisitPatientOverview({
-  petDetails, visits, language, darkMode, t, resetSelection, onOldVisitSelect,
+  petDetails, visits, language, darkMode, t, resetSelection, canChangeSelection = true, onOldVisitSelect,
 }: Props) {
   const latestVisit = visits[0] || null;
   const setSelectedOldVisit = onOldVisitSelect;
@@ -86,7 +87,7 @@ export default function NewVisitPatientOverview({
                   </div>
                 </div>
 
-                <button
+                {canChangeSelection && <button
                   type="button"
                   onClick={resetSelection}
                   className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
@@ -96,7 +97,7 @@ export default function NewVisitPatientOverview({
                   }`}
                 >
                   ← {t.changeSelection}
-                </button>
+                </button>}
               </div>
             </section>
 

@@ -24,43 +24,16 @@ type Visit = {
 type Pet = { id: string; name: string; client_id: string | null };
 type Client = { id: string; name: string; client_code: string | null; phone: string | null };
 type Vaccination = { id: string; visit_id: string; vaccine_name: string | null; administered_at: string | null; next_dose_at: string | null };
-type VisitDraft = {
-  visit_date: string; reason: string; examination: string; diagnosis: string; treatment: string;
-  weight: string; temperature: string; heart_rate: string; respiratory_rate: string; notes: string;
-};
 const COLUMNS = "id,client_id,pet_id,visit_date,reason,examination,diagnosis,treatment,weight,temperature,heart_rate,respiratory_rate,notes";
+type VisitInvoice = { id: string; visit_id: string; status: string };
 
 type VisitsCache = {
   visits: Visit[];
   petsById: Record<string, Pet>;
   clientsById: Record<string, Client>;
   vaccinationsByVisit: Record<string, Vaccination[]>;
+  invoicesByVisit: Record<string, VisitInvoice>;
 };
-
-function localDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-  return date.toISOString().slice(0, 16);
-}
-function textOrNull(value: string) {
-  const result = value.trim();
-  return result || null;
-}
-function numberOrNull(value: string, label: string): number | null {
-  if (!value.trim()) return null;
-  const result = Number(value);
-  if (!Number.isFinite(result) || result < 0) throw new Error(label + ": اكتب رقمًا صحيحًا أو اترك الحقل فارغًا.");
-  return result;
-}
-function makeDraft(visit: Visit): VisitDraft {
-  return {
-    visit_date: localDateTime(visit.visit_date), reason: visit.reason || "", examination: visit.examination || "",
-    diagnosis: visit.diagnosis || "", treatment: visit.treatment || "", weight: visit.weight == null ? "" : String(visit.weight),
-    temperature: visit.temperature == null ? "" : String(visit.temperature), heart_rate: visit.heart_rate == null ? "" : String(visit.heart_rate),
-    respiratory_rate: visit.respiratory_rate == null ? "" : String(visit.respiratory_rate), notes: visit.notes || "",
-  };
-}
 function visitHandler(notes: string | null) {
   const line = notes?.split(/\r?\n/).find((entry) => /performing doctor|الطبيب المعالج/i.test(entry));
   return line?.split(":").slice(1).join(":").trim() || "—";
@@ -72,6 +45,7 @@ export default function VisitHistoryDashboardPage() {
   const [petsById, setPetsById] = useState<Record<string, Pet>>({});
   const [clientsById, setClientsById] = useState<Record<string, Client>>({});
   const [vaccinationsByVisit, setVaccinationsByVisit] = useState<Record<string, Vaccination[]>>({});
+  const [invoicesByVisit, setInvoicesByVisit] = useState<Record<string, VisitInvoice>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -82,8 +56,6 @@ export default function VisitHistoryDashboardPage() {
   const [pageSize, setPageSize] = useState(25);
   const [deleting, setDeleting] = useState<Visit | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Visit | null>(null);
-  const [draft, setDraft] = useState<VisitDraft | null>(null);
   const [clinicId, setClinicId] = useState("");
   const [refreshingCache, setRefreshingCache] = useState(false);
   const ar = language === "ar";
@@ -100,12 +72,19 @@ export default function VisitHistoryDashboardPage() {
         setPetsById(cached.petsById);
         setClientsById(cached.clientsById);
         setVaccinationsByVisit(cached.vaccinationsByVisit);
+        setInvoicesByVisit(cached.invoicesByVisit || {});
       }
       const db = await getClinicDb();
       const { data, error: visitsError } = await db.from("visits").select(COLUMNS).order("visit_date", { ascending: false }).limit(500);
       if (visitsError) throw visitsError;
       const loaded = (data || []) as Visit[];
       const visitIds = loaded.map((visit) => visit.id);
+      let invoices: VisitInvoice[] = [];
+      if (visitIds.length) {
+        const invoiceResult = await db.from("invoices").select("id,visit_id,status").in("visit_id", visitIds).order("created_at", { ascending: false });
+        if (invoiceResult.error) console.error("DASHBOARD VISIT INVOICES LOAD ERROR:", invoiceResult.error);
+        else invoices = (invoiceResult.data || []) as VisitInvoice[];
+      }
       let vaccinations: Vaccination[] = [];
       if (visitIds.length) {
         const vaccinationResult = await db.from("vaccinations")
@@ -137,11 +116,18 @@ export default function VisitHistoryDashboardPage() {
       }, {});
       const nextPetsById = Object.fromEntries(pets.map((item) => [item.id, item]));
       const nextClientsById = Object.fromEntries(clients.map((item) => [item.id, item]));
+      const nextInvoicesByVisit: Record<string, VisitInvoice> = {};
+      for (const invoice of invoices) {
+        if (!nextInvoicesByVisit[invoice.visit_id] && !["cancelled", "returned"].includes(invoice.status)) {
+          nextInvoicesByVisit[invoice.visit_id] = invoice;
+        }
+      }
       setVisits(loaded);
       setVaccinationsByVisit(nextVaccinations);
       setPetsById(nextPetsById);
       setClientsById(nextClientsById);
-      writeClinicCache(context.clinic_id, "visit-history", { visits: loaded, petsById: nextPetsById, clientsById: nextClientsById, vaccinationsByVisit: nextVaccinations } satisfies VisitsCache);
+      setInvoicesByVisit(nextInvoicesByVisit);
+      writeClinicCache(context.clinic_id, "visit-history", { visits: loaded, petsById: nextPetsById, clientsById: nextClientsById, vaccinationsByVisit: nextVaccinations, invoicesByVisit: nextInvoicesByVisit } satisfies VisitsCache);
     } catch (err) {
       console.error("DASHBOARD VISITS LOAD ERROR:", err);
       setError(err instanceof Error ? err.message : "تعذر تحميل سجل الزيارات.");
@@ -181,54 +167,11 @@ export default function VisitHistoryDashboardPage() {
   const pageCount = Math.max(1, Math.ceil(filteredVisits.length / pageSize));
   const visibleVisits = filteredVisits.slice(page * pageSize, (page + 1) * pageSize);
 
-  function startEdit(visit: Visit) {
-    setError(""); setMessage(""); setEditing(visit); setDraft(makeDraft(visit));
-  }
-  function closeEdit() {
-    if (saving) return;
-    setEditing(null); setDraft(null);
-  }
-  async function saveEdit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!editing || !draft) return;
-    setSaving(true); setError(""); setMessage("");
-    try {
-      if (!draft.visit_date || Number.isNaN(new Date(draft.visit_date).getTime())) throw new Error(ar ? "حدد تاريخ ووقت الزيارة." : "Choose a valid visit date and time.");
-      const payload = {
-        visit_date: new Date(draft.visit_date).toISOString(),
-        reason: textOrNull(draft.reason), examination: textOrNull(draft.examination),
-        diagnosis: textOrNull(draft.diagnosis), treatment: textOrNull(draft.treatment),
-        weight: numberOrNull(draft.weight, ar ? "الوزن" : "Weight"),
-        temperature: numberOrNull(draft.temperature, ar ? "الحرارة" : "Temperature"),
-        heart_rate: numberOrNull(draft.heart_rate, ar ? "النبض" : "Heart rate"),
-        respiratory_rate: numberOrNull(draft.respiratory_rate, ar ? "التنفس" : "Respiratory rate"),
-        notes: textOrNull(draft.notes),
-      };
-      const db = await getClinicDb();
-      const { data, error: updateError } = await db.from("visits").update(payload).eq("id", editing.id).select(COLUMNS).single();
-      if (updateError) throw updateError;
-      if (!data) throw new Error(ar ? "لم يتم تأكيد حفظ الزيارة." : "The saved visit was not returned.");
-      setVisits((current) => current.map((visit) => visit.id === editing.id ? data as Visit : visit));
-      setEditing(null); setDraft(null);
-      setMessage(ar ? "تم حفظ تعديلات الزيارة بنجاح." : "Visit changes saved.");
-      if (clinicId) clearClinicCache(clinicId);
-    } catch (err) {
-      console.error("DASHBOARD VISIT EDIT ERROR:", err);
-      setError(err instanceof Error ? err.message : (ar ? "تعذر حفظ تعديلات الزيارة." : "Could not save visit changes."));
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function deleteVisit() {
     if (!deleting) return;
     setSaving(true); setError(""); setMessage("");
     try {
       const db = await getClinicDb();
-      const { data: invoices, error: invoiceLookupError } = await db.from("invoices").select("id").eq("visit_id", deleting.id);
-      if (invoiceLookupError) throw invoiceLookupError;
-      const invoiceIds = (invoices || []).map((row) => String(row.id));
-
       const { error: detachInvoiceError } = await db.from("invoices").update({ visit_id: null }).eq("visit_id", deleting.id);
       if (detachInvoiceError) throw detachInvoiceError;
 
@@ -275,6 +218,8 @@ export default function VisitHistoryDashboardPage() {
     weight: ar ? "الوزن (كجم)" : "Weight (kg)", temp: ar ? "الحرارة (°C)" : "Temperature (°C)",
     heart: ar ? "نبض القلب" : "Heart rate", respiration: ar ? "معدل التنفس" : "Respiratory rate", notes: ar ? "ملاحظات" : "Notes",
     edit: ar ? "تعديل الزيارة" : "Edit visit", save: ar ? "حفظ التعديلات" : "Save changes",
+    sharePrescription: ar ? "مشاركة الروشتة" : "Share prescription",
+    shareInvoice: ar ? "مشاركة الفاتورة" : "Share invoice",
     cancel: ar ? "إلغاء" : "Cancel", loading: ar ? "جاري تحميل سجل الزيارات..." : "Loading visits...",
     noResults: ar ? "لا توجد زيارات مطابقة للبحث." : "No matching visits found.",
     vaccines: ar ? "التطعيمات" : "Vaccinations",
@@ -287,7 +232,6 @@ export default function VisitHistoryDashboardPage() {
     limit: ar ? "يعرض السجل آخر 500 زيارة. استخدم البحث لتصفية النتائج." : "Showing the latest 500 visits. Use search to filter results.",
   };
   const inputClass = "w-full min-w-0 rounded-lg border border-[#444b4d] bg-[#303536] px-3 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/15";
-  const labelClass = "mb-1.5 block text-sm font-semibold text-slate-300";
 
   return (
     <main dir={ar ? "rtl" : "ltr"} className="min-h-screen overflow-x-hidden bg-[#181c1d] px-3 py-4 text-slate-100 sm:px-6 sm:py-8">
@@ -332,7 +276,11 @@ export default function VisitHistoryDashboardPage() {
                       <td className="px-4 py-4"><span className="block font-semibold">{owner?.name || text.unavailable}</span><span className="text-xs text-slate-400">{owner?.phone || owner?.client_code || ""}</span></td>
                       <td className="px-4 py-4 text-sm text-slate-300">{visitHandler(visit.notes)}</td>
                       <td className="px-4 py-4"><span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-bold text-emerald-300">{text.completed}</span></td>
-                      <td className="px-4 py-4 text-end"><button type="button" onClick={(event) => { event.stopPropagation(); startEdit(visit); }} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">{text.edit}</button></td>
+                      <td className="px-4 py-4 text-end" onClick={(event) => event.stopPropagation()}><div className="flex flex-wrap justify-end gap-2">
+                        <Link href={`/visits/${visit.id}/edit`} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">{text.edit}</Link>
+                        <Link href={`/prescriptions/${visit.id}`} className="rounded-lg border border-cyan-400/40 px-3 py-2 text-xs font-bold text-cyan-200">{text.sharePrescription}</Link>
+                        {invoicesByVisit[visit.id] && <Link href={`/invoices/${invoicesByVisit[visit.id].id}`} className="rounded-lg border border-emerald-400/40 px-3 py-2 text-xs font-bold text-emerald-200">{text.shareInvoice}</Link>}
+                      </div></td>
                     </tr>
                     {expandedId === visit.id && <tr><td colSpan={7} className="bg-[#24292a] px-4 py-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       {([[text.reason, visit.reason], [text.exam, visit.examination], [text.diagnosis, visit.diagnosis], [text.treatment, visit.treatment], [text.weight, visit.weight == null ? null : String(visit.weight)], [text.temp, visit.temperature == null ? null : String(visit.temperature)], [text.heart, visit.heart_rate == null ? null : String(visit.heart_rate)], [text.respiration, visit.respiratory_rate == null ? null : String(visit.respiratory_rate)], [text.notes, visit.notes]] as Array<[string, string | null]>).map(([label, value]) => <div key={label} className="min-w-0"><div className="text-xs font-bold text-slate-400">{label}</div><div className="mt-1 whitespace-pre-wrap break-words text-sm">{value || "—"}</div></div>)}
@@ -352,34 +300,6 @@ export default function VisitHistoryDashboardPage() {
           <div className="flex items-center gap-2"><button type="button" disabled={page === 0} onClick={() => setPage((current) => current - 1)} className="rounded-lg border border-[#414849] px-3 py-2 disabled:opacity-40">{text.previous}</button><span>{page + 1} / {pageCount}</span><button type="button" disabled={page + 1 >= pageCount} onClick={() => setPage((current) => current + 1)} className="rounded-lg border border-[#414849] px-3 py-2 disabled:opacity-40">{text.next}</button></div>
         </div>}
       </div>
-      {editing && draft && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) closeEdit(); }}>
-          <section role="dialog" aria-modal="true" aria-labelledby="edit-visit-title" className="max-h-[95dvh] w-full min-w-0 max-w-3xl overflow-y-auto rounded-t-3xl border border-[#414849] bg-[#252a2b] p-4 text-slate-100 shadow-2xl sm:max-h-[90vh] sm:rounded-xl sm:p-6">
-            <div className="mb-5 flex items-start justify-between gap-3">
-              <div className="min-w-0"><h2 id="edit-visit-title" className="text-xl font-black">{text.edit}</h2><p className="mt-1 break-words text-xs text-slate-500">{editing.pet_id ? petsById[editing.pet_id]?.name || "" : ""} · {editing.client_id ? clientsById[editing.client_id]?.name || "" : ""}</p><p className="mt-1 text-xs text-slate-400">{ar ? "ستظل روابط العميل والحيوان والأدوية والتطعيمات كما هي." : "Client, pet, medication, and vaccination links will stay unchanged."}</p></div>
-              <button type="button" onClick={closeEdit} disabled={saving} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#343b3c] text-slate-200 disabled:opacity-50" aria-label={text.cancel}>×</button>
-            </div>
-            {error && <div role="alert" className="mb-4 break-words rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm font-semibold text-rose-200">{error}</div>}
-            <form onSubmit={saveEdit} className="grid min-w-0 gap-4 sm:grid-cols-2">
-              <div className="min-w-0 sm:col-span-2"><label className={labelClass}>{text.date}</label><input type="datetime-local" required value={draft.visit_date} onChange={(e) => setDraft({ ...draft, visit_date: e.target.value })} className={inputClass} /></div>
-              {([
-                ["reason", text.reason, "text"], ["examination", text.exam, "textarea"], ["diagnosis", text.diagnosis, "textarea"],
-                ["treatment", text.treatment, "textarea"], ["weight", text.weight, "number"], ["temperature", text.temp, "number"],
-                ["heart_rate", text.heart, "number"], ["respiratory_rate", text.respiration, "number"], ["notes", text.notes, "textarea"],
-              ] as const).map(([key, label, kind]) => (
-                <div key={key} className={kind === "textarea" || key === "reason" ? "min-w-0 sm:col-span-2" : "min-w-0"}>
-                  <label className={labelClass} htmlFor={"visit-" + key}>{label}</label>
-                  {kind === "textarea" ? <textarea id={"visit-" + key} value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} rows={key === "notes" ? 4 : 3} className={inputClass} /> : <input id={"visit-" + key} type={kind === "number" ? "number" : "text"} min={kind === "number" ? 0 : undefined} step={kind === "number" ? "any" : undefined} value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} className={inputClass} />}
-                </div>
-              ))}
-              <div className="flex flex-col-reverse gap-2 pb-[env(safe-area-inset-bottom)] sm:col-span-2 sm:flex-row sm:justify-end">
-                <button type="button" onClick={closeEdit} disabled={saving} className="rounded-lg border border-[#414849] px-5 py-3 text-sm font-bold text-slate-200 disabled:opacity-50">{text.cancel}</button>
-                <button type="submit" disabled={saving} className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">{saving ? (ar ? "جاري الحفظ..." : "Saving...") : text.save}</button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
       {deleting && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setDeleting(null); }}>
         <section role="alertdialog" aria-modal="true" aria-labelledby="delete-visit-title" className="w-full max-w-md rounded-xl border border-[#414849] bg-[#252a2b] p-5 text-slate-100 shadow-2xl">
           <h2 id="delete-visit-title" className="text-lg font-black">{text.delete}</h2>

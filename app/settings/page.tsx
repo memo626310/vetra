@@ -1,12 +1,17 @@
 ﻿ "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { usePwaInstall } from "@/components/PwaInstallProvider";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { loadClinicProfile, type ClinicProfile } from "@/lib/clinic-profile";
 import { writeVetraThemeMode } from "@/lib/theme";
+
+const DASHBOARD_BACKGROUND_KEY = "vetra-dashboard-background";
+const DASHBOARD_BACKGROUND_TRANSPARENCY_KEY = "vetra-dashboard-background-transparency";
+const DEFAULT_DASHBOARD_BACKGROUND = "/vetra-dashboard-background.jpg";
+const DEFAULT_DASHBOARD_BACKGROUND_TRANSPARENCY = 32;
 
 type Language = "ar" | "en";
 
@@ -32,6 +37,7 @@ type BillingSettings = {
   id: string;
   clinic_id: string;
   consultation_fee: number | null;
+  follow_up_fee: number | null;
   injection_fee: number | null;
   auto_add_consultation_fee: boolean;
 };
@@ -99,11 +105,20 @@ const text = {
     billingHint: "الإعدادات التي تؤثر على إنشاء الفواتير والزيارات.",
     consultationFee: "سعر الكشف",
     consultationFeeHint: "يُستخدم عند تفعيل إضافة سعر الكشف تلقائيًا.",
+    followUpFee: "سعر المتابعة",
+    followUpFeeHint: "السعر الافتراضي لزيارات المتابعة، ويمكن تعديله داخل الفاتورة.",
     injectionFee: "سعر الحقنة الموحد",
     injectionFeeHint: "يُضاف تلقائيًا لكل دواء في الزيارة، ويمكن تعديل سعر كل بند قبل إصدار الفاتورة.",
     autoConsultation: "إضافة سعر الكشف تلقائيًا",
     autoConsultationHint: "عند إنهاء زيارة، يتم تجهيز بند الكشف في الفاتورة تلقائيًا.",
     appearance: "المظهر واللغة",
+    dashboardBackground: "خلفية الداشبورد",
+    dashboardBackgroundHint: "اختر صورة الخلفية وحدد مدى ظهورها في لوحة التحكم.",
+    chooseBackground: "اختيار صورة",
+    resetBackground: "استعادة الافتراضية",
+    backgroundTransparency: "شفافية الخلفية",
+    backgroundSaved: "تم حفظ خلفية الداشبورد.",
+    backgroundInvalid: "اختر صورة أقل من 2 ميجابايت.",
     appDataTools: "التطبيق والبيانات",
     appDataToolsHint: "تثبيت VETRA وإدارة نسخ بيانات العيادة.",
     installTitle: "تثبيت برنامج VETRA",
@@ -195,11 +210,20 @@ const text = {
     billingHint: "Settings that affect visits and invoice creation.",
     consultationFee: "Consultation fee",
     consultationFeeHint: "Used when automatic consultation fee is enabled.",
+    followUpFee: "Follow-up fee",
+    followUpFeeHint: "Default price for follow-up visits. It can be adjusted on the invoice.",
     injectionFee: "Default injection fee",
     injectionFeeHint: "Added automatically for each medication in a visit. Each line can be adjusted before billing.",
     autoConsultation: "Automatically add consultation fee",
     autoConsultationHint: "When a visit is completed, the consultation item is prepared automatically in the invoice.",
     appearance: "Appearance & language",
+    dashboardBackground: "Dashboard background",
+    dashboardBackgroundHint: "Choose the image and control how visible it is on the dashboard.",
+    chooseBackground: "Choose image",
+    resetBackground: "Restore default",
+    backgroundTransparency: "Background transparency",
+    backgroundSaved: "Dashboard background saved.",
+    backgroundInvalid: "Choose an image smaller than 2 MB.",
     appDataTools: "App & data tools",
     appDataToolsHint: "Install VETRA and manage clinic data backups.",
     installTitle: "Install VETRA",
@@ -294,6 +318,7 @@ export default function SettingsPage() {
   const [billing, setBilling] = useState<BillingSettings | null>(null);
 
   const [consultationFee, setConsultationFee] = useState("");
+  const [followUpFee, setFollowUpFee] = useState("");
   const [injectionFee, setInjectionFee] = useState("");
   const [autoAddConsultationFee, setAutoAddConsultationFee] = useState(false);
 
@@ -309,11 +334,19 @@ export default function SettingsPage() {
   const [backupProgress, setBackupProgress] = useState("");
   const [installHelp, setInstallHelp] = useState(false);
   const [installStatus, setInstallStatus] = useState("");
+  const [dashboardBackground, setDashboardBackground] = useState(DEFAULT_DASHBOARD_BACKGROUND);
+  const [dashboardBackgroundTransparency, setDashboardBackgroundTransparency] = useState(DEFAULT_DASHBOARD_BACKGROUND_TRANSPARENCY);
+  const [backgroundStatus, setBackgroundStatus] = useState("");
+  const backgroundInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDarkMode(localStorage.getItem("vetra-theme") !== "light");
       setLanguage(localStorage.getItem("vetra-language") === "en" ? "en" : "ar");
+      const savedBackground = localStorage.getItem(DASHBOARD_BACKGROUND_KEY);
+      const savedTransparency = Number(localStorage.getItem(DASHBOARD_BACKGROUND_TRANSPARENCY_KEY));
+      if (savedBackground?.startsWith("data:image/") || savedBackground?.startsWith("/")) setDashboardBackground(savedBackground);
+      if (Number.isFinite(savedTransparency)) setDashboardBackgroundTransparency(Math.min(100, Math.max(0, savedTransparency)));
       setReady(true);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -365,7 +398,7 @@ export default function SettingsPage() {
 
         const { data, error: billingError } = await db
           .from("billing_settings")
-          .select("id, clinic_id, consultation_fee, injection_fee, auto_add_consultation_fee")
+          .select("id, clinic_id, consultation_fee, follow_up_fee, injection_fee, auto_add_consultation_fee")
           .eq("clinic_id", clinicContext.clinic_id)
           .maybeSingle();
 
@@ -383,6 +416,7 @@ export default function SettingsPage() {
               ? ""
               : String(settings.consultation_fee)
           );
+          setFollowUpFee(settings.follow_up_fee == null ? "" : String(settings.follow_up_fee));
           setAutoAddConsultationFee(Boolean(settings.auto_add_consultation_fee));
           setInjectionFee(settings.injection_fee == null ? "" : String(settings.injection_fee));
         }
@@ -404,6 +438,37 @@ export default function SettingsPage() {
   }, [ready, router, language]);
 
   const t = text[language];
+
+  function handleDashboardBackgroundChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 2 * 1024 * 1024) {
+      setBackgroundStatus(t.backgroundInvalid);
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") return;
+      localStorage.setItem(DASHBOARD_BACKGROUND_KEY, reader.result);
+      setDashboardBackground(reader.result);
+      setBackgroundStatus(t.backgroundSaved);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function resetDashboardBackground() {
+    localStorage.removeItem(DASHBOARD_BACKGROUND_KEY);
+    setDashboardBackground(DEFAULT_DASHBOARD_BACKGROUND);
+    setBackgroundStatus(t.backgroundSaved);
+    if (backgroundInputRef.current) backgroundInputRef.current.value = "";
+  }
+
+  function changeDashboardBackgroundTransparency(value: string) {
+    const nextValue = Math.min(100, Math.max(0, Number(value)));
+    setDashboardBackgroundTransparency(nextValue);
+    localStorage.setItem(DASHBOARD_BACKGROUND_TRANSPARENCY_KEY, String(nextValue));
+  }
   const { canInstall, isInstalled, isIOS, installApp } = usePwaInstall();
   const isAdmin = context ? ["owner", "admin"].includes(context.role) : false;
   const doctorNameAvailableAt = clinicProfile?.doctor_name_changed_at
@@ -547,6 +612,7 @@ export default function SettingsPage() {
     }
 
     const feeValue = consultationFee.trim() === "" ? null : Number(consultationFee);
+    const followUpFeeValue = followUpFee.trim() === "" ? 0 : Number(followUpFee);
     const injectionFeeValue = injectionFee.trim() === "" ? 0 : Number(injectionFee);
 
     if (feeValue !== null && (!Number.isFinite(feeValue) || feeValue < 0)) {
@@ -555,6 +621,11 @@ export default function SettingsPage() {
       return;
     }
     if (!Number.isFinite(injectionFeeValue) || injectionFeeValue < 0) {
+      setError(t.saveError);
+      setMessage("");
+      return;
+    }
+    if (!Number.isFinite(followUpFeeValue) || followUpFeeValue < 0) {
       setError(t.saveError);
       setMessage("");
       return;
@@ -572,13 +643,14 @@ export default function SettingsPage() {
           .from("billing_settings")
           .update({
             consultation_fee: feeValue,
+            follow_up_fee: followUpFeeValue,
             injection_fee: injectionFeeValue,
             auto_add_consultation_fee: autoAddConsultationFee,
             updated_at: new Date().toISOString(),
           })
           .eq("id", billing.id)
           .eq("clinic_id", context.clinic_id)
-          .select("id, clinic_id, consultation_fee, injection_fee, auto_add_consultation_fee")
+          .select("id, clinic_id, consultation_fee, follow_up_fee, injection_fee, auto_add_consultation_fee")
           .single();
 
         if (updateError) throw updateError;
@@ -589,10 +661,11 @@ export default function SettingsPage() {
           .insert({
             clinic_id: context.clinic_id,
             consultation_fee: feeValue,
+            follow_up_fee: followUpFeeValue,
             injection_fee: injectionFeeValue,
             auto_add_consultation_fee: autoAddConsultationFee,
           })
-          .select("id, clinic_id, consultation_fee, injection_fee, auto_add_consultation_fee")
+          .select("id, clinic_id, consultation_fee, follow_up_fee, injection_fee, auto_add_consultation_fee")
           .single();
 
         if (insertError) throw insertError;
@@ -980,6 +1053,27 @@ export default function SettingsPage() {
               </div>
 
               <div>
+                <label className="mb-2 block text-sm font-bold">{t.followUpFee}</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={followUpFee}
+                    onChange={(e) => setFollowUpFee(e.target.value)}
+                    disabled={!isAdmin || savingBilling}
+                    className={`w-full rounded-2xl border px-4 py-3.5 outline-none transition focus:border-blue-500 ${
+                      darkMode
+                        ? "border-white/[0.07] bg-[#0F1115] text-white disabled:opacity-50"
+                        : "border-slate-200 bg-slate-50 text-slate-900 disabled:opacity-50"
+                    }`}
+                  />
+                  <span className="shrink-0 text-sm font-bold text-slate-500">{t.egp}</span>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">{t.followUpFeeHint}</p>
+              </div>
+
+              <div>
                 <label className="mb-2 block text-sm font-bold">{t.injectionFee}</label>
                 <div className="flex items-center gap-3">
                   <input
@@ -1066,6 +1160,29 @@ export default function SettingsPage() {
                   </button>
                 }
               />
+            </div>
+
+            <div className={`mt-5 rounded-2xl border p-4 ${darkMode ? "border-white/[0.06] bg-white/[0.02]" : "border-slate-100 bg-slate-50"}`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="font-bold">🖼️ {t.dashboardBackground}</h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{t.dashboardBackgroundHint}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <input ref={backgroundInputRef} type="file" accept="image/*" onChange={handleDashboardBackgroundChange} className="hidden" />
+                  <button type="button" onClick={() => backgroundInputRef.current?.click()} className="rounded-xl bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-500 transition hover:bg-blue-500/15">{t.chooseBackground}</button>
+                  <button type="button" onClick={resetDashboardBackground} className="rounded-xl border border-slate-300/40 px-3 py-2 text-xs font-bold text-slate-500 transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5">{t.resetBackground}</button>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
+                <div className="h-24 rounded-xl border border-white/10 bg-cover bg-center shadow-inner" style={{ backgroundImage: `url("${dashboardBackground}")` }} aria-label={t.dashboardBackground} />
+                <label className="block">
+                  <span className="text-sm font-bold">{t.backgroundTransparency}</span>
+                  <input type="range" min="0" max="100" step="1" value={dashboardBackgroundTransparency} onChange={(event) => changeDashboardBackgroundTransparency(event.target.value)} className="mt-3 w-full accent-teal-500" />
+                  <span className="mt-1 flex justify-between text-xs text-slate-500"><span>0%</span><strong className="text-teal-500">{dashboardBackgroundTransparency}%</strong><span>100%</span></span>
+                </label>
+              </div>
+              {backgroundStatus && <p role="status" className="mt-3 text-xs font-semibold text-teal-500">{backgroundStatus}</p>}
             </div>
           </section>
 

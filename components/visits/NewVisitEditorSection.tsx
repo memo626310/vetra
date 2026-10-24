@@ -8,10 +8,11 @@ type Props = {
   onSave: () => void;
   onSaveWithBill?: () => void;
   billLabel?: string;
+  saveLabel?: string;
   children: ReactNode;
 };
 
-export default function NewVisitEditorSection({ darkMode, t, saving, onSave, onSaveWithBill, billLabel, children }: Props) {
+export default function NewVisitEditorSection({ darkMode, t, saving, onSave, onSaveWithBill, billLabel, saveLabel, children }: Props) {
   return (
     <section
       className={`rounded-2xl border p-4 shadow-sm transition-colors duration-200 sm:p-6 ${
@@ -33,7 +34,7 @@ export default function NewVisitEditorSection({ darkMode, t, saving, onSave, onS
           disabled={saving}
           className="rounded-lg bg-cyan-600 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50 sm:px-7"
         >
-          {saving ? t.saving : `✓ ${t.saveVisit}`}
+          {saving ? t.saving : `✓ ${saveLabel || t.saveVisit}`}
         </button>
         {onSaveWithBill && <button
           type="button"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
@@ -34,11 +34,14 @@ type AvailableDoctor = { id: string; full_name: string; specialty: string | null
 type VisitServiceDraft = { id: string; name: string; quantity: number; price: number };
 type MedicationBillLine = { id: string; name: string };
 type VisitAttachmentDraft = { id: string; file: File; category: "analysis" | "xray" };
+type ExistingVisitAttachment = { id: string; file_name: string; storage_path: string; category: "analysis" | "xray"; url: string };
 type VaccineStockProduct = { id: string; name: string; active_ingredient: string | null; quantity: number; unit: string | null; retail_price: number; barcode?: string | null; category_id?: string | null };
 type DrawerMedication = { id: string; product_id: string; quantity: number };
 
 export default function NewVisitPage() {
   const router = useRouter();
+  const routeParams = useParams<{ id?: string }>();
+  const editVisitId = typeof routeParams?.id === "string" ? routeParams.id : null;
 
   const [language, setLanguage] = useState<Language>("en");
   const [darkMode, setDarkMode] = useState(false);
@@ -72,12 +75,16 @@ export default function NewVisitPage() {
   const [availableDoctors, setAvailableDoctors] = useState<AvailableDoctor[]>([]);
   const [groomingType, setGroomingType] = useState("");
   const [consultationFee, setConsultationFee] = useState(0);
+  const [followUpFee, setFollowUpFee] = useState(0);
   const [injectionFee, setInjectionFee] = useState(0);
   const [medicationChargePrices, setMedicationChargePrices] = useState<Record<string, number>>({});
   const [medicationChargeQuantities, setMedicationChargeQuantities] = useState<Record<string, number>>({});
   const [symptoms, setSymptoms] = useState<SymptomDraft[]>([]);
   const [visitServices, setVisitServices] = useState<VisitServiceDraft[]>([]);
   const [attachments, setAttachments] = useState<VisitAttachmentDraft[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<ExistingVisitAttachment[]>([]);
+  const [removedAttachments, setRemovedAttachments] = useState<ExistingVisitAttachment[]>([]);
+  const [visitDate, setVisitDate] = useState("");
 
   const [reason, setReason] = useState("examination");
   const [examStatus, setExamStatus] = useState<"normal" | "abnormal" | "">("");
@@ -111,6 +118,7 @@ export default function NewVisitPage() {
   const [vaccineProductMappings, setVaccineProductMappings] = useState<Record<string, string[]>>({});
   const [drawerMedications, setDrawerMedications] = useState<DrawerMedication[]>([]);
   const [medicalRecordDraft, setMedicalRecordDraft] = useState<MedicalRecordDraft>(emptyMedicalRecordDraft);
+  const [originalMedicalRecords, setOriginalMedicalRecords] = useState<Array<{ id: string; record_type: string; status: string | null }>>([]);
 
   const t = translations[language];
 
@@ -150,6 +158,7 @@ export default function NewVisitPage() {
   }, []);
 
   useEffect(() => {
+    if (editVisitId) return;
     if (!selectedClientId) {
       setPets([]);
       setSelectedPetId("");
@@ -157,13 +166,17 @@ export default function NewVisitPage() {
     }
 
     loadPets(selectedClientId);
-  }, [selectedClientId]);
+  }, [selectedClientId, editVisitId]);
 
   useEffect(() => {
     if (!petFromUrl) return;
 
     loadPetFromUrl(petFromUrl);
   }, [petFromUrl]);
+
+  useEffect(() => {
+    if (editVisitId) void loadVisitForEdit(editVisitId);
+  }, [editVisitId]);
 
   async function loadClients(forceRefresh = false) {
     setLoadingClients(true);
@@ -218,16 +231,18 @@ export default function NewVisitPage() {
       }
       if (categoriesResult.error) console.warn("LOAD PRODUCT CATEGORIES ERROR:", categoriesResult.error);
       const { data: billingSettings, error: billingSettingsError } = await db.from("billing_settings")
-        .select("consultation_fee, injection_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
+        .select("consultation_fee, follow_up_fee, injection_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
       if (billingSettingsError) {
         console.warn("LOAD INJECTION FEE SETTING ERROR; retrying legacy billing settings:", billingSettingsError);
         const { data: legacyBillingSettings, error: legacyBillingSettingsError } = await db.from("billing_settings")
           .select("consultation_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
         if (legacyBillingSettingsError) throw legacyBillingSettingsError;
         setConsultationFee(Number(legacyBillingSettings?.consultation_fee || 0));
+        setFollowUpFee(0);
         setInjectionFee(0);
       } else {
         setConsultationFee(Number(billingSettings?.consultation_fee || 0));
+        setFollowUpFee(Number(billingSettings?.follow_up_fee || 0));
         setInjectionFee(Number(billingSettings?.injection_fee || 0));
       }
 
@@ -326,6 +341,178 @@ export default function NewVisitPage() {
       setShowVisitStartModal(true);
     } catch (error) {
       console.error("LOAD PET FROM URL ERROR:", error);
+      setMessage(error instanceof Error ? error.message : t.loadError);
+    } finally {
+      setLoadingDetails(false);
+    }
+  }
+
+  async function loadVisitForEdit(visitId: string) {
+    setLoadingDetails(true);
+    setMessage("");
+    try {
+      const db = await getClinicDb();
+      const { data: visit, error: visitError } = await db.from("visits").select("*").eq("id", visitId).single();
+      if (visitError || !visit) throw visitError || new Error(t.loadError);
+
+      const [petResult, medicationResult, prescriptionResult, vaccineResult, recordResult, attachmentResult] = await Promise.all([
+        db.from("pets").select("*, client:clients (id, name, phone, email)").eq("id", visit.pet_id).single(),
+        db.from("visit_medications").select("*").eq("visit_id", visitId),
+        db.from("visit_prescriptions").select("*").eq("visit_id", visitId),
+        db.from("vaccinations").select("*").eq("visit_id", visitId).order("administered_at", { ascending: true }),
+        db.from("pet_medical_records").select("id,record_type,title,status,notes,performed_at").eq("visit_id", visitId),
+        db.from("visit_attachments").select("id,file_name,storage_path,category").eq("visit_id", visitId).order("created_at", { ascending: true }),
+      ]);
+      if (petResult.error) throw petResult.error;
+      if (medicationResult.error) throw medicationResult.error;
+      if (prescriptionResult.error) throw prescriptionResult.error;
+      if (vaccineResult.error) throw vaccineResult.error;
+      if (recordResult.error) throw recordResult.error;
+      if (attachmentResult.error) throw attachmentResult.error;
+
+      const pet = petResult.data;
+      if (!pet) throw new Error(t.loadError);
+      const medicationRows = medicationResult.data || [];
+      const prescriptionRows = prescriptionResult.data || [];
+      const vaccineRows = vaccineResult.data || [];
+      const medicalRows = recordResult.data || [];
+      const attachmentRows = attachmentResult.data || [];
+      const clinicContext = await getClinicContext();
+      setClinicId(clinicContext.clinic_id || "");
+      setPetDetails(pet as PetDetails);
+      setSelectedPetId(visit.pet_id);
+      setSelectedClientId(visit.client_id);
+      setVisitDate(formatLocalDateTime(new Date(visit.visit_date)));
+      setReason(visit.reason || "examination");
+      setPerformingDoctor("__any__");
+      setGroomingType("");
+      setAppointmentId("");
+
+      const noteLines = String(visit.notes || "").split(/\r?\n/);
+      const getNoteValue = (pattern: RegExp) => noteLines.find((line) => pattern.test(line))?.split(":").slice(1).join(":").trim() || "";
+      const doctorNote = getNoteValue(/^(?:Performing doctor|الطبيب المعالج):/i);
+      if (doctorNote) setPerformingDoctor(doctorNote.includes("Any available") || doctorNote.includes("أي طبيب") ? "__any__" : doctorNote);
+      const groomingNote = getNoteValue(/^(?:Grooming type|نوع التجميل):/i);
+      setGroomingType(groomingNote);
+      const appointmentNote = noteLines.find((line) => /^Appointment:/i.test(line));
+      const appointment = appointmentNote?.split(":").slice(1).join(":").trim() || "";
+      setAppointmentId(appointment);
+      setVisitSource(appointment ? "appointment" : "new_visit");
+
+      const examSections = String(visit.examination || "").split(/\n{2,}/);
+      const firstExamSection = examSections[0] || "";
+      const symptomLines = firstExamSection.split(/\r?\n/).filter(Boolean);
+      const parsedSymptoms = symptomLines.map((line) => {
+        const match = line.match(/^(.*?)\s*\((\d+)\s+(?:days|يوم)\)$/i);
+        return match ? { id: crypto.randomUUID(), name: match[1].trim(), days: match[2] } : null;
+      });
+      const hasSymptomBlock = symptomLines.length > 0 && parsedSymptoms.every(Boolean);
+      setSymptoms(hasSymptomBlock ? parsedSymptoms as SymptomDraft[] : []);
+      const clinicalExam = (hasSymptomBlock ? examSections.slice(1).join("\n\n") : String(visit.examination || "")).trim();
+      setExamStatus(clinicalExam.startsWith("Normal") ? "normal" : clinicalExam.startsWith("Abnormal") ? "abnormal" : "");
+      setExamination(clinicalExam.replace(/^(?:Normal|Abnormal):?\s*/, ""));
+      setDiagnosis(visit.diagnosis || "");
+      setWeight(visit.weight == null ? "" : String(visit.weight));
+      setTemperature(visit.temperature == null ? "" : String(visit.temperature));
+      setHeartRate(visit.heart_rate == null ? "" : String(visit.heart_rate));
+      setRespiratoryRate(visit.respiratory_rate == null ? "" : String(visit.respiratory_rate));
+
+      const medicationIds = [...new Set(medicationRows.map((row) => row.medication_id).filter(Boolean))];
+      const medicationNamesResult = medicationIds.length
+        ? await db.from("medications").select(`
+            id, name, active_ingredient, species, concentration, concentration_unit,
+            dose_type, dose_value, dose_min, dose_max, dose_unit, route, frequency,
+            duration_days, instructions
+          `).in("id", medicationIds)
+        : { data: [], error: null };
+      if (medicationNamesResult.error) throw medicationNamesResult.error;
+      const historicalMedications = (medicationNamesResult.data || []) as Medication[];
+      const medicationNames = new Map(historicalMedications.map((row) => [row.id, row.name]));
+      setMedications((current) => [...new Map([...current, ...historicalMedications].map((medication) => [medication.id, medication])).values()]);
+
+      const serviceRows: VisitServiceDraft[] = [];
+      const treatmentSections = String(visit.treatment || "").split(/\n{2,}/).filter(Boolean);
+      const freeTreatmentSections = treatmentSections.filter((section) => {
+        const lines = section.split(/\r?\n/).filter(Boolean);
+        const parsedServiceLines = lines.map((line) => line.match(/^(.*?)\s*[×x]\s*(\d+(?:\.\d+)?)\s*\((\d+(?:\.\d+)?)\s*EGP\)$/i));
+        if (parsedServiceLines.length && parsedServiceLines.every(Boolean)) {
+          for (const match of parsedServiceLines) {
+            if (!match) continue;
+            const quantity = Number(match[2]) || 1;
+            serviceRows.push({ id: crypto.randomUUID(), name: match[1].trim(), quantity, price: Number(match[3]) / quantity });
+          }
+          return false;
+        }
+        const medicationText = lines.some((line) => [...medicationNames.values()].some((name) => line.startsWith(`${name}:`)));
+        const prescriptionText = lines.some((line) => prescriptionRows.some((row) => line.startsWith(`${row.medication_name} -`) || line.startsWith(`[DrugEye`) || line.startsWith(`[Clinic medication`)));
+        return !medicationText && !prescriptionText;
+      });
+      setVisitServices(serviceRows);
+      setTreatment(freeTreatmentSections.join("\n\n"));
+
+      const followUpNote = noteLines.find((line) => /^Follow-up:/i.test(line)) || "";
+      const followUpValue = followUpNote.replace(/^Follow-up:\s*/i, "");
+      const followUpDetail = followUpValue.split(" — ").slice(1).join(" — ").trim();
+      const followUpLabel = followUpValue.split(" — ")[0].trim();
+      const followUpCode = Object.entries({
+        none: t.followUpNone, "3d": t.followUp3Days, "1w": t.followUp1Week, "2w": t.followUp2Weeks, "1m": t.followUp1Month, custom: t.followUpCustom,
+      }).find(([, label]) => label === followUpLabel)?.[0] || "";
+      setFollowUp(followUpCode);
+      setFollowUpDetails(followUpDetail);
+
+      const metadataPattern = /^(?:Appointment|Visit type|Performing doctor|الطبيب المعالج|Grooming type|نوع التجميل|Pre-surgery status|Post-surgery status|الحالة قبل الجراحة|الحالة بعد الجراحة|Follow-up):/i;
+      setVisitNotes(noteLines.filter((line) => !metadataPattern.test(line)).join("\n").trim());
+
+      setMedicationDrafts(medicationRows.map((row) => ({
+        id: row.id, medication_id: row.medication_id, product_id: row.product_id || null,
+        weight_kg: Number(row.weight_kg || visit.weight || 0), calculated_dose: Number(row.calculated_dose || 0),
+        calculated_dose_unit: row.calculated_dose_unit || "", dose_per_kg: row.dose_per_kg == null ? null : Number(row.dose_per_kg),
+        concentration: row.concentration == null ? null : Number(row.concentration), concentration_unit: row.concentration_unit,
+        calculated_volume: row.calculated_volume == null ? null : Number(row.calculated_volume), volume_unit: row.volume_unit,
+        route: row.route, frequency: row.frequency, duration_days: row.duration_days == null ? null : Number(row.duration_days), instructions: row.instructions,
+      })));
+      setFormularyDrafts(prescriptionRows.filter((row) => row.source === "bsava").map((row) => {
+        const [appliedDose = "", frequency = "", route = ""] = String(row.prescription || "").split(" · ");
+        return { id: row.id, product_id: row.product_id || null, drugId: 0, drugName: row.medication_name || "", activeIngredient: row.active_ingredient || "", species: pet.species || "", route, doseUnit: "", doseBasis: null, doseExpression: appliedDose, doseText: appliedDose, sourcePage: 0, sourceMin: 0, sourceMax: 0, calculatedMin: null, calculatedMax: null, appliedDose, adminDoseUnit: "", calculatedVolumeMin: null, calculatedVolumeMax: null, concentrationMgPerMl: null, clinicConcentrationMgPerMl: null, frequency, autoCalculated: false };
+      }));
+      setExternalMedicationDrafts(prescriptionRows.filter((row) => row.source !== "bsava").map((row) => {
+        const [doseText = "", route = "", frequency = "", duration = "", instructions = ""] = String(row.prescription || "").split(" · ");
+        return { id: row.id, product_id: row.product_id || null, productName: row.medication_name || "", activeIngredient: row.active_ingredient || null, manufacturer: null, price: null, doseText, route, frequency, duration, instructions, weightKg: null, source: row.source === "manual" ? "manual" as const : "DrugEye" as const, bsavaDrugName: null };
+      }));
+      setVaccinations(vaccineRows.map((row) => ({
+        id: row.id, product_id: row.product_id || null, vaccine_name: row.vaccine_name || "", vaccine_type: row.vaccine_type || "", dose_stage: "manual",
+        administered_at: row.administered_at ? formatLocalDateTime(new Date(row.administered_at)) : "", next_dose_at: row.next_dose_at ? formatLocalDateTime(new Date(row.next_dose_at)) : "",
+        next_dose_manual: true, dose: row.dose || "", route: row.route || "", batch_number: row.batch_number || "", manufacturer: row.manufacturer || "", notes: row.notes || "",
+      })));
+      setOriginalMedicalRecords(medicalRows.map((row) => ({ id: row.id, record_type: row.record_type, status: row.status })));
+      const labRows = medicalRows.filter((row) => row.record_type === "lab");
+      const surgeryRow = medicalRows.find((row) => row.record_type === "surgery");
+      setMedicalRecordDraft({
+        labTests: labRows.map((row) => row.title).join("\n"), labNotes: labRows.map((row) => row.notes || "").filter(Boolean).join("\n"),
+        labRecordIds: labRows.map((row) => row.id), surgeryRecordId: surgeryRow?.id || null,
+        surgeryTitle: surgeryRow?.title || "", surgeryStatus: surgeryRow?.status === "completed" ? "completed" : "planned",
+        surgeryBeforeStatus: String(surgeryRow?.notes || "").match(/Before:\s*(.*)/)?.[1] || getNoteValue(/^(?:Pre-surgery status|الحالة قبل الجراحة):/i),
+        surgeryAfterStatus: String(surgeryRow?.notes || "").match(/After:\s*(.*)/)?.[1] || getNoteValue(/^(?:Post-surgery status|الحالة بعد الجراحة):/i),
+        surgeryDate: surgeryRow?.performed_at ? String(surgeryRow.performed_at).slice(0, 10) : "", surgeryNotes: String(surgeryRow?.notes || "").split(/\r?\n/).filter((line) => !/^(Before|After):/.test(line)).join("\n"),
+      });
+
+      const session = await vetraCore.auth.getSession();
+      const token = session.data.session?.access_token;
+      const savedAttachments = await Promise.all(attachmentRows.map(async (row) => {
+        let url = "";
+        if (token) {
+          const response = await fetch(`/api/visits/attachments?id=${encodeURIComponent(row.id)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+          const result = await response.json().catch(() => null) as { url?: string } | null;
+          if (response.ok) url = result?.url || "";
+        }
+        return { id: row.id, file_name: row.file_name, storage_path: row.storage_path, category: row.category as "analysis" | "xray", url };
+      }));
+      setExistingAttachments(savedAttachments);
+      setRemovedAttachments([]);
+      await loadVisits(visit.pet_id, true);
+      setStarted(true);
+    } catch (error) {
+      console.error("LOAD VISIT FOR EDIT ERROR:", error);
       setMessage(error instanceof Error ? error.message : t.loadError);
     } finally {
       setLoadingDetails(false);
@@ -482,7 +669,7 @@ export default function NewVisitPage() {
         .order("name");
       if (error) throw error;
       const nextMedications = (data || []) as Medication[];
-      setMedications(nextMedications);
+      setMedications((current) => [...new Map([...nextMedications, ...current].map((medication) => [medication.id, medication])).values()]);
       writeClinicCache(context.clinic_id, "medication-catalog", nextMedications);
     } catch (error) {
       console.error("LOAD MEDICATIONS ERROR:", error);
@@ -676,12 +863,17 @@ export default function NewVisitPage() {
   async function saveVisit(createBill = false) {
     setMessage("");
 
+    if (editVisitId && (!visitDate || Number.isNaN(new Date(visitDate).getTime()))) {
+      setMessage(language === "ar" ? "حدد تاريخ ووقتًا صحيحين للزيارة." : "Choose a valid visit date and time.");
+      return;
+    }
+
     if (!selectedPetId || !selectedClientId) {
       setMessage(t.requiredFields);
       return;
     }
 
-    if (petDetails?.is_deceased) {
+    if (petDetails?.is_deceased && !editVisitId) {
       setMessage(t.deceasedPet);
       return;
     }
@@ -701,7 +893,8 @@ export default function NewVisitPage() {
       setMessage(language === "ar" ? "حدد نوع التجميل" : "Enter a grooming type");
       return;
     }
-    if (createBill && consultationFee <= 0 && medicationBillLines.length === 0 && vaccinations.every((item) => !item.vaccine_name.trim()) && !visitServices.some((line) => line.name.trim() && line.price >= 0 && line.quantity > 0)) {
+    const selectedVisitFee = reason === "followup" ? followUpFee : consultationFee;
+    if (createBill && selectedVisitFee <= 0 && medicationBillLines.length === 0 && vaccinations.every((item) => !item.vaccine_name.trim()) && !visitServices.some((line) => line.name.trim() && line.price >= 0 && line.quantity > 0)) {
       setMessage(language === "ar" ? "أضف خدمة واحدة على الأقل للفاتورة" : "Add at least one service to the bill");
       return;
     }
@@ -718,7 +911,7 @@ export default function NewVisitPage() {
         .single();
 
       if (currentPetError || !currentPet) throw currentPetError || new Error(t.loadError);
-      if (currentPet.is_deceased) {
+      if (currentPet.is_deceased && !editVisitId) {
         setMessage(t.deceasedPet);
         setStarted(false);
         return;
@@ -773,11 +966,10 @@ export default function NewVisitPage() {
       ].filter(Boolean).join("\n");
       const finalVisitNotes = [visitNotes.trim(), followUpText, metadata].filter(Boolean).join("\n\n");
 
-      const { data: visit, error: visitError } = await db
-        .from("visits")
-        .insert({
+      const visitPayload = {
           client_id: selectedClientId,
           pet_id: selectedPetId,
+          ...(editVisitId ? { visit_date: new Date(visitDate).toISOString() } : {}),
           reason: reason.trim() || null,
           examination: examinationWithSymptoms || null,
           diagnosis: diagnosis.trim() || null,
@@ -787,9 +979,10 @@ export default function NewVisitPage() {
           heart_rate: heartRate ? Number(heartRate) : null,
           respiratory_rate: respiratoryRate ? Number(respiratoryRate) : null,
           notes: finalVisitNotes || null,
-        })
-        .select("id")
-        .single();
+        };
+      const { data: visit, error: visitError } = editVisitId
+        ? await db.from("visits").update(visitPayload).eq("id", editVisitId).select("id").single()
+        : await db.from("visits").insert(visitPayload).select("id").single();
 
       if (visitError || !visit) throw visitError || new Error(t.saveError);
       const uploadedAttachmentPaths: string[] = [];
@@ -806,17 +999,21 @@ export default function NewVisitPage() {
           form.append("pet_id", selectedPetId);
           form.append("category", item.category);
           const response = await fetch("/api/visits/attachments", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
-          const payload = await response.json().catch(() => null) as { attachment?: { storage_path?: string }; error?: string } | null;
+          const payload = await response.json().catch(() => null) as { attachment?: { id?: string; storage_path?: string }; error?: string } | null;
           if (!response.ok || !payload?.attachment?.storage_path) throw new Error(payload?.error || t.saveError);
           uploadedAttachmentPaths.push(payload.attachment.storage_path);
         }
 
         const medicalRows = [
-          ...medicalRecordDraft.labTests.split(/\r?\n/).map((name) => name.trim()).filter(Boolean).map((title) => ({
+          ...medicalRecordDraft.labTests.split(/\r?\n/).map((name) => name.trim()).filter(Boolean).map((title, index) => ({
+            ...(editVisitId ? { id: medicalRecordDraft.labRecordIds[index] || crypto.randomUUID() } : {}),
             clinic_id: clinicContext.clinic_id, pet_id: selectedPetId, client_id: selectedClientId,
-            visit_id: visit.id, record_type: "lab", title, status: "ordered", notes: medicalRecordDraft.labNotes.trim() || null,
+            visit_id: visit.id, record_type: "lab", title,
+            status: originalMedicalRecords.find((row) => row.id === medicalRecordDraft.labRecordIds[index])?.status || "ordered",
+            notes: medicalRecordDraft.labNotes.trim() || null,
           })),
           ...(reason === "surgery" && medicalRecordDraft.surgeryTitle.trim() ? [{
+            ...(editVisitId ? { id: medicalRecordDraft.surgeryRecordId || crypto.randomUUID() } : {}),
             clinic_id: clinicContext.clinic_id, pet_id: selectedPetId, client_id: selectedClientId,
             visit_id: visit.id, record_type: "surgery", title: medicalRecordDraft.surgeryTitle.trim(),
             status: medicalRecordDraft.surgeryStatus, notes: [medicalRecordDraft.surgeryNotes.trim(), medicalRecordDraft.surgeryBeforeStatus.trim() ? `Before: ${medicalRecordDraft.surgeryBeforeStatus.trim()}` : "", medicalRecordDraft.surgeryAfterStatus.trim() ? `After: ${medicalRecordDraft.surgeryAfterStatus.trim()}` : ""].filter(Boolean).join("\n") || null,
@@ -824,16 +1021,27 @@ export default function NewVisitPage() {
           }] : []),
         ];
         if (medicalRows.length) {
-          const { error: recordsError } = await db.from("pet_medical_records").insert(medicalRows);
+          const { error: recordsError } = editVisitId
+            ? await db.from("pet_medical_records").upsert(medicalRows)
+            : await db.from("pet_medical_records").insert(medicalRows);
           if (recordsError) throw recordsError;
+        }
+        if (editVisitId) {
+          const retainedIds = medicalRows.map((row) => "id" in row ? row.id : "");
+          const removedIds = originalMedicalRecords.filter((row) => ["lab", "surgery"].includes(row.record_type) && !retainedIds.includes(row.id)).map((row) => row.id);
+          if (removedIds.length) {
+            const { error: removeRecordsError } = await db.from("pet_medical_records").delete().in("id", removedIds).eq("visit_id", visit.id);
+            if (removeRecordsError) throw removeRecordsError;
+          }
         }
 
         if (medicationDrafts.length) {
           const medicationRows = medicationDrafts.map((draft) => ({
+            ...(editVisitId ? { id: draft.id } : {}),
             clinic_id: clinicContext.clinic_id,
             visit_id: visit.id,
             medication_id: draft.medication_id,
-            product_id: null,
+            product_id: draft.product_id || null,
             weight_kg: draft.weight_kg,
             calculated_dose: draft.calculated_dose,
             calculated_dose_unit: draft.calculated_dose_unit,
@@ -847,24 +1055,38 @@ export default function NewVisitPage() {
             duration_days: draft.duration_days,
             instructions: draft.instructions,
           }));
-          const { error: medError } = await db.from("visit_medications").insert(medicationRows);
+          const { error: medError } = editVisitId
+            ? await db.from("visit_medications").upsert(medicationRows)
+            : await db.from("visit_medications").insert(medicationRows);
           if (medError) throw medError;
+        }
+        if (editVisitId) {
+          const retainedIds = medicationDrafts.map((draft) => draft.id);
+          const { data: existingRows, error: existingRowsError } = await db.from("visit_medications").select("id").eq("visit_id", visit.id);
+          if (existingRowsError) throw existingRowsError;
+          const removedIds = (existingRows || []).map((row) => row.id).filter((id) => !retainedIds.includes(id));
+          if (removedIds.length) {
+            const { error: removeError } = await db.from("visit_medications").delete().in("id", removedIds).eq("visit_id", visit.id);
+            if (removeError) throw removeError;
+          }
         }
 
         const prescriptionRows = [
           ...formularyDrafts.map((draft) => ({
+            ...(editVisitId ? { id: draft.id } : {}),
             clinic_id: clinicContext.clinic_id,
             visit_id: visit.id,
-            product_id: null,
+            product_id: draft.product_id || null,
             medication_name: draft.drugName,
             active_ingredient: draft.activeIngredient || null,
             prescription: [draft.appliedDose || draft.doseExpression, draft.frequency, draft.route].filter(Boolean).join(" · "),
             source: "bsava" as const,
           })),
           ...externalMedicationDrafts.map((draft) => ({
+            ...(editVisitId ? { id: draft.id } : {}),
             clinic_id: clinicContext.clinic_id,
             visit_id: visit.id,
-            product_id: null,
+            product_id: draft.product_id || null,
             medication_name: draft.productName,
             active_ingredient: draft.activeIngredient || null,
             prescription: [draft.doseText, draft.route, draft.frequency, draft.duration, draft.instructions].filter(Boolean).join(" · ") || null,
@@ -872,13 +1094,26 @@ export default function NewVisitPage() {
           })),
         ];
         if (prescriptionRows.length) {
-          const { error: prescriptionError } = await db.from("visit_prescriptions").insert(prescriptionRows);
+          const { error: prescriptionError } = editVisitId
+            ? await db.from("visit_prescriptions").upsert(prescriptionRows)
+            : await db.from("visit_prescriptions").insert(prescriptionRows);
           if (prescriptionError) throw prescriptionError;
+        }
+        if (editVisitId) {
+          const retainedIds = prescriptionRows.map((row) => row.id).filter((id): id is string => Boolean(id));
+          const { data: existingRows, error: existingRowsError } = await db.from("visit_prescriptions").select("id").eq("visit_id", visit.id);
+          if (existingRowsError) throw existingRowsError;
+          const removedIds = (existingRows || []).map((row) => row.id).filter((id) => !retainedIds.includes(id));
+          if (removedIds.length) {
+            const { error: removeError } = await db.from("visit_prescriptions").delete().in("id", removedIds).eq("visit_id", visit.id);
+            if (removeError) throw removeError;
+          }
         }
 
         const validVaccinations = vaccinations.filter((v) => v.vaccine_name.trim());
         if (validVaccinations.length) {
           const vaccineRows = validVaccinations.map((v) => ({
+            ...(editVisitId ? { id: v.id } : {}),
             clinic_id: clinicContext.clinic_id,
             visit_id: visit.id,
             pet_id: selectedPetId,
@@ -899,15 +1134,27 @@ export default function NewVisitPage() {
               v.notes.trim(),
             ].filter(Boolean).join("\n") || null,
           }));
-          const { error: vaccineError } = await db.from("vaccinations").insert(vaccineRows);
+          const { error: vaccineError } = editVisitId
+            ? await db.from("vaccinations").upsert(vaccineRows)
+            : await db.from("vaccinations").insert(vaccineRows);
           if (vaccineError) throw vaccineError;
         }
+        if (editVisitId) {
+          const retainedIds = validVaccinations.map((v) => v.id);
+          const { data: existingRows, error: existingRowsError } = await db.from("vaccinations").select("id").eq("visit_id", visit.id);
+          if (existingRowsError) throw existingRowsError;
+          const removedIds = (existingRows || []).map((row) => row.id).filter((id) => !retainedIds.includes(id));
+          if (removedIds.length) {
+            const { error: removeError } = await db.from("vaccinations").delete().in("id", removedIds).eq("visit_id", visit.id);
+            if (removeError) throw removeError;
+          }
+        }
 
-        if (createBill) {
+        if (createBill && !editVisitId) {
           const { data: { user } } = await vetraCore.auth.getUser();
           if (!user) throw new Error(language === "ar" ? "انتهت جلسة الدخول" : "Your session has expired");
           const invoiceLines = [
-            ...(consultationFee > 0 ? [{ item_type: "service" as const, product_id: null, name: "Consultation", quantity: 1, unit_price: consultationFee }] : []),
+            ...((reason === "followup" ? followUpFee : consultationFee) > 0 ? [{ item_type: "service" as const, product_id: null, name: reason === "followup" ? "Follow-up" : "Consultation", quantity: 1, unit_price: reason === "followup" ? followUpFee : consultationFee }] : []),
             ...visitServices.filter((line) => line.name.trim()).map((line) => ({ item_type: "service" as const, product_id: null, name: line.name.trim(), quantity: line.quantity, unit_price: line.price })),
             ...medicationBillLines.map((line) => ({
               item_type: "service" as const,
@@ -942,13 +1189,26 @@ export default function NewVisitPage() {
           ...drawerMedications.map((item) => ({ product_id: item.product_id, quantity: item.quantity, source_type: "medication" })),
           ...validVaccinations.filter((item) => item.product_id).map((item) => ({ product_id: item.product_id as string, quantity: 1, source_type: "vaccination" })),
         ];
-        if (dispenseItems.length) {
+        if (dispenseItems.length && !editVisitId) {
           const { error: dispenseError } = await db.rpc("vetra_dispense_visit_inventory", {
             p_visit_id: visit.id,
             p_items: dispenseItems,
           });
           if (dispenseError) throw dispenseError;
         }
+        if (removedAttachments.length) {
+          const { error: storageError } = await db.storage.from("visit-attachments").remove(removedAttachments.map((item) => item.storage_path));
+          if (storageError) throw storageError;
+          const { error: attachmentDeleteError } = await db.from("visit_attachments").delete().in("id", removedAttachments.map((item) => item.id)).eq("visit_id", visit.id);
+          if (attachmentDeleteError) throw attachmentDeleteError;
+        }
+        if (editVisitId && existingAttachments.length) {
+          for (const item of existingAttachments) {
+            const { error: categoryError } = await db.from("visit_attachments").update({ category: item.category }).eq("id", item.id).eq("visit_id", visit.id);
+            if (categoryError) throw categoryError;
+          }
+        }
+
         if (createBill && createdInvoiceId) {
           window.localStorage.setItem("vetra-data-version", String(Date.now()));
           router.push(`/invoices/${createdInvoiceId}`);
@@ -956,15 +1216,20 @@ export default function NewVisitPage() {
         }
 
       } catch (relatedSaveError) {
-        await db.from("visit_medications").delete().eq("visit_id", visit.id);
-        await db.from("visit_prescriptions").delete().eq("visit_id", visit.id);
-        await db.from("vaccinations").delete().eq("visit_id", visit.id);
-        await db.rpc("vetra_restore_visit_inventory", { p_visit_id: visit.id });
-        await db.from("pet_medical_records").delete().eq("visit_id", visit.id);
-        await db.from("visit_attachments").delete().eq("visit_id", visit.id);
-        if (uploadedAttachmentPaths.length) await db.storage.from("visit-attachments").remove(uploadedAttachmentPaths);
-        if (createdInvoiceId) await db.from("invoices").delete().eq("id", createdInvoiceId).eq("clinic_id", clinicContext.clinic_id);
-        await db.from("visits").delete().eq("id", visit.id);
+        if (!editVisitId) {
+          await db.from("visit_medications").delete().eq("visit_id", visit.id);
+          await db.from("visit_prescriptions").delete().eq("visit_id", visit.id);
+          await db.from("vaccinations").delete().eq("visit_id", visit.id);
+          await db.rpc("vetra_restore_visit_inventory", { p_visit_id: visit.id });
+          await db.from("pet_medical_records").delete().eq("visit_id", visit.id);
+          await db.from("visit_attachments").delete().eq("visit_id", visit.id);
+          if (uploadedAttachmentPaths.length) await db.storage.from("visit-attachments").remove(uploadedAttachmentPaths);
+          if (createdInvoiceId) await db.from("invoices").delete().eq("id", createdInvoiceId).eq("clinic_id", clinicContext.clinic_id);
+          await db.from("visits").delete().eq("id", visit.id);
+        } else if (uploadedAttachmentPaths.length) {
+          await db.from("visit_attachments").delete().in("storage_path", uploadedAttachmentPaths).eq("visit_id", visit.id);
+          await db.storage.from("visit-attachments").remove(uploadedAttachmentPaths);
+        }
         throw relatedSaveError;
       }
 
@@ -973,6 +1238,13 @@ export default function NewVisitPage() {
       }
 
       setMessage(t.visitSaved);
+
+      if (editVisitId) {
+        clearClinicCache(clinicContext.clinic_id);
+        await loadVisits(selectedPetId, true);
+        router.push("/dashboard/visits");
+        return;
+      }
 
       setReason("examination");
       setPerformingDoctor(clinicContext.doctor_name || "__any__");
@@ -995,7 +1267,7 @@ export default function NewVisitPage() {
       setDrawerMedications([]);
       setMedicalRecordDraft(emptyMedicalRecordDraft);
 
-      clearClinicCache(clinicId);
+      clearClinicCache(clinicContext.clinic_id);
       await loadVisits(selectedPetId, true);
 
       router.push(`/visits/${encodeURIComponent(visit.id)}`);
@@ -1057,7 +1329,8 @@ export default function NewVisitPage() {
     const product = vaccineStockProducts.find((item) => item.id === vaccination.product_id);
     return sum + (vaccination.vaccine_name.trim() && product ? Math.max(0, Number(product.retail_price) || 0) : 0);
   }, 0);
-  const visitBillTotal = consultationFee + visitServiceTotal + medicationChargeTotal + vaccinationChargeTotal;
+  const baseVisitFee = reason === "followup" ? followUpFee : consultationFee;
+  const visitBillTotal = baseVisitFee + visitServiceTotal + medicationChargeTotal + vaccinationChargeTotal;
 
   const pageClasses = darkMode
     ? "min-h-screen bg-[#0F1115] text-slate-100"
@@ -1090,7 +1363,7 @@ export default function NewVisitPage() {
                     darkMode ? "text-white" : "text-slate-900"
                   }`}
                 >
-                  {t.title}
+                  {editVisitId ? (language === "ar" ? "تعديل الزيارة" : "Edit visit") : t.title}
                 </h1>
 
                 <p
@@ -1098,7 +1371,9 @@ export default function NewVisitPage() {
                     darkMode ? "text-slate-400" : "text-slate-500"
                   }`}
                 >
-                  {t.subtitle}
+                  {editVisitId
+                    ? (language === "ar" ? "عدّل بيانات الكشف والعلاج والأدوية والتطعيمات والمرفقات." : "Edit the visit examination, treatment, medications, vaccinations, and attachments.")
+                    : t.subtitle}
                 </p>
               </div>
             </div>
@@ -1106,14 +1381,14 @@ export default function NewVisitPage() {
 
           <div className="flex items-center gap-2">
             <Link
-              href="/dashboard"
+              href={editVisitId ? "/dashboard/visits" : "/dashboard"}
               className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
                 darkMode
                   ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
                   : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               }`}
             >
-              {t.dashboard}
+              {editVisitId ? (language === "ar" ? "سجل الزيارات" : "Visit history") : t.dashboard}
             </Link>
 
             <button
@@ -1164,7 +1439,7 @@ export default function NewVisitPage() {
           </div>
         )}
 
-        <NewVisitPatientSelector
+        {!editVisitId && <NewVisitPatientSelector
           started={started}
           darkMode={darkMode}
           t={t}
@@ -1182,9 +1457,9 @@ export default function NewVisitPage() {
           filteredPets={filteredPets}
           startExamination={startExamination}
           loadingDetails={loadingDetails}
-        />
+        />}
 
-        {showVisitStartModal && petDetails && (
+        {!editVisitId && showVisitStartModal && petDetails && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="visit-start-title">
             <div className={`w-full max-w-lg rounded-2xl border p-6 shadow-2xl ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`}>
               <h2 id="visit-start-title" className="text-xl font-bold">{language === "ar" ? "بدء زيارة" : "Start visit"}</h2>
@@ -1223,10 +1498,14 @@ export default function NewVisitPage() {
               darkMode={darkMode}
               t={t}
               resetSelection={resetSelection}
+              canChangeSelection={!editVisitId}
               onOldVisitSelect={setSelectedOldVisit}
             />
 
-            <NewVisitEditorSection darkMode={darkMode} t={t} saving={saving} onSave={() => saveVisit(false)} onSaveWithBill={() => saveVisit(true)} billLabel={language === "ar" ? "حفظ الزيارة وإنشاء فاتورة" : "Save visit & create bill"}>
+            <NewVisitEditorSection darkMode={darkMode} t={t} saving={saving} saveLabel={editVisitId ? (language === "ar" ? "حفظ تعديلات الزيارة" : "Save visit changes") : undefined} onSave={() => saveVisit(false)} onSaveWithBill={editVisitId ? undefined : () => saveVisit(true)} billLabel={language === "ar" ? "حفظ الزيارة وإنشاء فاتورة" : "Save visit & create bill"}>
+              {editVisitId && <label className="block text-sm font-semibold lg:col-span-2">{language === "ar" ? "تاريخ ووقت الزيارة" : "Visit date and time"}
+                <input type="datetime-local" required value={visitDate} onChange={(event) => setVisitDate(event.target.value)} className={`mt-2 w-full rounded-xl border p-3 ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-300 bg-white"}`} />
+              </label>}
               <section className={`grid gap-4 rounded-2xl border p-4 sm:grid-cols-2 ${darkMode ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
                 <label className="text-sm font-semibold">{language === "ar" ? "سبب الزيارة" : "Visit reason"}
                   <select required className="mt-2 w-full rounded-xl border border-slate-300 bg-transparent p-3" value={reason} onChange={(event) => setReason(event.target.value)}>
@@ -1376,7 +1655,7 @@ export default function NewVisitPage() {
                 </div>
                 <button type="button" onClick={() => setVisitServices((current) => [...current, { id: crypto.randomUUID(), name: "", quantity: 1, price: 0 }])} className="w-full rounded-lg border border-dashed border-cyan-500/40 px-4 py-3 text-sm font-semibold text-cyan-700 dark:text-cyan-300">{language === "ar" ? "+ إضافة خدمة" : "+ Add service"}</button>
                 <div className={`ml-auto max-w-sm space-y-2 border-t pt-3 text-sm ${darkMode ? "border-slate-700" : "border-slate-200"}`}>
-                  {consultationFee > 0 && <div className="flex justify-between"><span>{language === "ar" ? "الكشف" : "Consultation"}</span><span>{consultationFee.toFixed(2)} EGP</span></div>}
+                  {baseVisitFee > 0 && <div className="flex justify-between"><span>{reason === "followup" ? (language === "ar" ? "المتابعة" : "Follow-up") : (language === "ar" ? "الكشف" : "Consultation")}</span><span>{baseVisitFee.toFixed(2)} EGP</span></div>}
                   <div className="flex justify-between"><span>{language === "ar" ? "الخدمات" : "Services"}</span><span>{visitServiceTotal.toFixed(2)} EGP</span></div>
                   {medicationChargeTotal > 0 && <div className="flex justify-between"><span>{language === "ar" ? "الأدوية والحقن" : "Medications and injections"}</span><span>{medicationChargeTotal.toFixed(2)} EGP</span></div>}
                   {vaccinationChargeTotal > 0 && <div className="flex justify-between"><span>{language === "ar" ? "التطعيمات" : "Vaccinations"}</span><span>{vaccinationChargeTotal.toFixed(2)} EGP</span></div>}
@@ -1396,6 +1675,11 @@ export default function NewVisitPage() {
                   <span className="min-w-0 flex-1 truncate">{item.file.name}</span>
                   <select value={item.category} onChange={(event) => setAttachments((current) => current.map((row) => row.id === item.id ? { ...row, category: event.target.value as VisitAttachmentDraft["category"] } : row))} className="rounded-lg border border-slate-300 bg-transparent px-2 py-1.5 dark:border-slate-700"><option value="analysis">{language === "ar" ? "تحليل" : "Analysis"}</option><option value="xray">{language === "ar" ? "أشعة" : "X-ray"}</option></select>
                   <button type="button" onClick={() => setAttachments((current) => current.filter((row) => row.id !== item.id))} className="px-2 py-1 text-rose-500" aria-label={language === "ar" ? "إزالة المرفق" : "Remove attachment"}>×</button>
+                </div>)}
+                {existingAttachments.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-2 text-sm">
+                  {item.url ? <a href={item.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate font-semibold text-cyan-700 underline dark:text-cyan-300">{item.file_name}</a> : <span className="min-w-0 flex-1 truncate">{item.file_name}</span>}
+                  <select value={item.category} onChange={(event) => setExistingAttachments((current) => current.map((row) => row.id === item.id ? { ...row, category: event.target.value as ExistingVisitAttachment["category"] } : row))} className="rounded-lg border border-slate-300 bg-transparent px-2 py-1.5 dark:border-slate-700"><option value="analysis">{language === "ar" ? "تحليل" : "Analysis"}</option><option value="xray">{language === "ar" ? "أشعة" : "X-ray"}</option></select>
+                  <button type="button" onClick={() => { setExistingAttachments((current) => current.filter((row) => row.id !== item.id)); setRemovedAttachments((current) => [...current, item]); }} className="px-2 py-1 text-rose-500" aria-label={language === "ar" ? "إزالة المرفق" : "Remove attachment"}>×</button>
                 </div>)}
               </section>
               <NewVisitMedicalRecordsFields

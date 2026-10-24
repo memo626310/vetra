@@ -118,7 +118,10 @@ export default function NewInvoicePage() {
   const [serviceName, setServiceName] = useState("");
   const [servicePrice, setServicePrice] = useState("");
   const [consultationFee, setConsultationFee] = useState(100);
+  const [followUpFee, setFollowUpFee] = useState(0);
   const [visitId, setVisitId] = useState("");
+  const [draftId, setDraftId] = useState("");
+  const [visitBillLoading, setVisitBillLoading] = useState(false);
   const [invoiceMedicationNotice, setInvoiceMedicationNotice] = useState("");
   const [requestedPetId, setRequestedPetId] = useState("");
   const visitPrefilledRef = useRef(false);
@@ -135,6 +138,7 @@ export default function NewInvoicePage() {
     setPetId(requestedPet);
     setRequestedPetId(requestedPet);
     setVisitId(params.get("visit") || "");
+    setDraftId(params.get("draft") || "");
     setQuickSaleMode(params.get("mode") === "quick-sale");
     setReady(true);
   }, []);
@@ -162,13 +166,18 @@ export default function NewInvoicePage() {
     const context = await getClinicContext();
     const db = await getClinicDb();
 
-    const canCreateInvoice = ["owner", "admin"].includes(context.role) || can("invoices", "create");
+    const requestedDraftId = new URLSearchParams(window.location.search).get("draft") || "";
+    const canCreateInvoice = ["owner", "admin"].includes(context.role)
+      || can("invoices", "create")
+      || (Boolean(requestedDraftId) && can("invoices", "edit"));
     if (!canCreateInvoice) {
       setAuthorized(false);
       setLoading(false);
       return;
     }
-    setCanIssueInvoices(["owner", "admin"].includes(context.role) || can("invoices", "create"));
+    setCanIssueInvoices(["owner", "admin"].includes(context.role)
+      || can("invoices", "create")
+      || (Boolean(requestedDraftId) && can("invoices", "edit")));
 
     setAuthorized(true);
 
@@ -200,7 +209,7 @@ export default function NewInvoicePage() {
           .order("name"),
         db
           .from("billing_settings")
-          .select("consultation_fee")
+          .select("consultation_fee, follow_up_fee")
           .eq("clinic_id", context.clinic_id)
           .limit(1)
           .maybeSingle(),
@@ -216,8 +225,12 @@ export default function NewInvoicePage() {
       setMessage(clientsResult.error.message);
     } else {
       setClients((clientsResult.data || []) as Client[]);
-      const requestedClient = (clientsResult.data || []).find((client) => client.id === clientId);
-      if (requestedClient) setClientSearch(requestedClient.name);
+      const requestedClientId = new URLSearchParams(window.location.search).get("client") || clientId;
+      const requestedClient = (clientsResult.data || []).find((client) => client.id === requestedClientId);
+      if (requestedClient) {
+        setClientId(requestedClient.id);
+        setClientSearch(requestedClient.name);
+      }
     }
 
     if (productsResult.error) {
@@ -234,9 +247,15 @@ export default function NewInvoicePage() {
     if (settingsResult.data?.consultation_fee != null) {
       setConsultationFee(Number(settingsResult.data.consultation_fee));
     }
+    if (settingsResult.data?.follow_up_fee != null) {
+      setFollowUpFee(Number(settingsResult.data.follow_up_fee));
+    }
     const visitFromUrl = new URLSearchParams(window.location.search).get("visit");
     if (visitFromUrl && !visitPrefilledRef.current) {
       visitPrefilledRef.current = true;
+      setVisitBillLoading(true);
+      const requestedPet = new URLSearchParams(window.location.search).get("pet");
+      if (requestedPet) setPetId(requestedPet);
       const consultationLine: InvoiceLine = {
         key: crypto.randomUUID(),
         item_type: "service",
@@ -277,8 +296,21 @@ export default function NewInvoicePage() {
           setLines([consultationLine]);
           return;
         }
-        const { data: visitBillingData, error: visitBillingError } = await db.from("visits").select("treatment").eq("id", visitFromUrl).maybeSingle();
+        const { data: visitBillingData, error: visitBillingError } = await db.from("visits").select("treatment,reason").eq("id", visitFromUrl).maybeSingle();
         if (visitBillingError) setInvoiceMedicationNotice(language === "ar" ? `تعذر قراءة علاج الزيارة: ${visitBillingError.message}` : `Could not read visit treatment: ${visitBillingError.message}`);
+        const isFollowUp = visitBillingData?.reason === "followup";
+        const visitFeeName = isFollowUp ? "Follow-up" : "Consultation";
+        const visitFeeDescription = isFollowUp
+          ? (language === "ar" ? "رسوم زيارة متابعة" : "Veterinary follow-up")
+          : (language === "ar" ? "كشف / استشارة بيطرية" : "Veterinary consultation");
+        const visitFeeLine: InvoiceLine = {
+          ...consultationLine,
+          service_name: visitFeeName,
+          description: visitFeeDescription,
+          unit_price: isFollowUp
+            ? Number(settingsResult.data?.follow_up_fee ?? followUpFee)
+            : Number(settingsResult.data?.consultation_fee ?? consultationFee),
+        };
         const medicationIds = [...new Set((visitMedicationRows || []).map((row) => row.medication_id).filter(Boolean))];
         const { data: medicationData, error: medicationsError } = medicationIds.length
           ? await db.from("medications").select("id,name,active_ingredient").in("id", medicationIds)
@@ -399,12 +431,64 @@ export default function NewInvoicePage() {
             autoMedication: false,
           }];
         });
-        setLines([consultationLine, ...serviceLines, ...billableVisitLines, ...drawerMedicationLines]);
+        setLines([visitFeeLine, ...serviceLines, ...billableVisitLines, ...drawerMedicationLines]);
         if (missing.length) setInvoiceMedicationNotice(language === "ar"
           ? `أُضيفت الأدوية غير المطابقة كبنود بدون سعر/مخزون: ${[...new Set(missing)].join("، ")}. اربط اسم الدواء بمنتج مخزون مطابق أو حدّد سعره قبل الإصدار.`
           : `Medications without a matching inventory product were added without price/stock: ${[...new Set(missing)].join(", ")}. Match them to an inventory product or enter their price before issuing.`);
-      })();
+      })()
+        .catch((error: unknown) => {
+          setInvoiceMedicationNotice(error instanceof Error ? error.message : (language === "ar" ? "تعذر تحميل تفاصيل الزيارة للفاتورة." : "Could not load visit details for the invoice."));
+          setLines([consultationLine]);
+        })
+        .finally(() => setVisitBillLoading(false));
     }
+    const draftFromUrl = new URLSearchParams(window.location.search).get("draft") || "";
+    if (draftFromUrl) {
+      const { data: draft, error: draftError } = await db
+        .from("invoices")
+        .select("id, client_id, pet_id, visit_id, status, subtotal, discount, notes, payment_method")
+        .eq("id", draftFromUrl)
+        .eq("clinic_id", context.clinic_id)
+        .eq("status", "draft")
+        .maybeSingle();
+      const { data: draftItems, error: draftItemsError } = await db
+        .from("invoice_items")
+        .select("id, item_type, product_id, service_name, description, quantity, unit_price, discount")
+        .eq("invoice_id", draftFromUrl)
+        .eq("clinic_id", context.clinic_id)
+        .order("created_at", { ascending: true });
+
+      if (draftError || !draft) {
+        setMessage(draftError?.message || (language === "ar" ? "المسودة غير موجودة أو تم إصدارها بالفعل." : "The draft was not found or has already been issued."));
+      } else if (draftItemsError) {
+        setMessage(draftItemsError.message);
+      } else {
+        setDraftId(draft.id);
+        setVisitId(draft.visit_id || "");
+        setClientId(draft.client_id);
+        const draftClient = (clientsResult.data || []).find((client) => client.id === draft.client_id);
+        if (draftClient) setClientSearch(draftClient.name);
+        setPetId(draft.pet_id || "");
+        setRequestedPetId(draft.pet_id || "");
+        setDiscount(String(draft.discount || 0));
+        setNotes(draft.notes || "");
+        setBillingMode(draft.payment_method === "cash" ? "cash" : "credit");
+        setLines((draftItems || []).map((item) => ({
+          key: item.id,
+          item_type: item.item_type as InvoiceLine["item_type"],
+          product_id: item.product_id,
+          service_name: item.service_name || "",
+          description: item.description || item.service_name || "",
+          quantity: Number(item.quantity) || 1,
+          unit_price: Number(item.unit_price) || 0,
+          discount: Number(item.discount) || 0,
+          available_quantity: item.product_id
+            ? Number((productsResult.data || []).find((product) => product.id === item.product_id)?.quantity ?? 0)
+            : null,
+        })));
+      }
+    }
+
     if (!accountsResult.error) {
       setFinancialAccounts((accountsResult.data || []) as FinancialAccount[]);
     } else {
@@ -826,14 +910,17 @@ setSaving(true);
     const context = await getClinicContext();
     const db = await getClinicDb();
 
-    if (!permissionsLoaded || !can("invoices", "create")) {
+    const canSaveInvoice = draftId
+      ? can("invoices", "edit")
+      : can("invoices", "create");
+    if (!permissionsLoaded || (!canSaveInvoice && !["owner", "admin"].includes(context.role))) {
       setAuthorized(false);
       setSaving(false);
       return;
     }
 
     const canCreateVisitInvoice = context.role === "reception" && Boolean(visitId);
-    if (!["owner", "admin"].includes(context.role) && !can("invoices", "create")) {
+    if (!canSaveInvoice && !["owner", "admin"].includes(context.role)) {
       setAuthorized(false);
       setSaving(false);
       return;
@@ -869,27 +956,40 @@ setSaving(true);
       }
     }
 
-    const { data: invoice, error: invoiceError } = await db
-      .from("invoices")
-      .insert({
-        clinic_id: context.clinic_id,
-        client_id: clientId,
-        pet_id: petId || null,
-        visit_id: visitId || null,
-        status: "draft",
-        payment_method: issueAfterSave ? billingMode : null,
-        subtotal,
-        discount: invoiceDiscount,
-        total,
-        paid_amount: 0,
-        notes: notes.trim() || null,
-        issued_at: issueAfterSave ? new Date().toISOString() : null,
-        paid_at: null,
-        created_by: user.id,
-        updated_by: user.id,
-      })
-      .select("id")
-      .single();
+    const invoicePayload = {
+      clinic_id: context.clinic_id,
+      client_id: clientId,
+      pet_id: petId || null,
+      visit_id: visitId || null,
+      status: "draft",
+      payment_method: issueAfterSave ? billingMode : null,
+      subtotal,
+      discount: invoiceDiscount,
+      total,
+      paid_amount: 0,
+      notes: notes.trim() || null,
+      issued_at: null,
+      paid_at: null,
+      updated_by: user.id,
+      updated_at: new Date().toISOString(),
+    };
+    const { data: invoice, error: invoiceError } = draftId
+      ? await db
+        .from("invoices")
+        .update(invoicePayload)
+        .eq("id", draftId)
+        .eq("clinic_id", context.clinic_id)
+        .eq("status", "draft")
+        .select("id")
+        .single()
+      : await db
+        .from("invoices")
+        .insert({
+          ...invoicePayload,
+          created_by: user.id,
+        })
+        .select("id")
+        .single();
 
     if (invoiceError || !invoice) {
       setMessage(invoiceError?.message || "Could not create invoice.");
@@ -918,6 +1018,19 @@ setSaving(true);
       ...row,
       clinic_id: context.clinic_id,
     }));
+
+    if (draftId) {
+      const { error: deleteItemsError } = await db
+        .from("invoice_items")
+        .delete()
+        .eq("invoice_id", invoice.id)
+        .eq("clinic_id", context.clinic_id);
+      if (deleteItemsError) {
+        setMessage(deleteItemsError.message);
+        setSaving(false);
+        return;
+      }
+    }
 
     const { error: itemsError } = await db
       .from("invoice_items")
@@ -1712,7 +1825,7 @@ setSuccess(
                   />
                 </div>
 
-                <button
+                {!visitId && <button
                   disabled={saving}
                   onClick={() => saveInvoice(false)}
                   className="w-full rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300"
@@ -1722,18 +1835,18 @@ setSuccess(
                     : language === "ar"
                       ? "حفظ كمسودة"
                       : "Save as draft"}
-                </button>
+                </button>}
 
                 {canIssueInvoices && <button
-                  disabled={saving}
+                  disabled={saving || (Boolean(visitId) && visitBillLoading)}
                   onClick={() => saveInvoice(true)}
                   className="w-full rounded-2xl bg-blue-600 px-5 py-4 font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
                 >
                   {saving
                     ? "Saving..."
                     : language === "ar"
-                      ? "إصدار الفاتورة"
-                      : "Issue invoice"}
+                      ? visitId ? "حفظ وإصدار الفاتورة" : "إصدار الفاتورة"
+                      : visitId ? "Save and issue invoice" : "Issue invoice"}
                 </button>}
               </div>
             </section>

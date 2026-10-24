@@ -3,6 +3,8 @@
 export type MedicalRecordDraft = {
   labTests: string;
   labNotes: string;
+  labRecordIds: string[];
+  surgeryRecordId: string | null;
   surgeryTitle: string;
   surgeryStatus: "planned" | "completed";
   surgeryBeforeStatus: string;
@@ -14,6 +16,8 @@ export type MedicalRecordDraft = {
 export const emptyMedicalRecordDraft: MedicalRecordDraft = {
   labTests: "",
   labNotes: "",
+  labRecordIds: [],
+  surgeryRecordId: null,
   surgeryTitle: "",
   surgeryStatus: "planned",
   surgeryBeforeStatus: "",
