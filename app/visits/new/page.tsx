@@ -1,5 +1,7 @@
 "use client";
 
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
+
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -39,6 +41,10 @@ type VaccineStockProduct = { id: string; name: string; active_ingredient: string
 type DrawerMedication = { id: string; product_id: string; quantity: number };
 
 export default function NewVisitPage() {
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
+  const [originalVaccinations, setOriginalVaccinations] = useState<VaccinationDraft[]>([]);
+  const vaccinationIsSaved = (id: string) => originalVaccinations.some((v) => v.id === id);
+  const canChangeVaccine = (id: string) => permissionsLoaded && can("vaccinations", vaccinationIsSaved(id) ? "edit" : "create");
   const router = useRouter();
   const routeParams = useParams<{ id?: string }>();
   const editVisitId = typeof routeParams?.id === "string" ? routeParams.id : null;
@@ -479,11 +485,13 @@ export default function NewVisitPage() {
         const [doseText = "", route = "", frequency = "", duration = "", instructions = ""] = String(row.prescription || "").split(" · ");
         return { id: row.id, product_id: row.product_id || null, productName: row.medication_name || "", activeIngredient: row.active_ingredient || null, manufacturer: null, price: null, doseText, route, frequency, duration, instructions, weightKg: null, source: row.source === "manual" ? "manual" as const : "DrugEye" as const, bsavaDrugName: null };
       }));
-      setVaccinations(vaccineRows.map((row) => ({
+      const loadedVaccinations: VaccinationDraft[] = vaccineRows.map((row) => ({
         id: row.id, product_id: row.product_id || null, vaccine_name: row.vaccine_name || "", vaccine_type: row.vaccine_type || "", dose_stage: "manual",
         administered_at: row.administered_at ? formatLocalDateTime(new Date(row.administered_at)) : "", next_dose_at: row.next_dose_at ? formatLocalDateTime(new Date(row.next_dose_at)) : "",
         next_dose_manual: true, dose: row.dose || "", route: row.route || "", batch_number: row.batch_number || "", manufacturer: row.manufacturer || "", notes: row.notes || "",
-      })));
+      }));
+      setVaccinations(loadedVaccinations);
+      setOriginalVaccinations(loadedVaccinations);
       setOriginalMedicalRecords(medicalRows.map((row) => ({ id: row.id, record_type: row.record_type, status: row.status })));
       const labRows = medicalRows.filter((row) => row.record_type === "lab");
       const surgeryRow = medicalRows.find((row) => row.record_type === "surgery");
@@ -782,6 +790,7 @@ export default function NewVisitPage() {
   }
 
   function addVaccination() {
+    if (!permissionsLoaded || !can("vaccinations", "create")) return;
     setVaccinations((current) => [
       ...current,
       {
@@ -803,6 +812,7 @@ export default function NewVisitPage() {
   }
 
   function updateVaccination(id: string, patch: Partial<VaccinationDraft>) {
+    if (!canChangeVaccine(id)) return;
     setVaccinations((current) => current.map((item) => {
       if (item.id !== id) return item;
 
@@ -839,6 +849,7 @@ export default function NewVisitPage() {
   }
 
   function resetVaccinationNextDoseToAutomatic(id: string) {
+    if (!canChangeVaccine(id)) return;
     setVaccinations((current) => current.map((item) => item.id === id
       ? {
           ...item,
@@ -850,6 +861,7 @@ export default function NewVisitPage() {
   }
 
   function removeVaccination(id: string) {
+    if (!permissionsLoaded || !can("vaccinations", vaccinationIsSaved(id) ? "delete" : "create")) return;
     setVaccinations((current) => current.filter((item) => item.id !== id));
   }
 
@@ -861,6 +873,14 @@ export default function NewVisitPage() {
   }, [followUp, language, t]);
 
   async function saveVisit(createBill = false) {
+    if (!permissionsLoaded || !can("medical_records", editVisitId ? "edit" : "create")) {
+      setMessage(language === "ar" ? "لا تملك صلاحية حفظ هذه الزيارة." : "You do not have permission to save this visit.");
+      return;
+    }
+    const changedVaccines = vaccinations.filter(v => JSON.stringify(v) !== JSON.stringify(originalVaccinations.find(o => o.id === v.id)));
+    if (changedVaccines.some(v => !canChangeVaccine(v.id)) || (originalVaccinations.some(o => !vaccinations.some(v => v.id === o.id && v.vaccine_name.trim())) && !can("vaccinations", "delete"))) {
+      setMessage(language === "ar" ? "لا تملك صلاحية تغيير التطعيمات المطلوبة." : "Missing permission for these vaccination changes."); return;
+    }
     setMessage("");
 
     if (editVisitId && (!visitDate || Number.isNaN(new Date(visitDate).getTime()))) {
@@ -1064,7 +1084,7 @@ export default function NewVisitPage() {
           const retainedIds = medicationDrafts.map((draft) => draft.id);
           const { data: existingRows, error: existingRowsError } = await db.from("visit_medications").select("id").eq("visit_id", visit.id);
           if (existingRowsError) throw existingRowsError;
-          const removedIds = (existingRows || []).map((row) => row.id).filter((id) => !retainedIds.includes(id));
+          const removedIds = originalVaccinations.map(row => row.id).filter(id => !retainedIds.includes(id));
           if (removedIds.length) {
             const { error: removeError } = await db.from("visit_medications").delete().in("id", removedIds).eq("visit_id", visit.id);
             if (removeError) throw removeError;
@@ -1112,7 +1132,7 @@ export default function NewVisitPage() {
 
         const validVaccinations = vaccinations.filter((v) => v.vaccine_name.trim());
         if (validVaccinations.length) {
-          const vaccineRows = validVaccinations.map((v) => ({
+          const vaccineRows = validVaccinations.filter(v => changedVaccines.some(c => c.id === v.id)).map((v) => ({
             ...(editVisitId ? { id: v.id } : {}),
             clinic_id: clinicContext.clinic_id,
             visit_id: visit.id,
@@ -1134,10 +1154,12 @@ export default function NewVisitPage() {
               v.notes.trim(),
             ].filter(Boolean).join("\n") || null,
           }));
-          const { error: vaccineError } = editVisitId
-            ? await db.from("vaccinations").upsert(vaccineRows)
-            : await db.from("vaccinations").insert(vaccineRows);
-          if (vaccineError) throw vaccineError;
+          for (const row of vaccineRows) {
+            const result = row.id && vaccinationIsSaved(row.id)
+              ? await db.from("vaccinations").update(row).eq("id", row.id).eq("visit_id", visit.id)
+              : await db.from("vaccinations").insert(row);
+            if (result.error) throw result.error;
+          }
         }
         if (editVisitId) {
           const retainedIds = validVaccinations.map((v) => v.id);
@@ -1335,6 +1357,10 @@ export default function NewVisitPage() {
   const pageClasses = darkMode
     ? "min-h-screen bg-[#0F1115] text-slate-100"
     : "min-h-screen bg-[#F7F8FA] text-slate-900";
+
+  if (!permissionsLoaded || !can("medical_records", editVisitId ? "edit" : "create")) {
+    return <main className="p-6" role="status">{!permissionsLoaded ? (language === "ar" ? "جارٍ تحميل الصلاحيات..." : "Loading permissions...") : (language === "ar" ? "لا تملك صلاحية إضافة أو تعديل هذه الزيارة." : "You do not have permission to add or edit this visit.")}</main>;
+  }
 
   return (
     <main
@@ -1580,6 +1606,11 @@ export default function NewVisitPage() {
                 removeMedication={removeMedication}
                 treatment={treatment}
                 setTreatment={setTreatment}
+                canViewVaccination={permissionsLoaded && can("vaccinations", "view")}
+                canAddVaccination={permissionsLoaded && can("vaccinations", "create")}
+                canEditVaccination={permissionsLoaded && can("vaccinations", "edit")}
+                canDeleteVaccination={permissionsLoaded && can("vaccinations", "delete")}
+                vaccinationIsSaved={vaccinationIsSaved}
                 vaccinations={vaccinations}
                 vaccineStockProducts={vaccineStockProducts}
                 vaccineProductMappings={vaccineProductMappings}

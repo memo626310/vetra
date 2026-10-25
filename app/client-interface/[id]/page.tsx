@@ -977,6 +977,7 @@ export default function ClientInterfaceIdPage(){
             </label>
             {pet.photo_url && <button type="button" disabled={photoBusy} onClick={() => void deletePetPhoto()} className="inline-flex items-center gap-2 rounded-xl border border-rose-300/15 bg-rose-300/[.06] px-3 py-2 text-xs font-bold text-rose-200 transition hover:bg-rose-300/10 disabled:opacity-60"><UiIcon name="trash" className="h-4 w-4"/>{lang === "ar" ? "حذف الصورة" : "Delete photo"}</button>}
             <Link href={`/client-interface/${clientId}/pets/${pet.id}/gallery`} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[.05] px-3 py-2 text-xs font-bold text-slate-200 transition hover:bg-white/10"><UiIcon name="camera" className="h-4 w-4"/>{lang === "ar" ? "معرض الصور" : "Photo gallery"}</Link>
+            <Link href={`/client-interface/${clientId}/analyses?pet=${pet.id}`} className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-black text-cyan-200 transition hover:bg-cyan-300/15">🧪 {lang === "ar" ? "نتائج التحاليل" : "Lab results"}</Link>
             <span className="basis-full text-[10px] text-slate-400">{lang === "ar" ? "JPG أو PNG أو WebP — حتى 5 ميجابايت" : "JPG, PNG, or WebP — up to 5 MB"}</span>
           </div>
           {photoError && <p role="alert" className="mt-2 text-xs font-semibold text-rose-300">{photoError}</p>}

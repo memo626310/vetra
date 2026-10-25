@@ -1,5 +1,7 @@
 "use client";
 
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
+
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
@@ -40,6 +42,7 @@ function visitHandler(notes: string | null) {
 }
 
 export default function VisitHistoryDashboardPage() {
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const [language, setLanguage] = useState<"ar" | "en">("ar");
   const [visits, setVisits] = useState<Visit[]>([]);
   const [petsById, setPetsById] = useState<Record<string, Pet>>({});
@@ -168,7 +171,7 @@ export default function VisitHistoryDashboardPage() {
   const visibleVisits = filteredVisits.slice(page * pageSize, (page + 1) * pageSize);
 
   async function deleteVisit() {
-    if (!deleting) return;
+    if (!deleting || !permissionsLoaded || !can("medical_records", "delete")) return;
     setSaving(true); setError(""); setMessage("");
     try {
       const db = await getClinicDb();
@@ -241,7 +244,7 @@ export default function VisitHistoryDashboardPage() {
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setLanguage(ar ? "en" : "ar")} className="rounded-lg border border-[#414849] bg-[#292e2f] px-3 py-2 text-sm font-bold">{ar ? "English" : "العربية"}</button>
             <ClinicCacheRefreshButton ar={ar} darkMode loading={refreshingCache} onRefresh={() => void refreshCache()} />
-            <Link href="/visits/new" className="rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-bold text-slate-950">{ar ? "بدء زيارة" : "Start visit"}</Link>
+            {permissionsLoaded && can("medical_records", "create") && <Link href="/visits/new" className="rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-bold text-slate-950">{ar ? "بدء زيارة" : "Start visit"}</Link>}
             <Link href="/dashboard" className="rounded-xl bg-[#0B2540] px-4 py-2.5 text-sm font-bold text-white">{text.back}</Link>
           </div>
         </header>
@@ -277,7 +280,7 @@ export default function VisitHistoryDashboardPage() {
                       <td className="px-4 py-4 text-sm text-slate-300">{visitHandler(visit.notes)}</td>
                       <td className="px-4 py-4"><span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-bold text-emerald-300">{text.completed}</span></td>
                       <td className="px-4 py-4 text-end" onClick={(event) => event.stopPropagation()}><div className="flex flex-wrap justify-end gap-2">
-                        <Link href={`/visits/${visit.id}/edit`} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">{text.edit}</Link>
+                        {permissionsLoaded && can("medical_records", "edit") && <Link href={`/visits/${visit.id}/edit`} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">{text.edit}</Link>}
                         <Link href={`/prescriptions/${visit.id}`} className="rounded-lg border border-cyan-400/40 px-3 py-2 text-xs font-bold text-cyan-200">{text.sharePrescription}</Link>
                         {invoicesByVisit[visit.id] && <Link href={`/invoices/${invoicesByVisit[visit.id].id}`} className="rounded-lg border border-emerald-400/40 px-3 py-2 text-xs font-bold text-emerald-200">{text.shareInvoice}</Link>}
                       </div></td>
@@ -285,7 +288,7 @@ export default function VisitHistoryDashboardPage() {
                     {expandedId === visit.id && <tr><td colSpan={7} className="bg-[#24292a] px-4 py-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       {([[text.reason, visit.reason], [text.exam, visit.examination], [text.diagnosis, visit.diagnosis], [text.treatment, visit.treatment], [text.weight, visit.weight == null ? null : String(visit.weight)], [text.temp, visit.temperature == null ? null : String(visit.temperature)], [text.heart, visit.heart_rate == null ? null : String(visit.heart_rate)], [text.respiration, visit.respiratory_rate == null ? null : String(visit.respiratory_rate)], [text.notes, visit.notes]] as Array<[string, string | null]>).map(([label, value]) => <div key={label} className="min-w-0"><div className="text-xs font-bold text-slate-400">{label}</div><div className="mt-1 whitespace-pre-wrap break-words text-sm">{value || "—"}</div></div>)}
                       {(vaccinationsByVisit[visit.id] || []).length > 0 && <div className="min-w-0 sm:col-span-2 lg:col-span-4"><div className="text-xs font-bold text-slate-400">{text.vaccines}</div><div className="mt-1 flex flex-wrap gap-2">{vaccinationsByVisit[visit.id].map((vaccination) => <span key={vaccination.id} className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1.5 text-sm text-cyan-100">{vaccination.vaccine_name || "—"}{vaccination.administered_at ? ` · ${new Date(vaccination.administered_at).toLocaleDateString(ar ? "ar-EG" : "en-GB")}` : ""}</span>)}</div></div>}
-                    </div><div className="mt-4 flex justify-end"><button type="button" onClick={() => setDeleting(visit)} className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700">{text.delete}</button></div></td></tr>}
+                    </div><div className="mt-4 flex justify-end">{permissionsLoaded && can("medical_records", "delete") && <button type="button" onClick={() => setDeleting(visit)} className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700">{text.delete}</button>}</div></td></tr>}
                   </Fragment>
                 );
               })}
@@ -300,7 +303,7 @@ export default function VisitHistoryDashboardPage() {
           <div className="flex items-center gap-2"><button type="button" disabled={page === 0} onClick={() => setPage((current) => current - 1)} className="rounded-lg border border-[#414849] px-3 py-2 disabled:opacity-40">{text.previous}</button><span>{page + 1} / {pageCount}</span><button type="button" disabled={page + 1 >= pageCount} onClick={() => setPage((current) => current + 1)} className="rounded-lg border border-[#414849] px-3 py-2 disabled:opacity-40">{text.next}</button></div>
         </div>}
       </div>
-      {deleting && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setDeleting(null); }}>
+      {deleting && permissionsLoaded && can("medical_records", "delete") && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setDeleting(null); }}>
         <section role="alertdialog" aria-modal="true" aria-labelledby="delete-visit-title" className="w-full max-w-md rounded-xl border border-[#414849] bg-[#252a2b] p-5 text-slate-100 shadow-2xl">
           <h2 id="delete-visit-title" className="text-lg font-black">{text.delete}</h2>
           <p className="mt-3 text-sm leading-6 text-slate-300">{text.deleteConfirm}</p>

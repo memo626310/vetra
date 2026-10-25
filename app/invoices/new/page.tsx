@@ -168,8 +168,7 @@ export default function NewInvoicePage() {
 
     const requestedDraftId = new URLSearchParams(window.location.search).get("draft") || "";
     const canCreateInvoice = ["owner", "admin"].includes(context.role)
-      || can("invoices", "create")
-      || (Boolean(requestedDraftId) && can("invoices", "edit"));
+      || can("invoices", requestedDraftId ? "edit" : "create");
     if (!canCreateInvoice) {
       setAuthorized(false);
       setLoading(false);

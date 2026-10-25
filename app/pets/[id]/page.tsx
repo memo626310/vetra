@@ -1,8 +1,11 @@
 "use client";
 
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
+import { vetraCore } from "@/lib/vetra-core";
 import { readVetraTheme, writeVetraThemeMode } from "@/lib/theme";
 import { clearClinicCache, readClinicCache, writeClinicCache } from "@/lib/clinic-cache";
 import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
@@ -57,6 +60,8 @@ type Vaccination = {
 };
 
 type PetMedicalRecord = { id: string; pet_id: string; client_id: string; visit_id: string | null; record_type: "lab" | "surgery"; title: string; status: string; result: string | null; notes: string | null; performed_at: string | null; created_at: string };
+type LabAttachment = { id: string; record_id: string; pet_id: string; file_name: string; storage_path: string; mime_type: string; size_bytes: number; created_at: string };
+type LabRow = { test: string; result: string; unit: string; reference: string };
 
 type VaccineCircle = {
   id: string;
@@ -71,18 +76,25 @@ type PetPageCache = {
   visits: Visit[];
   vaccinations: Vaccination[];
   medicalRecords: PetMedicalRecord[];
+  labAttachments: LabAttachment[];
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default function PetPage() {
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const [pet, setPet] = useState<Pet | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
   const [medicalRecords, setMedicalRecords] = useState<PetMedicalRecord[]>([]);
+  const [labAttachments, setLabAttachments] = useState<LabAttachment[]>([]);
   const [newLabTest, setNewLabTest] = useState("");
   const [newLabNotes, setNewLabNotes] = useState("");
+  const [newLabDate, setNewLabDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newLabFile, setNewLabFile] = useState<File | null>(null);
+  const [newLabRows, setNewLabRows] = useState<LabRow[]>([{ test: "", result: "", unit: "", reference: "" }]);
+  const [editingLabId, setEditingLabId] = useState<string | null>(null);
   const [savingLab, setSavingLab] = useState(false);
   const [labError, setLabError] = useState("");
 
@@ -152,6 +164,7 @@ export default function PetPage() {
           setVisits(cached.visits);
           setVaccinations(cached.vaccinations);
           setMedicalRecords(cached.medicalRecords);
+          setLabAttachments(cached.labAttachments || []);
         }
 
         const db = await getClinicDb();
@@ -194,6 +207,18 @@ export default function PetPage() {
         } else {
           setLabError("");
           setMedicalRecords((medicalRecordsData || []) as PetMedicalRecord[]);
+        }
+
+        const { data: labAttachmentsData, error: labAttachmentsError } = await db
+          .from("pet_medical_record_attachments")
+          .select("id,record_id,pet_id,file_name,storage_path,mime_type,size_bytes,created_at")
+          .eq("pet_id", petId)
+          .order("created_at", { ascending: false });
+        if (labAttachmentsError) {
+          console.warn("PET LAB ATTACHMENTS LOAD ERROR:", labAttachmentsError);
+          setLabAttachments([]);
+        } else {
+          setLabAttachments((labAttachmentsData || []) as LabAttachment[]);
         }
 
         // =========================
@@ -281,6 +306,7 @@ export default function PetPage() {
           visits: (visitsData || []) as Visit[],
           vaccinations: (vaccinationsData || []) as Vaccination[],
           medicalRecords: (medicalRecordsData || []) as PetMedicalRecord[],
+          labAttachments: (labAttachmentsData || []) as LabAttachment[],
         } satisfies PetPageCache);
         setLoading(false);
       } catch (err) {
@@ -307,22 +333,89 @@ export default function PetPage() {
   }
 
   async function addLabTest() {
-    if (!newLabTest.trim() || !pet) return;
+    if (!permissionsLoaded || (!can("medical_records", "create") && !can("medical_records", "edit"))) return;
+    if (!newLabTest.trim() || !pet || (!newLabFile && !editingLabId)) return;
     setSavingLab(true);
     setLabError("");
     try {
-      const [db, clinic] = await Promise.all([getClinicDb(), getClinicContext()]);
-      const { data, error: insertError } = await db.from("pet_medical_records").insert({
-        clinic_id: clinic.clinic_id, pet_id: pet.id, client_id: pet.client_id,
-        record_type: "lab", title: newLabTest.trim(), status: "ordered", notes: newLabNotes.trim() || null,
-      }).select("id,pet_id,client_id,visit_id,record_type,title,status,result,notes,performed_at,created_at").single();
-      if (insertError) throw insertError;
-      setMedicalRecords((current) => [data as PetMedicalRecord, ...current]);
+      const { data: sessionData } = await vetraCore.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("انتهت جلسة العيادة. سجّل الدخول مرة أخرى.");
+      const body = new FormData();
+      if (editingLabId) body.append("record_id", editingLabId);
+      body.append("title", newLabTest.trim());
+      body.append("notes", newLabNotes.trim());
+      body.append("performed_at", newLabDate);
+      body.append("result_rows", JSON.stringify(newLabRows.filter((row) => Object.values(row).some(Boolean))));
+      if (newLabFile) body.append("file", newLabFile);
+      const response = await fetch(`/api/pets/${encodeURIComponent(pet.id)}/lab-results`, { method: editingLabId ? "PATCH" : "POST", headers: { Authorization: `Bearer ${token}` }, body });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "تعذر حفظ نتيجة التحليل.");
+      if (editingLabId) {
+        setMedicalRecords((current) => current.map((record) => record.id === editingLabId ? payload.record as PetMedicalRecord : record));
+        if (payload.attachment) {
+          setLabAttachments((current) => {
+            const next = current.filter((attachment) => attachment.record_id !== editingLabId);
+            return [payload.attachment as LabAttachment, ...next];
+          });
+        }
+      } else {
+        setMedicalRecords((current) => [payload.record as PetMedicalRecord, ...current]);
+        setLabAttachments((current) => [payload.attachment as LabAttachment, ...current]);
+      }
       clearClinicCache(clinicId);
-      setNewLabTest(""); setNewLabNotes("");
+      setNewLabTest(""); setNewLabNotes(""); setNewLabDate(new Date().toISOString().slice(0, 10)); setNewLabFile(null); setNewLabRows([{ test: "", result: "", unit: "", reference: "" }]); setEditingLabId(null);
     } catch (saveError) {
       setLabError(saveError instanceof Error ? saveError.message : "تعذر حفظ التحليل. شغّل ملف SQL الخاص بالسجلات الطبية على قاعدة العيادة.");
     } finally { setSavingLab(false); }
+  }
+
+  function updateLabRow(index: number, key: keyof LabRow, value: string) {
+    setNewLabRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: value } : row));
+  }
+
+  function editLabTest(record: PetMedicalRecord) {
+    let rows: LabRow[] = [];
+    try { const parsed = record.result ? JSON.parse(record.result) : []; rows = Array.isArray(parsed) ? parsed : []; } catch { rows = []; }
+    setEditingLabId(record.id);
+    setNewLabTest(record.title);
+    setNewLabNotes(record.notes || "");
+    setNewLabDate((record.performed_at || record.created_at).slice(0, 10));
+    setNewLabRows(rows.length ? rows : [{ test: "", result: "", unit: "", reference: "" }]);
+    setNewLabFile(null);
+    setLabError("");
+    document.getElementById("lab-report-editor")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  async function deleteLabTest(record: PetMedicalRecord) {
+    if (!pet || !can("medical_records", "delete")) return;
+    if (!window.confirm(`حذف تقرير "${record.title}" من ملف ${pet.name}؟`)) return;
+    try {
+      const { data: sessionData } = await vetraCore.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("انتهت جلسة العيادة.");
+      const response = await fetch(`/api/pets/${encodeURIComponent(pet.id)}/lab-results?record_id=${encodeURIComponent(record.id)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "تعذر حذف التقرير.");
+      setMedicalRecords((current) => current.filter((item) => item.id !== record.id));
+      setLabAttachments((current) => current.filter((item) => item.record_id !== record.id));
+      if (editingLabId === record.id) setEditingLabId(null);
+      clearClinicCache(clinicId);
+    } catch (deleteError) { setLabError(deleteError instanceof Error ? deleteError.message : "تعذر حذف التقرير."); }
+  }
+
+  async function openLabFile(attachment: LabAttachment) {
+    try {
+      const { data: sessionData } = await vetraCore.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token || !pet) throw new Error("انتهت جلسة العيادة.");
+      const response = await fetch(`/api/pets/${encodeURIComponent(pet.id)}/lab-results?attachment_id=${encodeURIComponent(attachment.id)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok || !payload.url) throw new Error(payload.error || "تعذر فتح الملف.");
+      window.open(payload.url, "_blank", "noopener,noreferrer");
+    } catch (openError) {
+      setLabError(openError instanceof Error ? openError.message : "تعذر فتح ملف التحليل.");
+    }
   }
 
   // =========================
@@ -1393,7 +1486,7 @@ export default function PetPage() {
                 ✏️ تعديل البيانات
               </Link>
 
-              {!pet.is_deceased && (
+              {!pet.is_deceased && permissionsLoaded && can("medical_records", "create") && (
                 <Link
                   href={`/visits/new?pet=${pet.id}`}
                   className="rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-white dark:text-slate-900"
@@ -1673,18 +1766,27 @@ export default function PetPage() {
             <div><h2 className="text-xl font-bold">التحاليل والجراحات</h2><p className={`mt-1 text-sm ${mutedText}`}>سجل محفوظ ويظهر لصاحب الحيوان في ملفه.</p></div>
             <span className={`rounded-full px-3 py-1 text-xs font-bold ${softCard}`}>{medicalRecords.length} سجل</span>
           </div>
-          <div className="mb-5 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-            <input value={newLabTest} onChange={(event) => setNewLabTest(event.target.value)} placeholder="اسم التحليل المطلوب" className={`rounded-xl border px-3 py-2.5 text-sm ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"}`} />
-            <input value={newLabNotes} onChange={(event) => setNewLabNotes(event.target.value)} placeholder="ملاحظات للمعمل (اختياري)" className={`rounded-xl border px-3 py-2.5 text-sm ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"}`} />
-            <button type="button" onClick={addLabTest} disabled={savingLab || !newLabTest.trim()} className="rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingLab ? "جارٍ الحفظ..." : "إضافة تحليل"}</button>
-          </div>
+          {permissionsLoaded && (can("medical_records", "create") || can("medical_records", "edit")) && <div id="lab-report-editor" className={`mb-5 rounded-2xl border p-4 ${darkMode ? "border-cyan-400/20 bg-cyan-400/[.05]" : "border-cyan-100 bg-cyan-50"}`}>
+            <div className="mb-3 flex items-center justify-between gap-3"><div><h3 className="font-black">{editingLabId ? "تعديل تقرير التحليل" : "إضافة تقرير تحليل للحيوان"}</h3><p className={`mt-1 text-xs ${mutedText}`}>الحيوان: <b>{pet.name}</b> · المالك: <b>{client?.name || "—"}</b></p></div><span className="text-2xl">🧪</span></div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <input value={newLabTest} onChange={(event) => setNewLabTest(event.target.value)} placeholder="اسم التحليل، مثال: CBC (VET)" className={`rounded-xl border px-3 py-2.5 text-sm ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"}`} />
+              <input type="date" value={newLabDate} onChange={(event) => setNewLabDate(event.target.value)} className={`rounded-xl border px-3 py-2.5 text-sm ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"}`} />
+            </div>
+            <label className={`mt-2 flex cursor-pointer items-center gap-3 rounded-xl border border-dashed p-3 ${darkMode ? "border-cyan-300/30 bg-slate-950/50" : "border-cyan-300 bg-white"}`}><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => setNewLabFile(event.target.files?.[0] || null)} /><span className="text-xl">📎</span><span className="min-w-0"><span className="block truncate text-sm font-bold">{newLabFile?.name || "اختار ملف النتيجة PDF أو صورة"}</span><span className={`mt-1 block text-[10px] ${mutedText}`}>{newLabFile ? `${(newLabFile.size / 1024 / 1024).toFixed(1)} MB` : "حتى 10 ميجابايت"}</span></span></label>
+            <div className="mt-3"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-black">قيم التقرير</span><button type="button" onClick={() => setNewLabRows((current) => [...current, { test: "", result: "", unit: "", reference: "" }])} className="rounded-lg bg-cyan-500/10 px-2.5 py-1.5 text-[10px] font-black text-cyan-500">+ إضافة صف</button></div><div className="space-y-2">{newLabRows.map((row, index) => <div key={index} className="grid grid-cols-2 gap-2"><input value={row.test} onChange={(event) => updateLabRow(index, "test", event.target.value)} placeholder="اسم الاختبار" className={`rounded-lg border px-2.5 py-2 text-xs ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"}`} /><input value={row.result} onChange={(event) => updateLabRow(index, "result", event.target.value)} placeholder="النتيجة" className={`rounded-lg border px-2.5 py-2 text-xs ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"}`} /><input value={row.unit} onChange={(event) => updateLabRow(index, "unit", event.target.value)} placeholder="الوحدة" className={`rounded-lg border px-2.5 py-2 text-xs ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"}`} /><input value={row.reference} onChange={(event) => updateLabRow(index, "reference", event.target.value)} placeholder="المعدل المرجعي" className={`rounded-lg border px-2.5 py-2 text-xs ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"}`} /></div>)}</div></div>
+            {newLabRows.some((row) => Object.values(row).some(Boolean)) && <div className="mt-3 overflow-x-auto rounded-xl border border-slate-300/60 bg-white text-slate-950"><table className="min-w-[520px] w-full text-xs"><thead><tr className="border-b border-slate-300 font-black"><th className="px-2 py-2 text-start">اسم الاختبار</th><th className="px-2 py-2 text-start">النتيجة</th><th className="px-2 py-2 text-start">الوحدة</th><th className="px-2 py-2 text-start">المعدل المرجعي</th></tr></thead><tbody><tr><td colSpan={4} className="border-b border-slate-200 bg-[#eee5e5] px-2 py-2 text-center font-black">{newLabTest || "اسم التقرير"}</td></tr>{newLabRows.filter((row) => Object.values(row).some(Boolean)).map((row, index) => <tr key={index} className="border-b border-slate-100 last:border-0"><td className="px-2 py-2 font-semibold">{row.test || "—"}</td><td className="px-2 py-2 font-black">{row.result || "—"}</td><td className="px-2 py-2">{row.unit || "—"}</td><td className="px-2 py-2">{row.reference || "—"}</td></tr>)}</tbody></table></div>}
+            <textarea value={newLabNotes} onChange={(event) => setNewLabNotes(event.target.value)} placeholder="ملاحظات الطبيب أو المعمل (اختياري)" rows={2} className={`mt-2 w-full resize-none rounded-xl border px-3 py-2.5 text-sm ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"}`} />
+            <div className="mt-3 flex gap-2"><button type="button" onClick={() => void addLabTest()} disabled={savingLab || !newLabTest.trim() || (!newLabFile && !editingLabId)} className="flex-1 rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingLab ? "جارٍ حفظ التقرير..." : editingLabId ? "حفظ تعديلات التقرير" : "حفظ نتيجة التحليل"}</button>{editingLabId && <button type="button" onClick={() => { setEditingLabId(null); setNewLabTest(""); setNewLabNotes(""); setNewLabFile(null); setNewLabRows([{ test: "", result: "", unit: "", reference: "" }]); }} className={`rounded-xl border px-4 py-2.5 text-sm font-bold ${darkMode ? "border-white/10 text-slate-300" : "border-slate-200 text-slate-600"}`}>إلغاء</button>}</div>
+          </div>}
           {labError && <p className="mb-3 text-sm text-rose-500">{labError}</p>}
           <div className="grid gap-2 sm:grid-cols-2">
-            {medicalRecords.map((record) => <article key={record.id} className={`rounded-2xl border p-3 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-100 bg-slate-50"}`}>
-              <div className="flex items-center justify-between gap-2"><h3 className="font-bold">{record.title}</h3><span className="rounded-full bg-cyan-500/10 px-2 py-1 text-[10px] font-bold text-cyan-600">{record.record_type === "lab" ? "تحليل" : "جراحة"} · {record.status === "completed" ? "أُجري" : "مطلوب/مخطط"}</span></div>
-              <p className={`mt-1 text-xs ${mutedText}`}>{formatDate(record.performed_at || record.created_at)}</p>
-              {record.result && <p className="mt-2 text-sm">النتيجة: {record.result}</p>}{record.notes && <p className={`mt-2 text-sm ${mutedText}`}>{record.notes}</p>}
-            </article>)}
+            {medicalRecords.map((record) => { const attachment = labAttachments.find((item) => item.record_id === record.id); let rows: LabRow[] = []; try { rows = record.result ? JSON.parse(record.result) as LabRow[] : []; } catch { rows = []; } return <article key={record.id} className={`rounded-2xl border p-3 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-100 bg-slate-50"}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold">{record.title}</h3><p className={`mt-1 text-[10px] ${mutedText}`}>الحيوان: {pet.name} · المالك: {client?.name || "—"}</p></div><span className="rounded-full bg-cyan-500/10 px-2 py-1 text-[10px] font-bold text-cyan-600">{record.record_type === "lab" ? "تحليل" : "جراحة"} · {record.status === "completed" ? "مكتمل" : "مطلوب/مخطط"}</span></div>
+              <p className={`mt-1 text-xs ${mutedText}`}>تاريخ التقرير: {formatDate(record.performed_at || record.created_at)}</p>
+              {rows.length > 0 && <div className="mt-3 overflow-x-auto rounded-lg border border-slate-300/60 bg-white text-slate-950"><table className="min-w-[520px] w-full text-xs"><thead><tr className="border-b border-slate-300 font-black"><th className="px-2 py-2 text-start">اسم الاختبار</th><th className="px-2 py-2 text-start">النتيجة</th><th className="px-2 py-2 text-start">الوحدة</th><th className="px-2 py-2 text-start">المعدل المرجعي</th></tr></thead><tbody><tr><td colSpan={4} className="border-b border-slate-200 bg-[#eee5e5] px-2 py-2 text-center font-black">{record.title}</td></tr>{rows.map((row, index) => <tr key={index} className="border-b border-slate-100 last:border-0"><td className="px-2 py-2 font-semibold">{row.test || "—"}</td><td className="px-2 py-2 font-black">{row.result || "—"}</td><td className="px-2 py-2">{row.unit || "—"}</td><td className="px-2 py-2">{row.reference || "—"}</td></tr>)}</tbody></table></div>}
+              {record.notes && <p className={`mt-2 text-sm ${mutedText}`}>{record.notes}</p>}
+              <div className="mt-3 flex flex-wrap gap-2">{attachment && <button type="button" onClick={() => void openLabFile(attachment)} className="rounded-xl bg-cyan-500/10 px-3 py-2 text-xs font-black text-cyan-600">📎 فتح ملف النتيجة · {attachment.file_name}</button>}{permissionsLoaded && can("medical_records", "edit") && <button type="button" onClick={() => editLabTest(record)} className={`rounded-xl border px-3 py-2 text-xs font-black ${darkMode ? "border-cyan-300/20 text-cyan-200" : "border-cyan-200 text-cyan-700"}`}>✏️ تعديل</button>}{permissionsLoaded && can("medical_records", "delete") && <button type="button" onClick={() => void deleteLabTest(record)} className="rounded-xl border border-rose-300/20 bg-rose-400/10 px-3 py-2 text-xs font-black text-rose-300">🗑️ حذف</button>}</div>
+            </article>; })}
             {!medicalRecords.length && <p className={`text-sm ${mutedText}`}>لا توجد تحاليل أو جراحات مسجلة حتى الآن.</p>}
           </div>
         </section>
@@ -1734,7 +1836,7 @@ export default function PetPage() {
                 أول زيارة للحيوان هتظهر هنا.
               </p>
 
-              {!pet.is_deceased && (
+              {!pet.is_deceased && permissionsLoaded && can("medical_records", "create") && (
                 <Link
                   href={`/visits/new?pet=${pet.id}`}
                   className="mt-5 inline-block rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"

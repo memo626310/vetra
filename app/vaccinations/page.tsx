@@ -1,4 +1,6 @@
-﻿"use client";
+"use client";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
+﻿
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -745,6 +747,7 @@ function dateText(
 }
 
 export default function ClinicVaccinationsPage() {
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const router = useRouter();
 
   const [lang, setLang] = useState<Lang>("ar");
@@ -809,7 +812,22 @@ export default function ClinicVaccinationsPage() {
     }
   }
 
+  function exportVaccinations() {
+    if (!permissionsLoaded || !can("vaccinations", "export")) return;
+    const columns = ["id", "pet_id", "vaccine_name", "vaccine_type", "administered_at", "next_dose_at", "notes"];
+    const cell = (value: unknown) => {
+      let text = String(value ?? "");
+      if (/^[=+@\-\t\r]/.test(text)) text = "'" + text;
+      return '"' + text.replaceAll('"', '""') + '"';
+    };
+    const csv = [columns.map(cell).join(","), ...vaccines.map(v => columns.map(k => cell((v as unknown as Record<string, unknown>)[k])).join(","))].join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a"); link.href = url; link.download = "vaccinations.csv"; link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   async function shareVaccineWhatsApp(item: DueItem) {
+    if (!permissionsLoaded || !can("vaccinations", "export")) return;
     const overdue = item.status === "overdue" || (item.days !== null && item.days < 0);
     const opened = await openWhatsAppTemplate(
       item.pet.client?.phone,
@@ -993,6 +1011,7 @@ export default function ClinicVaccinationsPage() {
   }
 
   async function saveVaccineProductMapping(protocolKey: VaccineProtocolKey, productId: string, add: boolean) {
+    if (!permissionsLoaded || !can("vaccinations", add ? "create" : "delete")) return;
     setSavingVaccineMapping(protocolKey);
     setMappingMessage("");
     try {
@@ -1444,13 +1463,14 @@ export default function ClinicVaccinationsPage() {
               {dark ? "☀️" : "🌙"}
             </button>
 
-            <Link
+            {permissionsLoaded && can("vaccinations", "create") && can("medical_records", "create") && <Link
               href="/visits/new"
               className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-emerald-900/20 transition hover:-translate-y-0.5 hover:bg-emerald-500"
             >
               + {T[lang].newVisit}
-            </Link>
+            </Link>}
           </div>
+          {permissionsLoaded && can("vaccinations", "export") && <button type="button" onClick={exportVaccinations} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white">{lang === "ar" ? "تصدير التطعيمات CSV" : "Export vaccinations CSV"}</button>}
         </header>
 
         <div role="tablist" aria-label={lang === "ar" ? "أقسام التطعيمات" : "Vaccination sections"} className={`mb-5 flex gap-1 border-b ${dark ? "border-white/10" : "border-slate-200"}`}>
@@ -1483,11 +1503,11 @@ export default function ClinicVaccinationsPage() {
                     <span className="mb-1.5 block text-sm font-bold">{lang === "ar" ? protocol.titleAr : protocol.titleEn}</span>
                     <input value={mappingSearch[protocol.key] || ""} onChange={(event) => setMappingSearch((current) => ({ ...current, [protocol.key]: event.target.value }))} placeholder={lang === "ar" ? "ابحث عن منتج في المخزون..." : "Search inventory products..."} className={`w-full rounded-xl border px-3 py-2.5 text-sm ${dark ? "border-white/10 bg-[#181B21] text-white" : "border-slate-200 bg-white text-slate-900"}`} />
                     {searchResults.length > 0 && <div className={`mt-1 max-h-48 overflow-auto rounded-lg border ${dark ? "border-white/10 bg-[#181B21]" : "border-slate-200 bg-white"}`}>
-                      {searchResults.map((product) => <button key={product.id} type="button" disabled={savingVaccineMapping === protocol.key} onClick={() => void saveVaccineProductMapping(protocol.key, product.id, true)} className="flex w-full items-center justify-between gap-3 border-b border-white/[0.06] px-3 py-2 text-start text-sm last:border-0 hover:bg-emerald-500/10">
+                      {searchResults.map((product) => <button key={product.id} type="button" disabled={!permissionsLoaded || !can("vaccinations", "create") || savingVaccineMapping === protocol.key} onClick={() => void saveVaccineProductMapping(protocol.key, product.id, true)} className="flex w-full items-center justify-between gap-3 border-b border-white/[0.06] px-3 py-2 text-start text-sm last:border-0 hover:bg-emerald-500/10">
                         <span className="min-w-0 truncate">{product.name}{product.barcode ? ` · ${product.barcode}` : ""}</span><span className="shrink-0 text-xs text-slate-500">{product.quantity} {product.unit || ""} · {Number(product.retail_price || 0).toFixed(2)}</span>
                       </button>)}
                     </div>}
-                    <div className="mt-2 space-y-1.5">{linkedProducts.map((product) => <div key={product.id} className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-xs ${dark ? "bg-white/[0.04]" : "bg-white"}`}><span className="min-w-0 truncate">{product.name} · {product.quantity} {product.unit || ""}</span><button type="button" title={lang === "ar" ? "إزالة الربط" : "Remove link"} disabled={savingVaccineMapping === protocol.key} onClick={() => void saveVaccineProductMapping(protocol.key, product.id, false)} className="shrink-0 px-1 text-base text-rose-500">×</button></div>)}{linkedProducts.length === 0 && <span className="block text-xs text-slate-500">{lang === "ar" ? "لا توجد منتجات مرتبطة" : "No linked products"}</span>}</div>
+                    <div className="mt-2 space-y-1.5">{linkedProducts.map((product) => <div key={product.id} className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-xs ${dark ? "bg-white/[0.04]" : "bg-white"}`}><span className="min-w-0 truncate">{product.name} · {product.quantity} {product.unit || ""}</span><button type="button" title={lang === "ar" ? "إزالة الربط" : "Remove link"} disabled={!permissionsLoaded || !can("vaccinations", "delete") || savingVaccineMapping === protocol.key} onClick={() => void saveVaccineProductMapping(protocol.key, product.id, false)} className="shrink-0 px-1 text-base text-rose-500">×</button></div>)}{linkedProducts.length === 0 && <span className="block text-xs text-slate-500">{lang === "ar" ? "لا توجد منتجات مرتبطة" : "No linked products"}</span>}</div>
                   </div>
                 );
               })}
@@ -1649,7 +1669,7 @@ export default function ClinicVaccinationsPage() {
                     <div className="mt-4 flex flex-wrap gap-2">
                       <Link href={`/pets/${item.pet.id}`} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold">{T[lang].openPet}</Link>
                       {item.pet.client_id && <button type="button" onClick={() => { setNotifyMessage(""); setNotifyNotes(""); setNotifyKey(notifyKey === key ? "" : key); }} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950">{T[lang].notifyOwner}</button>}
-                      {item.pet.client_id && <button type="button" onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-300">{T[lang].whatsapp}</button>}
+                      {item.pet.client_id && <button type="button" disabled={!permissionsLoaded || !can("vaccinations", "export")} onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-300">{T[lang].whatsapp}</button>}
                     </div>
                     {notifyKey === key && (
                       <div className="mt-3 space-y-2">
@@ -1717,9 +1737,9 @@ export default function ClinicVaccinationsPage() {
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Link href={`/pets/${item.pet.id}`} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold">{T[lang].openPet}</Link>
-                      <Link href={`/visits/new?pet=${encodeURIComponent(item.pet.id)}`} className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300">{T[lang].newVisit}</Link>
+                      {permissionsLoaded && can("vaccinations", "create") && can("medical_records", "create") && <Link href={`/visits/new?pet=${encodeURIComponent(item.pet.id)}`} className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300">{T[lang].newVisit}</Link>}
                       {(item.due || item.status === "due") && item.pet.client_id && <button type="button" onClick={() => { setNotifyMessage(""); setNotifyNotes(""); setNotifyKey(notifyKey === key ? "" : key); }} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950">{T[lang].notifyOwner}</button>}
-                      {(item.due || item.status === "due") && item.pet.client_id && <button type="button" onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-300">{T[lang].whatsapp}</button>}
+                      {(item.due || item.status === "due") && item.pet.client_id && <button type="button" disabled={!permissionsLoaded || !can("vaccinations", "export")} onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-300">{T[lang].whatsapp}</button>}
                     </div>
                     {notifyKey === key && (
                       <div className="mt-3 space-y-2">
@@ -1880,14 +1900,14 @@ export default function ClinicVaccinationsPage() {
                               {T[lang].openPet}
                             </Link>
 
-                            <Link
+                            {permissionsLoaded && can("vaccinations", "create") && can("medical_records", "create") && <Link
                               href={`/visits/new?pet=${encodeURIComponent(
                                 item.pet.id
                               )}`}
                               className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-300"
                             >
                               +
-                            </Link>
+                            </Link>}
                             {(item.due || item.status === "due") && item.pet.client_id && (
                               <button
                                 type="button"
@@ -1902,7 +1922,7 @@ export default function ClinicVaccinationsPage() {
                                 {T[lang].notifyOwner}
                               </button>
                             )}
-                            {(item.due || item.status === "due") && item.pet.client_id && <button type="button" onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300">{T[lang].whatsapp}</button>}
+                            {(item.due || item.status === "due") && item.pet.client_id && <button type="button" disabled={!permissionsLoaded || !can("vaccinations", "export")} onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300">{T[lang].whatsapp}</button>}
                           </div>
                           {notifyKey === `${item.pet.id}-${item.vaccineType}` && (
                             <div className="mt-3 min-w-64 space-y-2">

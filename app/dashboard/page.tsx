@@ -598,7 +598,7 @@ export default function Home() {
   ["🟢", isArabic ? "نشاط العملاء" : "Client activity", "/dashboard/clients-activity"],
   ].filter((item) => {
     const required = permissionForPath(item[2]);
-    const hasPermission = !required || (permissionsLoaded && can(required.key, required.action) && (item[2] !== "/inventory/purchases" || (can("inventory", "view") && can("payments", "view") && can("payments", "create"))));
+    const hasPermission = !required || (permissionsLoaded && can(required.key, required.action) && (item[2] !== "/inventory/purchases" || (can("inventory", "view") && can("finance_page", "view"))));
 
     // Debug logging
     if (required) {
@@ -617,7 +617,7 @@ export default function Home() {
   const visibleCards = t.cards.map((card, index) => ({ card, index })).filter(({ index }) => {
     const cardPaths = ["/visits/new", "/invoices/new", "/clients", "/pets", "/appointments", "/vaccinations", "/inventory/products", "/barcode-test", "/finance", "/reports", "/dashboard/visits", "/messages", "/staff", "/inventory/purchases", "/invoices"];
     const required = permissionForPath(cardPaths[index]);
-    return !required || (permissionsLoaded && can(required.key, required.action) && (cardPaths[index] !== "/inventory/purchases" || (can("inventory", "view") && can("payments", "view") && can("payments", "create"))));
+    return !required || (permissionsLoaded && can(required.key, required.action) && (cardPaths[index] !== "/inventory/purchases" || (can("inventory", "view") && can("finance_page", "view"))));
   });
   const visibleStats = ["appointments", "vaccinations", "inventory", "inventory", "inventory"]
     .map((key, index) => ({ key, index }))

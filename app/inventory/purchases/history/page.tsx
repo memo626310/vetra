@@ -28,7 +28,7 @@ type PurchaseItem = {
 };
 type EditableLine = { product_id: string; quantity: string; unit_cost: string };
 
-function money(value: number) {
+function formatPurchaseMoney(value: number) {
   return `${new Intl.NumberFormat("en-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)} EGP`;
 }
 
@@ -39,6 +39,8 @@ function errorText(error: unknown, fallback: string) {
 }
 
 export default function PurchaseHistoryPage() {
+  const { can: canSee } = useStaffPermissions();
+  const money = (value: number) => canSee("financial_sensitive_data", "view") ? formatPurchaseMoney(value) : "••••••";
   const router = useRouter();
   const { can, loaded: permissionsLoaded } = useStaffPermissions();
   const [language, setLanguage] = useState<"ar" | "en">("ar");
@@ -136,7 +138,7 @@ export default function PurchaseHistoryPage() {
   const editTotal = editLines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unit_cost || 0), 0);
 
   async function startEdit(purchase: Purchase) {
-    if (!can("inventory", "edit") || !can("payments", "edit")) { setError(isAr ? "لا تملك صلاحية تعديل فواتير الشراء والخزنة." : "You do not have permission to edit purchase invoices."); return; }
+    if (!can("financial_sensitive_data", "view") || !can("inventory", "edit") || !can("finance_page", "view")) { setError(isAr ? "لا تملك صلاحية تعديل فواتير الشراء والخزنة." : "You do not have permission to edit purchase invoices."); return; }
     setEditError("");
     setLoadingDetails(purchase.id);
     try {
@@ -163,7 +165,7 @@ export default function PurchaseHistoryPage() {
   }
 
   async function saveEdit() {
-    if (!can("inventory", "edit") || !can("payments", "edit")) { setEditError(isAr ? "لا تملك صلاحية تعديل فواتير الشراء والخزنة." : "You do not have permission to edit purchase invoices."); return; }
+    if (!can("financial_sensitive_data", "view") || !can("inventory", "edit") || !can("finance_page", "view")) { setEditError(isAr ? "لا تملك صلاحية تعديل فواتير الشراء والخزنة." : "You do not have permission to edit purchase invoices."); return; }
     if (!editingPurchase || !editSupplier.trim() || !editAccountId || !editLines.length) {
       setEditError(isAr ? "أكمل المورد والخزنة وأضف صنفًا واحدًا على الأقل." : "Enter a supplier, choose a vault, and add at least one item.");
       return;
@@ -272,7 +274,7 @@ export default function PurchaseHistoryPage() {
               </tr></thead>
               <tbody>
                 {filteredPurchases.map((purchase) => (
-                  <FragmentPurchase key={purchase.id} purchase={purchase} accountName={accounts.find((account) => account.id === purchase.account_id)?.name || "—"} expanded={expandedId === purchase.id} items={itemsByPurchase[purchase.id]} loadingDetails={loadingDetails === purchase.id} dark={dark} isAr={isAr} onToggle={() => void toggleDetails(purchase.id)} onEdit={() => void startEdit(purchase)} canEdit={can("inventory", "edit") && can("payments", "edit")} dateText={dateText} />
+                  <FragmentPurchase key={purchase.id} purchase={purchase} accountName={accounts.find((account) => account.id === purchase.account_id)?.name || "—"} expanded={expandedId === purchase.id} items={itemsByPurchase[purchase.id]} loadingDetails={loadingDetails === purchase.id} dark={dark} isAr={isAr} onToggle={() => void toggleDetails(purchase.id)} onEdit={() => void startEdit(purchase)} canEdit={can("financial_sensitive_data", "view") && can("inventory", "edit") && can("finance_page", "view")} dateText={dateText} />
                 ))}
                 {!filteredPurchases.length && <tr><td colSpan={6} className="px-4 py-16 text-center text-slate-500">{isAr ? (search ? "لا توجد فواتير تطابق البحث." : "لا توجد فواتير شراء مسجلة حتى الآن.") : (search ? "No purchase invoices match your search." : "No purchase invoices have been recorded yet.")}</td></tr>}
               </tbody>
@@ -305,6 +307,8 @@ function FragmentPurchase({ purchase, accountName, expanded, items, loadingDetai
   canEdit: boolean;
   dateText: (value: string) => string;
 }) {
+  const { can } = useStaffPermissions();
+  const money = (value: number) => can("financial_sensitive_data", "view") ? formatPurchaseMoney(value) : "••••••";
   return <>
     <tr className={`border-b ${dark ? "border-white/[0.05]" : "border-slate-100"}`}>
       <td className="px-4 py-4 whitespace-nowrap text-slate-500">{dateText(purchase.created_at)}</td>

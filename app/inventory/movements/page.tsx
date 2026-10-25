@@ -1,4 +1,5 @@
 "use client";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -64,6 +65,7 @@ function formatDate(value: string, language: "ar" | "en") {
 }
 
 export default function InventoryMovementsPage() {
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const router = useRouter();
 
   const [language, setLanguage] = useState<"ar" | "en">("ar");
@@ -117,7 +119,7 @@ export default function InventoryMovementsPage() {
 
       const context = await getClinicContext();
 
-      if (!["owner", "admin"].includes(context.role)) {
+      if (!can("inventory", "view")) {
         throw new Error(
           isAr ? "ليس لديك صلاحية لعرض حركة المخزون." : "You are not allowed to view inventory movements."
         );
@@ -164,8 +166,8 @@ export default function InventoryMovementsPage() {
   }
 
   useEffect(() => {
-    loadMovements();
-  }, []);
+    if (permissionsLoaded) void loadMovements();
+  }, [permissionsLoaded]);
 
   const filteredMovements = useMemo(() => {
     const q = search.trim().toLowerCase();

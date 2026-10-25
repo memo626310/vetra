@@ -1,4 +1,5 @@
 "use client";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
@@ -6,6 +7,7 @@ import { vetraCore } from "@/lib/vetra-core";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 
 export default function BarcodeTestPage() {
+  const { can } = useStaffPermissions();
   const [barcode, setBarcode] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -222,8 +224,8 @@ export default function BarcodeTestPage() {
                   value={`${Number(product.quantity || 0).toLocaleString("en-US")} ${product.unit || ""}`.trim()}
                 />
                 <Info label="سعر البيع" value={formatPrice(product.retail_price)} />
-                <Info label="سعر الجملة" value={formatPrice(product.wholesale_price)} />
-                <Info label="آخر سعر شراء" value={formatPrice(product.last_purchase_price)} />
+                <Info label="سعر الجملة" value={can("financial_sensitive_data", "view") ? formatPrice(product.wholesale_price) : "••••••"} />
+                <Info label="آخر سعر شراء" value={can("financial_sensitive_data", "view") ? formatPrice(product.last_purchase_price) : "••••••"} />
                 <Info label="تاريخ الانتهاء" value={formatExpiry(product.expiry_date)} />
               </div>
 

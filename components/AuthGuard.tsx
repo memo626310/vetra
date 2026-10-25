@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
 import { permissionForPath } from "@/lib/staff-permissions";
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
@@ -22,13 +22,18 @@ function isPublicPath(pathname: string) {
   );
 }
 
-export default function AuthGuard({
+export default function AuthGuard({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<main role="status" className="p-6">Loading VETRA...</main>}><AuthGuardContent>{children}</AuthGuardContent></Suspense>;
+}
+
+function AuthGuardContent({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const [checkedPath, setCheckedPath] = useState("");
   const [checkError, setCheckError] = useState(false);
@@ -130,7 +135,7 @@ export default function AuthGuard({
     };
   }, [pathname, router]);
 
-  const requiredPermission = permissionForPath(pathname);
+  const requiredPermission = permissionForPath(pathname, searchParams.toString());
   if ((checkedPath !== pathname || checkError || (requiredPermission && !permissionsLoaded)) && !isPublicPath(pathname)) {
     return (
       <main className="min-h-screen bg-[#f7f8fa] px-4 pt-3 dark:bg-[#0f1115]">

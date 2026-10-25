@@ -50,7 +50,7 @@ declare
   v_group record;
   v_action record;
   v_saved jsonb;
-  v_allowed_groups text[] := array['patients','all_patients','appointments','medical_records','prescriptions','vaccinations','invoices_page','invoices','finance_page','payments','inventory','reports','messages','staff','clinic_settings'];
+  v_allowed_groups text[] := array['patients','appointments','medical_records','vaccinations','invoices','finance_page','inventory','financial_sensitive_data','reports','messages','staff','clinic_settings'];
   v_allowed_actions text[] := array['view','create','edit','delete','export'];
 begin
   if v_clinic_id is null or auth.uid() is null then
@@ -174,7 +174,7 @@ create policy vetra_staff_invoices_select_guard on public.invoices
   using (
     clinic_id = public.vetra_current_clinic_id()
     and (
-      public.vetra_has_clinic_staff_permission('invoices_page', 'view')
+      public.vetra_has_clinic_staff_permission('invoices', 'view')
         or public.vetra_has_clinic_staff_permission('finance_page', 'view')
         or public.vetra_has_clinic_staff_permission('invoices', 'create')
     )
@@ -184,7 +184,7 @@ create policy vetra_staff_invoices_select on public.invoices
   for select to authenticated
   using (
     clinic_id = public.vetra_current_clinic_id()
-    and public.vetra_has_clinic_staff_permission('invoices_page', 'view')
+    and public.vetra_has_clinic_staff_permission('invoices', 'view')
   );
 drop policy if exists vetra_staff_invoices_insert_guard on public.invoices;
 create policy vetra_staff_invoices_insert_guard on public.invoices
@@ -244,7 +244,7 @@ create policy vetra_staff_invoice_items_select_guard on public.invoice_items
   using (
     clinic_id = public.vetra_current_clinic_id()
     and (
-      public.vetra_has_clinic_staff_permission('invoices_page', 'view')
+      public.vetra_has_clinic_staff_permission('invoices', 'view')
         or public.vetra_has_clinic_staff_permission('finance_page', 'view')
         or public.vetra_has_clinic_staff_permission('invoices', 'create')
     )

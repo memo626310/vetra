@@ -1,3 +1,4 @@
+import { getClinicStaffPermissions, requireClinicPermission } from "@/lib/staff-api-auth";
 import { randomUUID } from "node:crypto";
 import { getCoreAdminClient, PushSetupError, resolveClinicPushContext } from "@/lib/push-server";
 
@@ -37,7 +38,13 @@ export async function POST(request: Request) {
     }
 
     const context = await resolveClinicPushContext(request);
+    const permissions = await getClinicStaffPermissions(context);
+    if (!permissions.medical_records?.create && !permissions.medical_records?.edit) {
+      throw new PushSetupError("لا تملك صلاحية إضافة مرفقات طبية.", 403);
+    }
     clinicDb = context.clinicDb;
+    const { data: visit, error: visitError } = await clinicDb.from("visits").select("id").eq("id", visitId).eq("clinic_id", context.clinicId).eq("client_id", clientId).eq("pet_id", petId).maybeSingle();
+    if (visitError || !visit) throw new PushSetupError("الزيارة غير موجودة أو غير متاحة.", 404);
     const { clinicId } = context;
     admin = getCoreAdminClient();
     const fileName = file.name.replace(/[^\w.-]+/g, "_");
@@ -78,7 +85,7 @@ export async function GET(request: Request) {
   try {
     const attachmentId = new URL(request.url).searchParams.get("id");
     if (!attachmentId) return Response.json({ error: "معرّف المرفق مطلوب." }, { status: 400 });
-    const { clinicId, clinicDb } = await resolveClinicPushContext(request);
+    const { clinicId, clinicDb } = await requireClinicPermission(request, "medical_records", "view");
     const { data: attachment, error } = await clinicDb.from("visit_attachments")
       .select("storage_path")
       .eq("id", attachmentId)

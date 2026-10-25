@@ -99,7 +99,7 @@ export default function InventoryPurchasesPage() {
       if (!user) { router.replace("/login"); return; }
       const context = await getClinicContext();
       const isOwnerOrAdmin = ["owner", "admin"].includes(context.role);
-      const canCreatePurchase = permissionsLoaded && can("inventory", "view") && can("inventory", "create") && can("payments", "view") && can("payments", "create");
+      const canCreatePurchase = permissionsLoaded && can("inventory", "view") && can("inventory", "create") && can("finance_page", "view");
       if (!isOwnerOrAdmin && !canCreatePurchase) { setAuthorized(false); return; }
       setAuthorized(true);
       const db = await getClinicDb();
@@ -142,11 +142,11 @@ export default function InventoryPurchasesPage() {
   function selectProduct(nextId: string) {
     setProductId(nextId);
     const product = products.find((item) => item.id === nextId);
-    setUnitCost(product ? String(product.last_purchase_price ?? product.wholesale_price ?? "") : "");
+    setUnitCost(product && can("financial_sensitive_data", "view") ? String(product.last_purchase_price ?? product.wholesale_price ?? "") : "");
   }
 
   function addProductToLines(nextProduct: Product, nextQuantity = 1) {
-    const defaultCost = nextProduct.last_purchase_price ?? nextProduct.wholesale_price ?? 0;
+    const defaultCost = can("financial_sensitive_data", "view") ? nextProduct.last_purchase_price ?? nextProduct.wholesale_price ?? 0 : 0;
     if (defaultCost <= 0) {
       setProductId(nextProduct.id);
       setQuantity(String(nextQuantity));
@@ -326,7 +326,7 @@ export default function InventoryPurchasesPage() {
   }
 
   async function savePurchase() {
-    if (!can("payments", "create")) { setError(isAr ? "تحتاج صلاحية تسجيل حركة الخزنة لتسجيل فاتورة الشراء." : "Payment creation permission is required to post a purchase bill."); return; }
+    if (!can("finance_page", "view")) { setError(isAr ? "تحتاج صلاحية تسجيل حركة الخزنة لتسجيل فاتورة الشراء." : "Payment creation permission is required to post a purchase bill."); return; }
     if (!can("inventory", "create")) { setError(isAr ? "لا تملك صلاحية إنشاء مشتريات أو أصناف المخزون." : "You do not have permission to create inventory records."); return; }
     setError("");
     setNotice("");

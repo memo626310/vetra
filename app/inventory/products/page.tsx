@@ -444,7 +444,7 @@ export default function ProductsPage() {
       let loadedCategories = (categoriesResult.data || []) as Category[];
       for (const name of ["الأدوية", "التطعيمات"]) {
         const existing = loadedCategories.find((category) => category.name.trim() === name);
-        if (existing) continue;
+        if (existing || !can("inventory", "create")) continue;
         const { data: created, error: createError } = await db
           .from("product_categories")
           .insert({ name, clinic_id: context.clinic_id })
@@ -481,6 +481,7 @@ export default function ProductsPage() {
   }
 
   async function linkProductToInventorySection(product: Product, section: "medication" | "vaccine") {
+    if (!requireInventoryPermission("edit")) return;
     const categoryId = inventoryLinkCategories[section];
     if (!categoryId || product.category_id === categoryId) return;
     setSaving(true);
@@ -508,6 +509,7 @@ export default function ProductsPage() {
 
 
   function openAddProduct() {
+    if (!requireInventoryPermission("create")) return;
 
 
     setEditingProduct(null);
@@ -541,6 +543,7 @@ export default function ProductsPage() {
   ) {
 
 
+    if (!requireInventoryPermission("edit")) return;
     setEditingProduct(product);
 
 
@@ -665,7 +668,7 @@ export default function ProductsPage() {
 
 
   function requireInventoryPermission(action: "create" | "edit" | "delete") {
-    if (can("inventory", action)) return true;
+    if (permissionsLoaded && can("inventory", action)) return true;
     setMessage("ليس لديك صلاحية تنفيذ هذه العملية في المخزون.");
     return false;
   }
@@ -863,6 +866,11 @@ const payload = {
 
 
 
+    if (!canViewSensitiveFinancialData) {
+      const safePayload = payload as Partial<typeof payload>;
+      delete safePayload.wholesale_price;
+      delete safePayload.last_purchase_price;
+    }
     let error;
 
 
@@ -1491,6 +1499,14 @@ const { error } =
 
 
 
+  function exportInventory() {
+    if (!permissionsLoaded || !can("inventory", "export")) return;
+    const columns = ["name", "barcode", "quantity", "unit", "retail_price", ...(canViewSensitiveFinancialData ? ["wholesale_price", "last_purchase_price"] : [])];
+    const cell = (value: unknown) => { let text = String(value ?? ""); if (/^[=+@\-\t\r]/.test(text)) text = "'" + text; return '"' + text.replaceAll('"','""') + '"'; };
+    const csv = [columns.map(cell).join(","), ...products.map(p => columns.map(k => cell((p as unknown as Record<string, unknown>)[k])).join(","))].join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a"); a.href = url; a.download = "inventory.csv"; a.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   function formatPrice(
 
 
@@ -1641,6 +1657,7 @@ const { error } =
 
 
 
+            {permissionsLoaded && can("inventory", "export") && <button type="button" onClick={exportInventory} className="rounded-xl bg-cyan-600 px-4 py-3 font-bold text-white">تصدير المخزون CSV</button>}
             <button
 
 
@@ -1681,13 +1698,7 @@ const { error } =
             <button
 
 
-              onClick={
-
-
-                openAddProduct
-
-
-              }
+              disabled={!can("inventory", "create")} onClick={openAddProduct}
 
 
               className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-700"
@@ -1742,8 +1753,8 @@ const { error } =
                   {categories.filter((category) => category.id !== manageCategoryId).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                 </select>
               </label>
-              <button type="button" disabled={saving || !manageCategoryId || !categoryDestinationId} onClick={() => void moveCategoryProducts()} className="self-end rounded-xl bg-blue-600 px-4 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">نقل المنتجات</button>
-              <button type="button" disabled={saving || !manageCategoryId} onClick={() => void deleteCategory()} className="self-end rounded-xl border border-red-200 px-4 py-2.5 font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:text-red-300">حذف التصنيف</button>
+              <button type="button" disabled={saving || !manageCategoryId || !categoryDestinationId || !can("inventory", "edit")} onClick={() => void moveCategoryProducts()} className="self-end rounded-xl bg-blue-600 px-4 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">نقل المنتجات</button>
+              <button type="button" disabled={saving || !manageCategoryId || !can("inventory", "delete") || !can("inventory", "edit")} onClick={() => void deleteCategory()} className="self-end rounded-xl border border-red-200 px-4 py-2.5 font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:text-red-300">حذف التصنيف</button>
             </div>
           )}
         </section>
@@ -2373,21 +2384,20 @@ const { error } =
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => linkProductToInventorySection(product, "medication")}
-                              disabled={saving || !inventoryLinkCategories.medication}
+                              disabled={saving || !can("inventory", "edit") || !inventoryLinkCategories.medication}
                               className="rounded-lg bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-700 hover:bg-cyan-100 disabled:opacity-50 dark:bg-cyan-950/30 dark:text-cyan-300"
                             >
                               💊 درج الأدوية
                             </button>
                             <button
                               onClick={() => linkProductToInventorySection(product, "vaccine")}
-                              disabled={saving || !inventoryLinkCategories.vaccine}
+                              disabled={saving || !can("inventory", "edit") || !inventoryLinkCategories.vaccine}
                               className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 dark:bg-emerald-950/30 dark:text-emerald-300"
                             >
                               🧪 التطعيمات
                             </button>
                             <button
-                              onClick={() =>
-                                openEditProduct(product)
+                              disabled={!can("inventory", "edit")} onClick={() => openEditProduct(product)
                               }
                               className="rounded-lg bg-blue-50 px-3 py-2 font-semibold text-blue-600 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-950/50"
                             >
@@ -3210,7 +3220,7 @@ const { error } =
 
 
                 {/* WHOLESALE */}
-                {(!editingProduct || canViewSensitiveFinancialData) && (
+                {canViewSensitiveFinancialData && (
 <Field
 
 
@@ -3259,7 +3269,7 @@ const { error } =
 
 
                 {/* LAST PURCHASE */}
-                {(!editingProduct || canViewSensitiveFinancialData) && (
+                {canViewSensitiveFinancialData && (
 <Field
 
 

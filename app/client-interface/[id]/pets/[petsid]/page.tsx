@@ -87,6 +87,8 @@ type Vaccine = {
 };
 
 type PetMedicalRecord = { id: string; pet_id: string; visit_id: string | null; record_type: "lab" | "surgery"; title: string; status: string; result: string | null; notes: string | null; performed_at: string | null; created_at: string };
+type LabRow = { test: string; result: string; unit: string; reference: string };
+type LabAttachment = { id: string; record_id: string; pet_id: string; file_name: string; mime_type: string; size_bytes: number; created_at: string };
 
 
 
@@ -818,6 +820,7 @@ export default function ClientPetProfilePage() {
 
   const [vaccines, setVaccines] = useState<Vaccine[]>([]);
   const [medicalRecords, setMedicalRecords] = useState<PetMedicalRecord[]>([]);
+  const [labAttachments, setLabAttachments] = useState<LabAttachment[]>([]);
   const [medicalRecordsUnavailable, setMedicalRecordsUnavailable] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -898,6 +901,7 @@ export default function ClientPetProfilePage() {
       if (vaccineResult.error) throw new Error(vaccineResult.error.message);
 
       const recordsResult = await withTimeout(db.rpc("vetra_get_pet_medical_records", { p_pet_id: petId }));
+      const attachmentsResult = await withTimeout(db.rpc("vetra_get_pet_lab_attachments", { p_pet_id: petId }));
 
 
 
@@ -909,6 +913,7 @@ export default function ClientPetProfilePage() {
 
       setVaccines((vaccineResult.data || []) as Vaccine[]);
       setMedicalRecords((recordsResult.data || []) as PetMedicalRecord[]);
+      setLabAttachments((attachmentsResult.data || []) as LabAttachment[]);
       setMedicalRecordsUnavailable(Boolean(recordsResult.error));
       if (recordsResult.error) console.warn("CLIENT PET MEDICAL RECORDS LOAD ERROR:", recordsResult.error);
 
@@ -925,6 +930,10 @@ export default function ClientPetProfilePage() {
     }
 
   };
+
+  async function openLabAttachment(attachment: LabAttachment) {
+    router.push(`/client-interface/${clientId}/analyses?pet=${encodeURIComponent(petId)}&record=${encodeURIComponent(attachment.record_id)}`);
+  }
 
 
 
@@ -1033,6 +1042,7 @@ export default function ClientPetProfilePage() {
 
           <Link href={`/client-interface/${clientId}/pets/${pet.id}/gallery`} className="min-w-0 flex-1 break-words rounded-2xl border border-white/10 bg-white/[.04] px-2 py-2.5 text-center text-xs font-black text-slate-200 sm:px-4">▧ {lang === "ar" ? "معرض الصور" : "Photo gallery"}</Link>
           <Link href={`/client-interface/${clientId}/vaccinations?pet=${pet.id}`} className="min-w-0 flex-1 break-words rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-2 py-2.5 text-center text-xs font-black text-slate-950 sm:px-4">💉 {t.vaccinations}</Link>
+          <Link href={`/client-interface/${clientId}/analyses?pet=${pet.id}`} className="min-w-0 flex-1 break-words rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-2 py-2.5 text-center text-xs font-black text-cyan-200 sm:px-4">🧪 {lang === "ar" ? "التحاليل" : "Lab results"}</Link>
 
         </header>
 
@@ -1122,11 +1132,13 @@ export default function ClientPetProfilePage() {
           <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold text-cyan-300">{lang === "ar" ? "التحاليل والجراحات" : "Lab tests & surgeries"}</p><h2 className="mt-1 text-xl font-black">{lang === "ar" ? "سجل الإجراءات" : "Procedure history"}</h2></div><span className="rounded-full bg-cyan-400/10 px-3 py-1.5 text-[10px] font-black text-cyan-300">{medicalRecords.length}</span></div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {medicalRecordsUnavailable && <p className="text-sm text-amber-500 sm:col-span-2">{lang === "ar" ? "سجل التحاليل والجراحات غير مفعّل بعد لدى العيادة." : "The clinic has not enabled lab and surgery records yet."}</p>}
-            {medicalRecords.map((record) => <article key={record.id} className={dark ? "rounded-2xl border border-white/[.05] bg-white/[.025] p-4" : "rounded-2xl border border-slate-100 bg-slate-50 p-4"}>
-              <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-black">{record.title}</h3><span className="rounded-full bg-cyan-400/10 px-2 py-1 text-[10px] font-bold text-cyan-300">{record.record_type === "lab" ? (lang === "ar" ? "تحليل" : "Lab") : (lang === "ar" ? "جراحة" : "Surgery")} · {record.status === "completed" ? (lang === "ar" ? "مكتمل" : "Completed") : (lang === "ar" ? "قيد المتابعة" : "In progress")}</span></div>
-              <p className="mt-1 text-[10px] text-slate-500">{formatDate(record.performed_at || record.created_at, lang)}</p>
-              {record.result && <p className="mt-2 text-sm">{lang === "ar" ? "النتيجة:" : "Result:"} {record.result}</p>}{record.notes && <p className="mt-2 text-xs leading-6 text-slate-500">{record.notes}</p>}
-            </article>)}
+            {medicalRecords.map((record) => { let rows: LabRow[] = []; try { const parsed = record.result ? JSON.parse(record.result) : []; rows = Array.isArray(parsed) ? parsed : []; } catch { rows = []; } const attachment = labAttachments.find((item) => item.record_id === record.id); return <article key={record.id} className={dark ? "rounded-2xl border border-white/[.05] bg-white/[.025] p-4" : "rounded-2xl border border-slate-100 bg-slate-50 p-4"}>
+              <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-black">{record.title}</h3><p className="mt-1 text-[10px] text-slate-500">{lang === "ar" ? "الحيوان:" : "Pet:"} {pet.name} · {lang === "ar" ? "المالك:" : "Owner:"} {client.name}</p></div><span className="rounded-full bg-cyan-400/10 px-2 py-1 text-[10px] font-bold text-cyan-300">{record.record_type === "lab" ? (lang === "ar" ? "تحليل" : "Lab") : (lang === "ar" ? "جراحة" : "Surgery")} · {record.status === "completed" ? (lang === "ar" ? "مكتمل" : "Completed") : (lang === "ar" ? "قيد المتابعة" : "In progress")}</span></div>
+              <p className="mt-1 text-[10px] text-slate-500">{lang === "ar" ? "تاريخ التقرير:" : "Report date:"} {formatDate(record.performed_at || record.created_at, lang)}</p>
+              {rows.length > 0 && <div className="mt-3 overflow-x-auto rounded-xl border border-slate-300/60 bg-white text-slate-950"><table className="min-w-[580px] w-full text-xs"><thead><tr className="border-b-2 border-slate-700 font-black"><th className="px-3 py-2 text-start">{lang === "ar" ? "اسم الاختبار" : "Test name"}</th><th className="px-3 py-2 text-start">{lang === "ar" ? "النتيجة" : "Result"}</th><th className="px-3 py-2 text-start">{lang === "ar" ? "الوحدة" : "Unit"}</th><th className="px-3 py-2 text-start">{lang === "ar" ? "المعدل المرجعي" : "Reference range"}</th></tr></thead><tbody><tr><td colSpan={4} className="border-b border-slate-300 bg-[#eee5e5] px-3 py-2 text-center font-black">{record.title}</td></tr>{rows.map((row, index) => <tr key={index} className="border-b border-slate-200 last:border-0"><td className="px-3 py-2 font-semibold">{row.test || "—"}</td><td className="px-3 py-2 font-black">{row.result || "—"}</td><td className="px-3 py-2">{row.unit || "—"}</td><td className="px-3 py-2">{row.reference || "—"}</td></tr>)}</tbody></table></div>}
+              {record.result && rows.length === 0 && <p className="mt-2 text-sm">{lang === "ar" ? "النتيجة:" : "Result:"} {record.result}</p>}{record.notes && <p className="mt-2 text-xs leading-6 text-slate-500">{record.notes}</p>}
+              {attachment && <button type="button" onClick={() => void openLabAttachment(attachment)} className="mt-3 rounded-xl bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950">↗ {lang === "ar" ? "فتح التحليل" : "Open analysis"}</button>}
+            </article>; })}
             {!medicalRecords.length && <p className="text-sm text-slate-500">{lang === "ar" ? "لا توجد تحاليل أو جراحات مسجلة حتى الآن." : "No lab tests or surgeries have been recorded yet."}</p>}
           </div>
         </section>

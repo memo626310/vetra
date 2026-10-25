@@ -95,11 +95,9 @@ create policy vetra_staff_clients_select_guard on public.clients
       or public.vetra_has_clinic_staff_permission('appointments', 'create')
       or public.vetra_has_clinic_staff_permission('medical_records', 'view')
       or public.vetra_has_clinic_staff_permission('medical_records', 'create')
-      or public.vetra_has_clinic_staff_permission('prescriptions', 'view')
-      or public.vetra_has_clinic_staff_permission('prescriptions', 'create')
       or public.vetra_has_clinic_staff_permission('vaccinations', 'view')
       or public.vetra_has_clinic_staff_permission('vaccinations', 'create')
-      or public.vetra_has_clinic_staff_permission('invoices_page', 'view')
+      or public.vetra_has_clinic_staff_permission('invoices', 'view')
       or public.vetra_has_clinic_staff_permission('invoices', 'create')
       or public.vetra_has_clinic_staff_permission('reports', 'view')
       or public.vetra_has_clinic_staff_permission('messages', 'view')
@@ -133,11 +131,9 @@ create policy vetra_staff_pets_select_guard on public.pets
       or public.vetra_has_clinic_staff_permission('appointments', 'create')
       or public.vetra_has_clinic_staff_permission('medical_records', 'view')
       or public.vetra_has_clinic_staff_permission('medical_records', 'create')
-      or public.vetra_has_clinic_staff_permission('prescriptions', 'view')
-      or public.vetra_has_clinic_staff_permission('prescriptions', 'create')
       or public.vetra_has_clinic_staff_permission('vaccinations', 'view')
       or public.vetra_has_clinic_staff_permission('vaccinations', 'create')
-      or public.vetra_has_clinic_staff_permission('invoices_page', 'view')
+      or public.vetra_has_clinic_staff_permission('invoices', 'view')
       or public.vetra_has_clinic_staff_permission('invoices', 'create')
       or public.vetra_has_clinic_staff_permission('reports', 'view')
       or public.vetra_has_clinic_staff_permission('messages', 'view')
@@ -170,11 +166,9 @@ create policy vetra_staff_products_select_guard on public.products
       public.vetra_has_clinic_staff_permission('inventory', 'view')
       or public.vetra_has_clinic_staff_permission('medical_records', 'view')
       or public.vetra_has_clinic_staff_permission('medical_records', 'create')
-      or public.vetra_has_clinic_staff_permission('prescriptions', 'view')
-      or public.vetra_has_clinic_staff_permission('prescriptions', 'create')
       or public.vetra_has_clinic_staff_permission('vaccinations', 'view')
       or public.vetra_has_clinic_staff_permission('vaccinations', 'create')
-      or public.vetra_has_clinic_staff_permission('invoices_page', 'view')
+      or public.vetra_has_clinic_staff_permission('invoices', 'view')
       or public.vetra_has_clinic_staff_permission('invoices', 'create')
     ));
 drop policy if exists vetra_staff_products_insert_guard on public.products;
@@ -203,11 +197,9 @@ create policy vetra_staff_product_categories_select_guard on public.product_cate
       public.vetra_has_clinic_staff_permission('inventory', 'view')
       or public.vetra_has_clinic_staff_permission('medical_records', 'view')
       or public.vetra_has_clinic_staff_permission('medical_records', 'create')
-      or public.vetra_has_clinic_staff_permission('prescriptions', 'view')
-      or public.vetra_has_clinic_staff_permission('prescriptions', 'create')
       or public.vetra_has_clinic_staff_permission('vaccinations', 'view')
       or public.vetra_has_clinic_staff_permission('vaccinations', 'create')
-      or public.vetra_has_clinic_staff_permission('invoices_page', 'view')
+      or public.vetra_has_clinic_staff_permission('invoices', 'view')
       or public.vetra_has_clinic_staff_permission('invoices', 'create')
     ));
 drop policy if exists vetra_staff_product_categories_insert_guard on public.product_categories;
@@ -302,25 +294,25 @@ create policy vetra_staff_inventory_purchase_items_delete_guard on public.invent
 
 -- Financial reads are split between Finance and register permissions.
 -- The Finance page may read account balances, invoice summaries, and the movement ledger;
--- the cash-register page requires the more specific payments.view permission.
+-- the cash-register page uses finance_page.view.
 drop policy if exists vetra_staff_financial_accounts_select_guard on public.financial_accounts;
 create policy vetra_staff_financial_accounts_select_guard on public.financial_accounts
   as restrictive for select to authenticated
   using (clinic_id = public.vetra_current_clinic_id()
     and (public.vetra_has_clinic_staff_permission('finance_page', 'view')
-      or public.vetra_has_clinic_staff_permission('payments', 'view')
+      or public.vetra_has_clinic_staff_permission('finance_page', 'view')
       or public.vetra_has_clinic_staff_permission('invoices', 'create')));
 drop policy if exists vetra_staff_cash_sessions_select_guard on public.cash_register_sessions;
 create policy vetra_staff_cash_sessions_select_guard on public.cash_register_sessions
   as restrictive for select to authenticated
   using (clinic_id = public.vetra_current_clinic_id()
-    and public.vetra_has_clinic_staff_permission('payments', 'view'));
+    and public.vetra_has_clinic_staff_permission('finance_page', 'view'));
 drop policy if exists vetra_staff_financial_transactions_select_guard on public.financial_transactions;
 create policy vetra_staff_financial_transactions_select_guard on public.financial_transactions
   as restrictive for select to authenticated
   using (clinic_id = public.vetra_current_clinic_id()
     and (public.vetra_has_clinic_staff_permission('finance_page', 'view')
-      or public.vetra_has_clinic_staff_permission('payments', 'view')
+      or public.vetra_has_clinic_staff_permission('finance_page', 'view')
       or public.vetra_has_clinic_staff_permission('invoices', 'create')));
 
 -- The existing invoice and invoice-item select guards are also recreated by the updated

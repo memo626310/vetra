@@ -129,7 +129,7 @@ export default function InvoicesPage() {
 
       const context = await getClinicContext();
 
-      if (!can("invoices_page", "view")) {
+      if (!can("invoices", "view")) {
         setAuthorized(false);
         setLoading(false);
         return;
@@ -211,7 +211,7 @@ export default function InvoicesPage() {
 
   async function issueDraft(invoice: Invoice) {
     if (invoice.status !== "draft") return;
-    if (!can("invoices", "edit") && !can("invoices", "create")) return;
+    if (!can("invoices", "edit")) return;
     setDraftActionId(invoice.id);
     setMessage("");
     try {
@@ -505,7 +505,7 @@ export default function InvoicesPage() {
 
           <div className={`rounded-3xl border p-5 ${darkMode ? "border-white/[0.06] bg-[#13161B]" : "border-slate-100 bg-white"}`}>
             <p className="text-sm text-slate-500">{language === "ar" ? "إجمالي الربح التقديري" : "Estimated profit"}</p>
-            <p className="mt-2 text-2xl font-black text-emerald-500">{formatMoney(reportTotals.profit)} <span className="text-sm font-semibold text-slate-500">EGP</span></p>
+            <p className="mt-2 text-2xl font-black text-emerald-500">{can("financial_sensitive_data", "view") ? formatMoney(reportTotals.profit) : "••••••"} <span className="text-sm font-semibold text-slate-500">EGP</span></p>
           </div>
 
           <div className={`rounded-3xl border p-5 ${darkMode ? "border-white/[0.06] bg-[#13161B]" : "border-slate-100 bg-white"}`}>
@@ -721,7 +721,7 @@ export default function InvoicesPage() {
                         >
                           {language === "ar" ? "تعديل" : "Edit"}
                         </button>}
-                        {invoice.status === "draft" && (can("invoices", "edit") || can("invoices", "create")) && <button
+                        {invoice.status === "draft" && can("invoices", "edit") && <button
                           disabled={draftActionId === invoice.id}
                           onClick={() => void issueDraft(invoice)}
                           className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"

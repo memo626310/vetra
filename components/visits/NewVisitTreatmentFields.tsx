@@ -49,6 +49,11 @@ type Props = {
   updateVaccination: (id: string, patch: Partial<VaccinationDraft>) => void;
   removeVaccination: (id: string) => void;
   resetVaccinationNextDoseToAutomatic: (id: string) => void;
+  vaccinationIsSaved?: (id: string) => boolean;
+  canViewVaccination?: boolean;
+  canAddVaccination?: boolean;
+  canEditVaccination?: boolean;
+  canDeleteVaccination?: boolean;
   visitNotes: string;
   setVisitNotes: (value: string) => void;
   followUp: string;
@@ -67,7 +72,7 @@ export default function NewVisitTreatmentFields({
   clinicStockProducts,
   drawerMedications, setDrawerMedications,
   resetVaccinationNextDoseToAutomatic, visitNotes, setVisitNotes, followUp, setFollowUp,
-  followUpDetails, setFollowUpDetails,
+  followUpDetails, setFollowUpDetails, canViewVaccination = false, canAddVaccination = false, canEditVaccination = false, canDeleteVaccination = false, vaccinationIsSaved = () => true,
 }: Props) {
   const [showTreatmentNotes, setShowTreatmentNotes] = useState(Boolean(treatment));
   const [drugEyeResults, setDrugEyeResults] = useState<DrugEyeResult[]>([]);
@@ -458,19 +463,20 @@ export default function NewVisitTreatmentFields({
                     })}</div>}
                   </section>
 
+                  {(canViewVaccination || canAddVaccination) && <>
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <label className={`block text-sm font-semibold ${darkMode ? "text-slate-300" : "text-slate-700"}`}>{language === "ar" ? "التطعيمات" : "Vaccinations"}</label>
-                    <button type="button" onClick={addVaccination} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700">+ {language === "ar" ? "إضافة تطعيم" : "Add vaccine"}</button>
+                    {canAddVaccination && <button type="button" onClick={addVaccination} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700">+ {language === "ar" ? "إضافة تطعيم" : "Add vaccine"}</button>}
                   </div>
                   {vaccinations.length === 0 ? (
                     <div className={`rounded-2xl border border-dashed p-4 text-xs text-slate-500 ${darkMode ? "border-slate-700" : "border-slate-200"}`}>{language === "ar" ? "لا يوجد تطعيم مضاف لهذه الزيارة." : "No vaccination added to this visit."}</div>
                   ) : (
                     <div className="space-y-3">
-                      {vaccinations.map((v) => (
+                      {vaccinations.filter(v => canViewVaccination || !vaccinationIsSaved(v.id)).map((v) => (
                         <div key={v.id} className={`rounded-2xl border p-4 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-slate-50"}`}>
                           <div className="grid gap-3 md:grid-cols-2">
-                            <input value={v.vaccine_name} onChange={(e) => updateVaccination(v.id,{vaccine_name:e.target.value, product_id:null})} placeholder={language === "ar" ? "اسم المستحضر / التطعيم" : "Vaccine / product name"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <select value={v.vaccine_type} onChange={(e) => updateVaccination(v.id,{vaccine_type:e.target.value})} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`}>
+                            <input disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} value={v.vaccine_name} onChange={(e) => updateVaccination(v.id,{vaccine_name:e.target.value, product_id:null})} placeholder={language === "ar" ? "اسم المستحضر / التطعيم" : "Vaccine / product name"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <select disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} value={v.vaccine_type} onChange={(e) => updateVaccination(v.id,{vaccine_type:e.target.value})} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`}>
                               <option value="">{language === "ar" ? "اختار نوع البروتوكول" : "Select protocol type"}</option>
                               <option value="Viral">{language === "ar" ? "التطعيم الفيروسي (ثلاثي / رباعي)" : "Viral (trivalent / quadrivalent)"}</option>
                               <option value="Rabies">{language === "ar" ? "السعار" : "Rabies"}</option>
@@ -487,7 +493,7 @@ export default function NewVisitTreatmentFields({
                               const allowedProductIds = vaccineProductMappings[protocolKey] || [];
                               const options = vaccineStockProducts.filter((product) => allowedProductIds.includes(product.id));
                               if (!protocolKey || options.length === 0) return null;
-                              return <label className="block md:col-span-2"><span className="mb-1 block text-xs font-semibold text-slate-500">{language === "ar" ? "منتج المخزون المستخدم" : "Inventory product used"}</span><select value={v.product_id || ""} onChange={(event) => {
+                              return <label className="block md:col-span-2"><span className="mb-1 block text-xs font-semibold text-slate-500">{language === "ar" ? "منتج المخزون المستخدم" : "Inventory product used"}</span><select disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} value={v.product_id || ""} onChange={(event) => {
                                 const product = options.find((item) => item.id === event.target.value);
                                 updateVaccination(v.id, { product_id: product?.id || null, vaccine_name: product?.name || v.vaccine_name });
                               }} className={`w-full rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`}><option value="">{language === "ar" ? "اختار المنتج" : "Select product"}</option>{options.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.quantity} {product.unit || ""} · {Number(product.retail_price || 0).toFixed(2)} EGP</option>)}</select></label>;
@@ -498,14 +504,14 @@ export default function NewVisitTreatmentFields({
                                 {" · "}{language === "ar" ? "الرصيد" : "Stock"}: {vaccineStockProducts.find((product) => product.id === v.product_id)?.quantity}
                               </p>
                             )}
-                            <select value={v.dose_stage} onChange={(e) => updateVaccination(v.id,{dose_stage:e.target.value})} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`}>
+                            <select disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} value={v.dose_stage} onChange={(e) => updateVaccination(v.id,{dose_stage:e.target.value})} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`}>
                               {getVaccinationStageOptions(v.vaccine_type).map((stage) => (
                                 <option key={stage.value} value={stage.value}>{language === "ar" ? stage.ar : stage.en}</option>
                               ))}
                             </select>
-                            <input type="datetime-local" value={v.administered_at} onChange={(e) => updateVaccination(v.id,{administered_at:e.target.value})} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} type="datetime-local" value={v.administered_at} onChange={(e) => updateVaccination(v.id,{administered_at:e.target.value})} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
                             <div>
-                              <input type="datetime-local" value={v.next_dose_at} onChange={(e) => updateVaccination(v.id,{next_dose_at:e.target.value})} className={`w-full rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                              <input disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} type="datetime-local" value={v.next_dose_at} onChange={(e) => updateVaccination(v.id,{next_dose_at:e.target.value})} className={`w-full rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
                               <div className={`mt-1 flex items-center justify-between gap-2 text-[11px] ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
                                 <span>{v.next_dose_manual
                                   ? (language === "ar" ? "موعد مخصص — تم تعديله يدويًا" : "Custom date — manually edited")
@@ -513,23 +519,24 @@ export default function NewVisitTreatmentFields({
                                     ? (language === "ar" ? "موعد مقترح حسب البروتوكول، ويمكن تعديله" : "Suggested by protocol; editable")
                                     : (language === "ar" ? "لا يوجد موعد تلقائي ثابت — أدخله عند الحاجة" : "No fixed automatic date — enter one when needed")}</span>
                                 {v.next_dose_manual && v.vaccine_type && v.dose_stage !== "manual" && (
-                                  <button type="button" onClick={() => resetVaccinationNextDoseToAutomatic(v.id)} className="shrink-0 font-bold text-blue-500 hover:text-blue-600">
+                                  <button type="button" disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} onClick={() => resetVaccinationNextDoseToAutomatic(v.id)} className="shrink-0 font-bold text-blue-500 hover:text-blue-600">
                                     {language === "ar" ? "إعادة الحساب" : "Reset auto date"}
                                   </button>
                                 )}
                               </div>
                             </div>
-                            <input value={v.dose} onChange={(e) => updateVaccination(v.id,{dose:e.target.value})} placeholder={language === "ar" ? "الجرعة" : "Dose"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <input value={v.route} onChange={(e) => updateVaccination(v.id,{route:e.target.value})} placeholder={language === "ar" ? "طريقة الإعطاء" : "Route"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <input value={v.batch_number} onChange={(e) => updateVaccination(v.id,{batch_number:e.target.value})} placeholder={language === "ar" ? "رقم التشغيلة" : "Batch number"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <input value={v.manufacturer} onChange={(e) => updateVaccination(v.id,{manufacturer:e.target.value})} placeholder={language === "ar" ? "الشركة المصنعة" : "Manufacturer"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                            <textarea value={v.notes} onChange={(e) => updateVaccination(v.id,{notes:e.target.value})} placeholder={language === "ar" ? "ملاحظات التطعيم" : "Vaccination notes"} className={`md:col-span-2 rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} value={v.dose} onChange={(e) => updateVaccination(v.id,{dose:e.target.value})} placeholder={language === "ar" ? "الجرعة" : "Dose"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} value={v.route} onChange={(e) => updateVaccination(v.id,{route:e.target.value})} placeholder={language === "ar" ? "طريقة الإعطاء" : "Route"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} value={v.batch_number} onChange={(e) => updateVaccination(v.id,{batch_number:e.target.value})} placeholder={language === "ar" ? "رقم التشغيلة" : "Batch number"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <input disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} value={v.manufacturer} onChange={(e) => updateVaccination(v.id,{manufacturer:e.target.value})} placeholder={language === "ar" ? "الشركة المصنعة" : "Manufacturer"} className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                            <textarea disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} value={v.notes} onChange={(e) => updateVaccination(v.id,{notes:e.target.value})} placeholder={language === "ar" ? "ملاحظات التطعيم" : "Vaccination notes"} className={`md:col-span-2 rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
                           </div>
-                          <button type="button" onClick={() => removeVaccination(v.id)} className="mt-3 text-xs font-bold text-rose-500">{language === "ar" ? "حذف التطعيم" : "Remove vaccine"}</button>
+                          {(vaccinationIsSaved(v.id) ? canDeleteVaccination : canAddVaccination) && <button type="button" onClick={() => removeVaccination(v.id)} className="mt-3 text-xs font-bold text-rose-500">{language === "ar" ? "حذف التطعيم" : "Remove vaccine"}</button>}
                         </div>
                       ))}
                     </div>
                   )}
+                  </>}
                 </div>
 
 

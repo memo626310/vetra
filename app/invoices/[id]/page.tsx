@@ -2,6 +2,8 @@
 
 "use client";
 
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
+
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { vetraCore } from "@/lib/vetra-core";
@@ -123,6 +125,7 @@ function dateTime(value: string | null | undefined, language: "en" | "ar") {
 }
 
 export default function InvoiceDetailsPage() {
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const params = useParams();
   const router = useRouter();
 
@@ -165,9 +168,9 @@ export default function InvoiceDetailsPage() {
   }, []);
 
   useEffect(() => {
-    if (!invoiceId) return;
+    if (!invoiceId || !permissionsLoaded) return;
     loadInvoice();
-  }, [invoiceId]);
+  }, [invoiceId, permissionsLoaded]);
 
   useEffect(() => {
     if (!themeReady) return;
@@ -195,7 +198,7 @@ export default function InvoiceDetailsPage() {
 
       const context = await getClinicContext();
 
-      if (!["owner", "admin", "reception"].includes(context.role)) {
+      if (!can("invoices", "view")) {
         router.replace("/dashboard");
         return;
       }
@@ -326,6 +329,7 @@ export default function InvoiceDetailsPage() {
   }, [items]);
 
   async function openReturnDialog() {
+    if (!permissionsLoaded || !can("invoices", "edit")) return;
     if (!invoice) return;
 
     setReturnReason("");
@@ -405,6 +409,7 @@ export default function InvoiceDetailsPage() {
   }
 
   async function createReturn() {
+    if (!permissionsLoaded || !can("invoices", "edit")) return;
     if (!invoice) return;
 
     if (invoice.status === "cancelled" || invoice.status === "returned") {
@@ -595,6 +600,7 @@ export default function InvoiceDetailsPage() {
   }
 
   async function cancelInvoice() {
+    if (!permissionsLoaded || !can("invoices", "delete")) return;
     if (!invoice) return;
 
     if (invoice.status === "cancelled") {
@@ -693,10 +699,12 @@ export default function InvoiceDetailsPage() {
   }
 
   function printInvoice() {
+    if (!permissionsLoaded || !can("invoices", "export")) return;
     window.print();
   }
 
   function sendWhatsApp() {
+    if (!permissionsLoaded || !can("invoices", "export")) return;
     if (!invoice?.client?.phone) {
       setError(
         isAr
@@ -760,9 +768,8 @@ export default function InvoiceDetailsPage() {
   };
 
   const isDraft = invoice.status === "draft";
-  const canCancel = !isReception && invoice.status !== "cancelled";
+  const canCancel = invoice.status !== "cancelled";
   const canReturn =
-    !isReception &&
     !isDraft &&
     invoice.status !== "cancelled" &&
     invoice.status !== "returned" &&
@@ -801,21 +808,21 @@ export default function InvoiceDetailsPage() {
               {darkMode ? "☀️" : "🌙"}
             </button>
 
-            <button
+            {permissionsLoaded && can("invoices", "export") && <button
               onClick={printInvoice}
               className="rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 dark:bg-white dark:text-slate-900"
             >
               🖨️ {isAr ? "طباعة" : "Print"}
-            </button>
+            </button>}
 
-            <button
+            {permissionsLoaded && can("invoices", "export") && <button
               onClick={sendWhatsApp}
               className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300"
             >
               WhatsApp
-            </button>
+            </button>}
 
-            {canReturn && (
+            {permissionsLoaded && can("invoices", "edit") && canReturn && (
               <button
                 onClick={openReturnDialog}
                 className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300"
@@ -824,7 +831,7 @@ export default function InvoiceDetailsPage() {
               </button>
             )}
 
-            {canCancel && (
+            {permissionsLoaded && can("invoices", "delete") && canCancel && (
               <button
                 onClick={() => {
                   setCancelReason("");
@@ -1116,7 +1123,7 @@ export default function InvoiceDetailsPage() {
         </div>
       </div>
 
-      {showCancel && (
+      {showCancel && permissionsLoaded && can("invoices", "delete") && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden">
           <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-900">
             <h2 className="text-xl font-black">
@@ -1163,7 +1170,7 @@ export default function InvoiceDetailsPage() {
         </div>
       )}
 
-      {showReturn && (
+      {showReturn && permissionsLoaded && can("invoices", "edit") && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden">
           <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-900">
             <h2 className="text-xl font-black">
