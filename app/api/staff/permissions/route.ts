@@ -91,6 +91,15 @@ export async function PUT(request: Request) {
   } catch (error) {
     if (error instanceof PushSetupError) return Response.json({ error: error.message }, { status: error.status });
     console.error("STAFF PERMISSIONS PUT ERROR:", error);
-    return Response.json({ error: "تعذر حفظ صلاحيات الموظف." }, { status: 500 });
+    const diagnosticError = error && typeof error === "object"
+      ? error as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown }
+      : null;
+    const diagnostic = [
+      typeof diagnosticError?.code === "string" ? `code=${diagnosticError.code}` : "",
+      typeof diagnosticError?.message === "string" ? diagnosticError.message : String(error),
+      typeof diagnosticError?.details === "string" ? `details=${diagnosticError.details}` : "",
+      typeof diagnosticError?.hint === "string" ? `hint=${diagnosticError.hint}` : "",
+    ].filter(Boolean).join(" | ");
+    return Response.json({ error: `ØªØ¹Ø°Ø± Ø­ÙØ¸ ØµÙ„Ø§Ø­ÙŠØ§Øª Ø§Ù„Ù…ÙˆØ¸Ù: ${diagnostic}` }, { status: 500 });
   }
 }

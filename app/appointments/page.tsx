@@ -10,6 +10,7 @@ import { loadClinicProfile } from "@/lib/clinic-profile";
 import { writeVetraThemeMode } from "@/lib/theme";
 import { clearClinicCache, readClinicCache, writeClinicCache } from "@/lib/clinic-cache";
 import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type Language = "ar" | "en";
 type Status =
@@ -308,6 +309,7 @@ function displayStatus(a: Appointment, graceMinutes: number): Status | "late" {
 
 export default function AppointmentsPage() {
   const router = useRouter();
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
 
   const [language, setLanguage] = useState<Language>("ar");
   const [darkMode, setDarkMode] = useState(true);
@@ -749,6 +751,10 @@ export default function AppointmentsPage() {
   }
 
   async function saveNewClient(nextModal: "appointment" | "both" = "appointment") {
+    if (!permissionsLoaded || !can("patients", "create")) {
+      setError(language === "ar" ? "لا تملك صلاحية إضافة العملاء." : "You do not have permission to add clients.");
+      return;
+    }
     if (!newClientName.trim()) {
       setError(t.error);
       return;
@@ -785,6 +791,10 @@ export default function AppointmentsPage() {
   }
 
   async function saveNewPet(nextModal: "appointment" = "appointment") {
+    if (!permissionsLoaded || !can("patients", "create")) {
+      setError(language === "ar" ? "لا تملك صلاحية إضافة الحيوانات." : "You do not have permission to add pets.");
+      return;
+    }
     if (!clientId || !newPetName.trim()) {
       setError(t.error);
       return;
@@ -822,6 +832,10 @@ export default function AppointmentsPage() {
   }
 
   async function saveBoth() {
+    if (!permissionsLoaded || !can("patients", "create")) {
+      setError(language === "ar" ? "لا تملك صلاحية إضافة العملاء والحيوانات." : "You do not have permission to add clients and pets.");
+      return;
+    }
     if (!newClientName.trim()) {
       setError(t.error);
       return;
@@ -1209,9 +1223,11 @@ export default function AppointmentsPage() {
         </section>
 
         <div className="mt-5 flex flex-wrap gap-3">
-          <button onClick={() => { resetFormFields(); setModal("both"); }} className={`rounded-2xl border px-5 py-3 text-sm font-bold ${darkMode ? "border-white/10 bg-[#13161B]" : "border-slate-200 bg-white"}`}>＋ {t.addBoth}</button>
-          <button onClick={() => { resetFormFields(); setModal("client"); }} className={`rounded-2xl border px-5 py-3 text-sm font-bold ${darkMode ? "border-white/10 bg-[#13161B]" : "border-slate-200 bg-white"}`}>＋ {t.addClient}</button>
-          <button onClick={() => { resetFormFields(); setModal("pet"); }} className={`rounded-2xl border px-5 py-3 text-sm font-bold ${darkMode ? "border-white/10 bg-[#13161B]" : "border-slate-200 bg-white"}`}>＋ {t.addPet}</button>
+          {permissionsLoaded && can("patients", "create") && <>
+            <button onClick={() => { resetFormFields(); setModal("both"); }} className={`rounded-2xl border px-5 py-3 text-sm font-bold ${darkMode ? "border-white/10 bg-[#13161B]" : "border-slate-200 bg-white"}`}>＋ {t.addBoth}</button>
+            <button onClick={() => { resetFormFields(); setModal("client"); }} className={`rounded-2xl border px-5 py-3 text-sm font-bold ${darkMode ? "border-white/10 bg-[#13161B]" : "border-slate-200 bg-white"}`}>＋ {t.addClient}</button>
+            <button onClick={() => { resetFormFields(); setModal("pet"); }} className={`rounded-2xl border px-5 py-3 text-sm font-bold ${darkMode ? "border-white/10 bg-[#13161B]" : "border-slate-200 bg-white"}`}>＋ {t.addPet}</button>
+          </>}
         </div>
 
         {modal && (
@@ -1231,8 +1247,10 @@ export default function AppointmentsPage() {
               {modal === "appointment" && (
                 <div className="space-y-4">
                   <div className="flex gap-2">
-                    <button onClick={() => setModal("client")} className="flex-1 rounded-xl bg-white/[0.04] px-3 py-3 text-xs font-bold">＋ {t.addClient}</button>
-                    <button onClick={() => setModal("both")} className="flex-1 rounded-xl bg-white/[0.04] px-3 py-3 text-xs font-bold">＋ {t.addBoth}</button>
+                    {permissionsLoaded && can("patients", "create") && <>
+                      <button onClick={() => setModal("client")} className="flex-1 rounded-xl bg-white/[0.04] px-3 py-3 text-xs font-bold">＋ {t.addClient}</button>
+                      <button onClick={() => setModal("both")} className="flex-1 rounded-xl bg-white/[0.04] px-3 py-3 text-xs font-bold">＋ {t.addBoth}</button>
+                    </>}
                   </div>
 
                   <div>

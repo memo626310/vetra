@@ -23,6 +23,16 @@ type Invoice = {
   pet: { name: string } | null;
 };
 
+type InvoiceItemCost = {
+  invoice_id: string;
+  item_type: "product" | "service";
+  quantity: number;
+  unit_price: number;
+  discount: number;
+  total: number;
+  product: { last_purchase_price: number | null; wholesale_price: number | null } | null;
+};
+
 const statusOptions = [
   { value: "all", ar: "كل الحالات", en: "All statuses" },
   { value: "draft", ar: "مسودة", en: "Draft" },
@@ -63,6 +73,9 @@ const statusLabel = (status: string) => {
   return item ? `${item.ar} / ${item.en}` : status;
 };
 
+const invoiceDateValue = (invoice: Invoice) => invoice.issued_at || invoice.created_at;
+const invoiceDateTimestamp = (invoice: Invoice) => new Date(invoiceDateValue(invoice)).getTime();
+
 export default function InvoicesPage() {
   const router = useRouter();
   const { loaded: permissionsLoaded, can } = useStaffPermissions();
@@ -72,6 +85,7 @@ export default function InvoicesPage() {
   const [ready, setReady] = useState(false);
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoiceProfits, setInvoiceProfits] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [message, setMessage] = useState("");
@@ -79,6 +93,8 @@ export default function InvoicesPage() {
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
@@ -123,9 +139,8 @@ export default function InvoicesPage() {
 
       const db = await getClinicDb();
 
-      const { data, error } = await db
-        .from("invoices")
-        .select(`
+      const [invoiceResult, itemResult] = await Promise.all([
+        db.from("invoices").select(`
           id,
           clinic_id,
           invoice_number,
@@ -141,18 +156,43 @@ export default function InvoicesPage() {
           pet:pets(name)
         `)
         .eq("clinic_id", context.clinic_id)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false }),
+        db.from("invoice_items").select(`
+          invoice_id,
+          item_type,
+          quantity,
+          unit_price,
+          discount,
+          total,
+          product:products(last_purchase_price, wholesale_price)
+        `).eq("clinic_id", context.clinic_id),
+      ]);
 
-      if (error) {
-        console.error("INVOICES LOAD ERROR:", error);
+      if (invoiceResult.error) {
+        console.error("INVOICES LOAD ERROR:", invoiceResult.error);
 
         setMessage(
-          error.message || "حصل خطأ أثناء تحميل الفواتير"
+          invoiceResult.error.message || "حصل خطأ أثناء تحميل الفواتير"
         );
 
         setInvoices([]);
       } else {
-        setInvoices((data || []) as unknown as Invoice[]);
+        setInvoices((invoiceResult.data || []) as unknown as Invoice[]);
+      }
+
+      if (itemResult.error) {
+        console.error("INVOICE ITEMS LOAD ERROR:", itemResult.error);
+        setInvoiceProfits({});
+      } else {
+        const profitByInvoice: Record<string, number> = {};
+        for (const rawItem of (itemResult.data || []) as unknown as InvoiceItemCost[]) {
+          const itemTotal = Number(rawItem.total || (Number(rawItem.quantity || 0) * Number(rawItem.unit_price || 0) - Number(rawItem.discount || 0)));
+          const costPerUnit = rawItem.item_type === "product"
+            ? Number(rawItem.product?.last_purchase_price ?? rawItem.product?.wholesale_price ?? 0)
+            : 0;
+          profitByInvoice[rawItem.invoice_id] = (profitByInvoice[rawItem.invoice_id] || 0) + itemTotal - Number(rawItem.quantity || 0) * costPerUnit;
+        }
+        setInvoiceProfits(profitByInvoice);
       }
     } catch (error) {
       console.error("INVOICES LOAD ERROR:", error);
@@ -215,10 +255,19 @@ export default function InvoicesPage() {
     return () => window.clearTimeout(timer);
   }, [ready, permissionsLoaded, can]);
 
+  const periodInvoices = useMemo(() => {
+    const start = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : Number.NEGATIVE_INFINITY;
+    const end = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : Number.POSITIVE_INFINITY;
+    return invoices.filter((invoice) => {
+      const timestamp = invoiceDateTimestamp(invoice);
+      return timestamp >= start && timestamp <= end;
+    });
+  }, [invoices, fromDate, toDate]);
+
   const filteredInvoices = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return invoices.filter((invoice) => {
+    return periodInvoices.filter((invoice) => {
       const matchesStatus =
         status === "all" || invoice.status === status;
 
@@ -235,13 +284,18 @@ export default function InvoicesPage() {
         petName.includes(query);
 
       return matchesStatus && matchesSearch;
-    });
-  }, [invoices, search, status]);
+    }).sort((a, b) => invoiceDateTimestamp(b) - invoiceDateTimestamp(a));
+  }, [periodInvoices, search, status]);
 
-  const totalVisible = filteredInvoices.reduce(
-    (sum, invoice) =>
-      sum + Number(invoice.total || 0),
-    0
+  const reportInvoices = periodInvoices.filter((invoice) => !["draft", "cancelled"].includes(invoice.status));
+  const reportTotals = reportInvoices.reduce(
+    (totals, invoice) => ({
+      sales: totals.sales + Number(invoice.total || 0),
+      paid: totals.paid + Number(invoice.paid_amount || 0),
+      remaining: totals.remaining + Math.max(Number(invoice.total || 0) - Number(invoice.paid_amount || 0), 0),
+      profit: totals.profit + Number(invoiceProfits[invoice.id] || 0),
+    }),
+    { sales: 0, paid: 0, remaining: 0, profit: 0 }
   );
 
   const formatMoney = (value: number) =>
@@ -426,7 +480,7 @@ export default function InvoicesPage() {
           </div>
         )}
 
-        <section className="mb-6 grid gap-4 sm:grid-cols-2">
+        <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <div
             className={`rounded-3xl border p-5 ${
               darkMode
@@ -434,15 +488,8 @@ export default function InvoicesPage() {
                 : "border-slate-100 bg-white"
             }`}
           >
-            <p className="text-sm text-slate-500">
-              {language === "ar"
-                ? "الفواتير الظاهرة"
-                : "Visible invoices"}
-            </p>
-
-            <p className="mt-2 text-3xl font-black">
-              {filteredInvoices.length}
-            </p>
+            <p className="text-sm text-slate-500">{language === "ar" ? "فواتير الفترة" : "Period invoices"}</p>
+            <p className="mt-2 text-3xl font-black">{reportInvoices.length}</p>
           </div>
 
           <div
@@ -452,18 +499,23 @@ export default function InvoicesPage() {
                 : "border-slate-100 bg-white"
             }`}
           >
-            <p className="text-sm text-slate-500">
-              {language === "ar"
-                ? "إجمالي الظاهر"
-                : "Visible total"}
-            </p>
+            <p className="text-sm text-slate-500">{language === "ar" ? "إجمالي المبيعات" : "Total sales"}</p>
+            <p className="mt-2 text-2xl font-black">{formatMoney(reportTotals.sales)} <span className="text-sm font-semibold text-slate-500">EGP</span></p>
+          </div>
 
-            <p className="mt-2 text-3xl font-black">
-              {formatMoney(totalVisible)}{" "}
-              <span className="text-base font-semibold text-slate-500">
-                EGP
-              </span>
-            </p>
+          <div className={`rounded-3xl border p-5 ${darkMode ? "border-white/[0.06] bg-[#13161B]" : "border-slate-100 bg-white"}`}>
+            <p className="text-sm text-slate-500">{language === "ar" ? "إجمالي الربح التقديري" : "Estimated profit"}</p>
+            <p className="mt-2 text-2xl font-black text-emerald-500">{formatMoney(reportTotals.profit)} <span className="text-sm font-semibold text-slate-500">EGP</span></p>
+          </div>
+
+          <div className={`rounded-3xl border p-5 ${darkMode ? "border-white/[0.06] bg-[#13161B]" : "border-slate-100 bg-white"}`}>
+            <p className="text-sm text-slate-500">{language === "ar" ? "إجمالي المدفوع" : "Total paid"}</p>
+            <p className="mt-2 text-2xl font-black text-blue-500">{formatMoney(reportTotals.paid)} <span className="text-sm font-semibold text-slate-500">EGP</span></p>
+          </div>
+
+          <div className={`rounded-3xl border p-5 ${darkMode ? "border-white/[0.06] bg-[#13161B]" : "border-slate-100 bg-white"}`}>
+            <p className="text-sm text-slate-500">{language === "ar" ? "إجمالي المتبقي" : "Total remaining"}</p>
+            <p className="mt-2 text-2xl font-black text-amber-500">{formatMoney(reportTotals.remaining)} <span className="text-sm font-semibold text-slate-500">EGP</span></p>
           </div>
         </section>
 
@@ -474,7 +526,7 @@ export default function InvoicesPage() {
               : "border-slate-100 bg-white"
           }`}
         >
-          <div className="grid gap-3 lg:grid-cols-[1fr_260px]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_190px]">
             <div className="relative">
               <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-slate-400">
                 🔎
@@ -520,7 +572,30 @@ export default function InvoicesPage() {
                 </option>
               ))}
             </select>
+
+            <label className="text-xs font-semibold text-slate-500">
+              {language === "ar" ? "من تاريخ" : "From date"}
+              <input
+                type="date"
+                value={fromDate}
+                max={toDate || undefined}
+                onChange={(event) => setFromDate(event.target.value)}
+                className={`mt-1 w-full rounded-2xl border px-4 py-3 text-sm font-normal outline-none transition focus:border-blue-500 ${darkMode ? "border-white/[0.07] bg-[#0F1115] text-white" : "border-slate-200 bg-slate-50 text-slate-800"}`}
+              />
+            </label>
+
+            <label className="text-xs font-semibold text-slate-500">
+              {language === "ar" ? "إلى تاريخ" : "To date"}
+              <input
+                type="date"
+                value={toDate}
+                min={fromDate || undefined}
+                onChange={(event) => setToDate(event.target.value)}
+                className={`mt-1 w-full rounded-2xl border px-4 py-3 text-sm font-normal outline-none transition focus:border-blue-500 ${darkMode ? "border-white/[0.07] bg-[#0F1115] text-white" : "border-slate-200 bg-slate-50 text-slate-800"}`}
+              />
+            </label>
           </div>
+          {(fromDate || toDate) && <button type="button" onClick={() => { setFromDate(""); setToDate(""); }} className="mt-3 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">{language === "ar" ? "مسح الفترة" : "Clear date range"}</button>}
         </section>
 
         <section
@@ -606,7 +681,7 @@ export default function InvoicesPage() {
                     </td>
 
                     <td className="px-5 py-5 text-slate-500">
-                      {formatDate(invoice.created_at)}
+                      {formatDate(invoiceDateValue(invoice))}
                     </td>
 
                     <td className="px-5 py-5">

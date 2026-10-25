@@ -165,6 +165,7 @@ const emptyProduct = {
 export default function ProductsPage() {
 
   const { loaded: permissionsLoaded, can } = useStaffPermissions();
+  const canViewSensitiveFinancialData = can("financial_sensitive_data", "view");
 
   const [products, setProducts] = useState<Product[]>([]);
 
@@ -2014,26 +2015,30 @@ const { error } =
 
 
 
-                  <th className="px-4 py-4">
+                  {canViewSensitiveFinancialData && (
+<th className="px-4 py-4">
 
 
                     سعر الجملة
 
 
                   </th>
+                  )}
 
 
 
 
 
 
-                  <th className="px-4 py-4">
+                  {canViewSensitiveFinancialData && (
+<th className="px-4 py-4">
 
 
                     آخر سعر شراء
 
 
                   </th>
+                  )}
 <th className="px-4 py-4">
 
 
@@ -2321,38 +2326,30 @@ const { error } =
 
 
 
-                        <td className="px-4 py-4">
+                        {canViewSensitiveFinancialData && (
+<td className="px-4 py-4">
 
 
-                          {formatPrice(
-
-
-                            product.wholesale_price
-
-
-                          )}
+                          {formatPrice(product.wholesale_price)}
 
 
                         </td>
+                        )}
 
 
 
 
 
 
-                        <td className="px-4 py-4">
+                        {canViewSensitiveFinancialData && (
+<td className="px-4 py-4">
 
 
-                          {formatPrice(
-
-
-                            product.last_purchase_price
-
-
-                          )}
+                          {formatPrice(product.last_purchase_price)}
 
 
                         </td>
+                        )}
 <td className="px-4 py-4">
 
 
@@ -3213,9 +3210,8 @@ const { error } =
 
 
                 {/* WHOLESALE */}
-
-
-                <Field
+                {(!editingProduct || canViewSensitiveFinancialData) && (
+<Field
 
 
                   label="سعر الجملة"
@@ -3255,6 +3251,7 @@ const { error } =
 
 
                 />
+                )}
 
 
 
@@ -3262,9 +3259,8 @@ const { error } =
 
 
                 {/* LAST PURCHASE */}
-
-
-                <Field
+                {(!editingProduct || canViewSensitiveFinancialData) && (
+<Field
 
 
                   label="آخر سعر شراء"
@@ -3304,6 +3300,7 @@ const { error } =
 
 
                 />
+                )}
 
 
 

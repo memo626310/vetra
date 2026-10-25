@@ -21,6 +21,8 @@ begin
   for v_required in
     select * from (values
       ('products', 'SELECT'), ('products', 'INSERT'), ('products', 'UPDATE'),
+      ('clients', 'SELECT'), ('clients', 'INSERT'), ('clients', 'UPDATE'), ('clients', 'DELETE'),
+      ('pets', 'SELECT'), ('pets', 'INSERT'), ('pets', 'UPDATE'), ('pets', 'DELETE'),
       ('product_categories', 'SELECT'), ('product_categories', 'INSERT'),
       ('product_categories', 'UPDATE'), ('product_categories', 'DELETE'),
       ('inventory_suppliers', 'SELECT'), ('inventory_purchases', 'SELECT'),
@@ -42,6 +44,8 @@ end;
 $$;
 
 alter table public.clinic_staff enable row level security;
+alter table public.clients enable row level security;
+alter table public.pets enable row level security;
 alter table public.products enable row level security;
 alter table public.product_categories enable row level security;
 alter table public.inventory_suppliers enable row level security;
@@ -78,6 +82,84 @@ create policy vetra_staff_directory_delete_guard on public.clinic_staff
   using (clinic_id = public.vetra_current_clinic_id()
     and public.vetra_has_clinic_staff_permission('staff', 'view')
     and public.vetra_has_clinic_staff_permission('staff', 'delete'));
+
+-- Patient records keep their existing permissive clinic-isolation policies.
+-- These restrictive policies add per-action permissions without replacing those policies.
+drop policy if exists vetra_staff_clients_select_guard on public.clients;
+create policy vetra_staff_clients_select_guard on public.clients
+  as restrictive for select to authenticated
+  using (clinic_id = public.vetra_current_clinic_id()
+    and (
+      public.vetra_has_clinic_staff_permission('patients', 'view')
+      or public.vetra_has_clinic_staff_permission('appointments', 'view')
+      or public.vetra_has_clinic_staff_permission('appointments', 'create')
+      or public.vetra_has_clinic_staff_permission('medical_records', 'view')
+      or public.vetra_has_clinic_staff_permission('medical_records', 'create')
+      or public.vetra_has_clinic_staff_permission('prescriptions', 'view')
+      or public.vetra_has_clinic_staff_permission('prescriptions', 'create')
+      or public.vetra_has_clinic_staff_permission('vaccinations', 'view')
+      or public.vetra_has_clinic_staff_permission('vaccinations', 'create')
+      or public.vetra_has_clinic_staff_permission('invoices_page', 'view')
+      or public.vetra_has_clinic_staff_permission('invoices', 'create')
+      or public.vetra_has_clinic_staff_permission('reports', 'view')
+      or public.vetra_has_clinic_staff_permission('messages', 'view')
+      or public.vetra_has_clinic_staff_permission('messages', 'create')
+    ));
+drop policy if exists vetra_staff_clients_insert_guard on public.clients;
+create policy vetra_staff_clients_insert_guard on public.clients
+  as restrictive for insert to authenticated
+  with check (clinic_id = public.vetra_current_clinic_id()
+    and public.vetra_has_clinic_staff_permission('patients', 'create'));
+drop policy if exists vetra_staff_clients_update_guard on public.clients;
+create policy vetra_staff_clients_update_guard on public.clients
+  as restrictive for update to authenticated
+  using (clinic_id = public.vetra_current_clinic_id()
+    and public.vetra_has_clinic_staff_permission('patients', 'edit'))
+  with check (clinic_id = public.vetra_current_clinic_id()
+    and public.vetra_has_clinic_staff_permission('patients', 'edit'));
+drop policy if exists vetra_staff_clients_delete_guard on public.clients;
+create policy vetra_staff_clients_delete_guard on public.clients
+  as restrictive for delete to authenticated
+  using (clinic_id = public.vetra_current_clinic_id()
+    and public.vetra_has_clinic_staff_permission('patients', 'delete'));
+
+drop policy if exists vetra_staff_pets_select_guard on public.pets;
+create policy vetra_staff_pets_select_guard on public.pets
+  as restrictive for select to authenticated
+  using (clinic_id = public.vetra_current_clinic_id()
+    and (
+      public.vetra_has_clinic_staff_permission('patients', 'view')
+      or public.vetra_has_clinic_staff_permission('appointments', 'view')
+      or public.vetra_has_clinic_staff_permission('appointments', 'create')
+      or public.vetra_has_clinic_staff_permission('medical_records', 'view')
+      or public.vetra_has_clinic_staff_permission('medical_records', 'create')
+      or public.vetra_has_clinic_staff_permission('prescriptions', 'view')
+      or public.vetra_has_clinic_staff_permission('prescriptions', 'create')
+      or public.vetra_has_clinic_staff_permission('vaccinations', 'view')
+      or public.vetra_has_clinic_staff_permission('vaccinations', 'create')
+      or public.vetra_has_clinic_staff_permission('invoices_page', 'view')
+      or public.vetra_has_clinic_staff_permission('invoices', 'create')
+      or public.vetra_has_clinic_staff_permission('reports', 'view')
+      or public.vetra_has_clinic_staff_permission('messages', 'view')
+      or public.vetra_has_clinic_staff_permission('messages', 'create')
+    ));
+drop policy if exists vetra_staff_pets_insert_guard on public.pets;
+create policy vetra_staff_pets_insert_guard on public.pets
+  as restrictive for insert to authenticated
+  with check (clinic_id = public.vetra_current_clinic_id()
+    and public.vetra_has_clinic_staff_permission('patients', 'create'));
+drop policy if exists vetra_staff_pets_update_guard on public.pets;
+create policy vetra_staff_pets_update_guard on public.pets
+  as restrictive for update to authenticated
+  using (clinic_id = public.vetra_current_clinic_id()
+    and public.vetra_has_clinic_staff_permission('patients', 'edit'))
+  with check (clinic_id = public.vetra_current_clinic_id()
+    and public.vetra_has_clinic_staff_permission('patients', 'edit'));
+drop policy if exists vetra_staff_pets_delete_guard on public.pets;
+create policy vetra_staff_pets_delete_guard on public.pets
+  as restrictive for delete to authenticated
+  using (clinic_id = public.vetra_current_clinic_id()
+    and public.vetra_has_clinic_staff_permission('patients', 'delete'));
 
 -- Inventory tables: keep the existing clinic isolation policies and add permission checks.
 drop policy if exists vetra_staff_products_select_guard on public.products;

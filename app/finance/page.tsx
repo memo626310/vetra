@@ -132,6 +132,7 @@ export default function FinancePage() {
   const [activeTab, setActiveTab] = useState<"overview" | "collections" | "accounts" | "activity">("overview");
 
   const isAr = lang === "ar";
+  const canViewSensitiveFinancialData = can("financial_sensitive_data", "view");
   const activeInvoices = useMemo(() => invoices.filter((x) =>
     !["draft", "cancelled", "returned"].includes(x.status)
   ), [invoices]);
@@ -421,7 +422,7 @@ export default function FinancePage() {
         </div>}
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className={cardClass}><p className="text-sm text-slate-500">{isAr ? "مبيعات اليوم" : "Today's sales"}</p><p className="mt-3 text-2xl font-black">{money(dailySales, lang)}</p><p className="mt-2 text-xs text-slate-500">{isAr ? "الفواتير الصادرة غير الملغاة" : "Issued, non-cancelled invoices"}</p></div>
+          <div className={cardClass}><p className="text-sm text-slate-500">{isAr ? "مبيعات اليوم" : "Today's sales"}</p><p className="mt-3 text-2xl font-black">{canViewSensitiveFinancialData ? money(dailySales, lang) : "••••••"}</p><p className="mt-2 text-xs text-slate-500">{isAr ? "الفواتير الصادرة غير الملغاة" : "Issued, non-cancelled invoices"}</p></div>
           <div className={cardClass}><p className="text-sm text-slate-500">{isAr ? "تحصيلات اليوم المسجلة" : "Today's ledger collections"}</p><p className="mt-3 text-2xl font-black text-emerald-500">{money(dailyCollections, lang)}</p><p className="mt-2 text-xs text-slate-500">{isAr ? "حركة مالية فعلية مسجلة" : "Posted incoming movements"}</p></div>
           <div className={cardClass}><p className="text-sm text-slate-500">{isAr ? "المتبقي على العملاء" : "Customer balances due"}</p><p className="mt-3 text-2xl font-black text-amber-500">{money(outstanding, lang)}</p><p className="mt-2 text-xs text-slate-500">{isAr ? "من الفواتير النشطة" : "From active invoices"}</p></div>
           <div className={cardClass}><p className="text-sm text-slate-500">{isAr ? "أرصدة الحسابات المالية" : "Financial account balances"}</p><p className="mt-3 text-2xl font-black">{money(balances, lang)}</p><p className="mt-2 text-xs text-slate-500">{isAr ? "الرصيد الافتتاحي + الحركات المسجلة" : "Opening balances + posted movements"}</p></div>
@@ -441,7 +442,7 @@ export default function FinancePage() {
         </nav>
 
         {activeTab === "overview" && <section className={`${cardClass} flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between`}>
-          <div><h2 className="text-lg font-black">{isAr ? "مبيعات آخر 30 يومًا" : "Sales over the last 30 days"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "قيمة الفواتير الصادرة، وليست صافي الربح." : "Issued invoice value, not net profit."}</p></div><p className="text-2xl font-black text-blue-500">{money(last30Sales, lang)}</p>
+          <div><h2 className="text-lg font-black">{isAr ? "مبيعات آخر 30 يومًا" : "Sales over the last 30 days"}</h2><p className="mt-1 text-sm text-slate-500">{isAr ? "قيمة الفواتير الصادرة، وليست صافي الربح." : "Issued invoice value, not net profit."}</p></div><p className="text-2xl font-black text-blue-500">{canViewSensitiveFinancialData ? money(last30Sales, lang) : "••••••"}</p>
         </section>}
 
         {activeTab === "overview" && <section className={`${cardClass} flex flex-wrap gap-3`}>

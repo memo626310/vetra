@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { clearClinicCache } from "@/lib/clinic-cache";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type Pet = {
   id: string;
@@ -23,6 +24,7 @@ type Pet = {
 export default function EditPetPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
 
   const petId = params.id;
 
@@ -234,6 +236,11 @@ export default function EditPetPage() {
 
     setError("");
     setMessage("");
+
+    if (!permissionsLoaded || !can("patients", "edit")) {
+      setError("لا تملك صلاحية تعديل بيانات الحيوانات.");
+      return;
+    }
 
     if (!pet) {
       setError(
@@ -738,7 +745,9 @@ export default function EditPetPage() {
                 type="submit"
                 disabled={
                   saving ||
-                  uploading
+                  uploading ||
+                  !permissionsLoaded ||
+                  !can("patients", "edit")
                 }
                 className="rounded-2xl bg-slate-900 px-7 py-3.5 font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >

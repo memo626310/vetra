@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { clearClinicCache } from "@/lib/clinic-cache";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type ClientForm = {
   client_code: string;
@@ -19,6 +20,7 @@ type ClientForm = {
 export default function EditClientPage() {
   const params = useParams<{ id: string }>();
   const clientId = params.id;
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
 
   const [form, setForm] = useState<ClientForm>({
     client_code: "",
@@ -108,6 +110,11 @@ export default function EditClientPage() {
 
     setError("");
     setSuccess("");
+
+    if (!permissionsLoaded || !can("patients", "edit")) {
+      setError("لا تملك صلاحية تعديل بيانات العملاء.");
+      return;
+    }
 
     if (!form.name.trim()) {
       setError("اكتب اسم العميل الأول.");
@@ -362,7 +369,7 @@ export default function EditClientPage() {
             <div className="sm:col-span-2 mt-2 flex flex-wrap gap-3">
               <button
                 type="submit"
-                disabled={saving || Boolean(success)}
+                disabled={saving || Boolean(success) || !permissionsLoaded || !can("patients", "edit")}
                 className="rounded-2xl bg-slate-900 px-7 py-3.5 font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving

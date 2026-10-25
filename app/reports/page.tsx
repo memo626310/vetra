@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { writeVetraThemeMode } from "@/lib/theme";
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
+import { useSensitiveDisplay } from "@/lib/use-sensitive-display";
 
 type Language = "ar" | "en";
 type RangeKey = "7" | "30" | "90" | "365" | "all";
@@ -311,9 +312,11 @@ function rankValues(values: string[], limit = 5) {
 function BarChart({
   buckets,
   language,
+  showFinancial,
 }: {
   buckets: Bucket[];
   language: Language;
+  showFinancial: boolean;
 }) {
   const maxRevenue = Math.max(1, ...buckets.map((item) => item.revenue));
   const maxVisits = Math.max(1, ...buckets.map((item) => item.visits));
@@ -327,11 +330,13 @@ function BarChart({
           return (
             <div key={`${bucket.label}-${index}`} className="flex min-w-0 flex-col items-center justify-end gap-2">
               <div className="flex h-40 items-end gap-1">
-                <div
+                {showFinancial && (
+<div
                   title={`${formatMoney(bucket.revenue, language)} EGP`}
                   className="w-2.5 rounded-t-lg bg-blue-500/80 transition-all"
                   style={{ height: `${revenueHeight}px` }}
                 />
+                )}
                 <div
                   title={`${bucket.visits} ${language === "ar" ? "زيارة" : "visits"}`}
                   className="w-2.5 rounded-t-lg bg-emerald-400/80 transition-all"
@@ -344,7 +349,7 @@ function BarChart({
         })}
       </div>
       <div className="flex flex-wrap items-center gap-5 text-xs text-slate-500">
-        <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" />{language === "ar" ? "الإيراد" : "Revenue"}</span>
+        {showFinancial && (<span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" />{language === "ar" ? "الإيراد" : "Revenue"}</span>)}
         <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />{language === "ar" ? "الزيارات" : "Visits"}</span>
       </div>
     </div>
@@ -421,6 +426,8 @@ function RankingCard({
 export default function ReportsPage() {
   const router = useRouter();
   const { can, loaded: permissionsLoaded } = useStaffPermissions();
+  const canViewSensitiveFinancialData = can("financial_sensitive_data", "view");
+  const { hideSensitiveValues } = useSensitiveDisplay();
   const [language, setLanguage] = useState<Language>("ar");
   const [darkMode, setDarkMode] = useState(true);
   const [ready, setReady] = useState(false);
@@ -739,9 +746,9 @@ if (
 
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard label={t.visits} value={String(metrics.visits)} hint={`${metrics.activePets} ${t.petCount}`} icon="🩺" tone="bg-blue-500/10" darkMode={darkMode} />
-          <MetricCard label={t.revenue} value={`${formatMoney(metrics.revenue, language)} EGP`} hint={`${metrics.invoices} ${t.invoiceCount}`} icon="💰" tone="bg-emerald-500/10" darkMode={darkMode} />
-          <MetricCard label={t.collected} value={`${formatMoney(metrics.collected, language)} EGP`} hint={`${formatMoney(metrics.outstanding, language)} EGP ${t.outstanding}`} icon="💳" tone="bg-cyan-500/10" darkMode={darkMode} />
-          <MetricCard label={t.averageInvoice} value={`${formatMoney(metrics.averageInvoice, language)} EGP`} hint={`${data.clientsCount} ${language === "ar" ? "عميل" : "clients"}`} icon="🧾" tone="bg-violet-500/10" darkMode={darkMode} />
+          <MetricCard label={t.revenue} value={canViewSensitiveFinancialData ? String(formatMoney(metrics.revenue, language)) + " EGP" : "••••••"} hint={`${metrics.invoices} ${t.invoiceCount}`} icon="💰" tone="bg-emerald-500/10" darkMode={darkMode} />
+          <MetricCard label={t.collected} value={canViewSensitiveFinancialData ? String(formatMoney(metrics.collected, language)) + " EGP" : "••••••"} hint={canViewSensitiveFinancialData ? String(formatMoney(metrics.outstanding, language)) + " EGP " + t.outstanding : "••••••"} icon="💳" tone="bg-cyan-500/10" darkMode={darkMode} />
+          <MetricCard label={t.averageInvoice} value={canViewSensitiveFinancialData ? String(formatMoney(metrics.averageInvoice, language)) + " EGP" : "••••••"} hint={`${data.clientsCount} ${language === "ar" ? "عميل" : "clients"}`} icon="🧾" tone="bg-violet-500/10" darkMode={darkMode} />
         </div>
 
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -759,7 +766,7 @@ if (
             </div>
             <div className="text-xs text-slate-500">{t.range}: {range === "7" ? t.last7 : range === "30" ? t.last30 : range === "90" ? t.last90 : range === "365" ? t.last365 : t.all}</div>
           </div>
-          {buckets.length ? <BarChart buckets={buckets} language={language} /> : <div className="flex min-h-40 items-center justify-center text-sm text-slate-500">{t.noData}</div>}
+          {hideSensitiveValues ? <div className="flex min-h-40 items-center justify-center text-sm text-slate-500">{language === "ar" ? "تم إخفاء ملخص المبيعات" : "Sales summary hidden"}</div> : buckets.length ? <BarChart buckets={buckets} language={language} showFinancial={canViewSensitiveFinancialData} /> : <div className="flex min-h-40 items-center justify-center text-sm text-slate-500">{t.noData}</div>}
         </section>
 
         <div className="mb-6 grid gap-4 xl:grid-cols-2">
@@ -819,13 +826,13 @@ if (
             </div>
             <div className="space-y-3 p-5">
               <div className={`rounded-2xl border p-4 ${darkMode ? "border-white/[0.05] bg-black/10" : "border-slate-100 bg-slate-50"}`}>
-                <div className="flex items-center justify-between text-sm"><span className="text-slate-500">{t.total}</span><strong>{formatMoney(metrics.revenue, language)} EGP</strong></div>
+                <div className="flex items-center justify-between text-sm"><span className="text-slate-500">{t.total}</span><strong>{canViewSensitiveFinancialData ? String(formatMoney(metrics.revenue, language)) + " EGP" : "••••••"}</strong></div>
               </div>
               <div className={`rounded-2xl border p-4 ${darkMode ? "border-white/[0.05] bg-black/10" : "border-slate-100 bg-slate-50"}`}>
-                <div className="flex items-center justify-between text-sm"><span className="text-slate-500">{t.paid}</span><strong className="text-emerald-400">{formatMoney(metrics.collected, language)} EGP</strong></div>
+                <div className="flex items-center justify-between text-sm"><span className="text-slate-500">{t.paid}</span><strong className="text-emerald-400">{canViewSensitiveFinancialData ? String(formatMoney(metrics.collected, language)) + " EGP" : "••••••"}</strong></div>
               </div>
               <div className={`rounded-2xl border p-4 ${darkMode ? "border-white/[0.05] bg-black/10" : "border-slate-100 bg-slate-50"}`}>
-                <div className="flex items-center justify-between text-sm"><span className="text-slate-500">{t.unpaid}</span><strong className="text-amber-400">{formatMoney(metrics.outstanding, language)} EGP</strong></div>
+                <div className="flex items-center justify-between text-sm"><span className="text-slate-500">{t.unpaid}</span><strong className="text-amber-400">{canViewSensitiveFinancialData ? String(formatMoney(metrics.outstanding, language)) + " EGP" : "••••••"}</strong></div>
               </div>
               <div className={`rounded-2xl border p-4 ${darkMode ? "border-white/[0.05] bg-black/10" : "border-slate-50 bg-slate-50"}`}>
                 <div className="flex items-center justify-between text-sm"><span className="text-slate-500">{t.activePatients}</span><strong>{metrics.activePets}</strong></div>

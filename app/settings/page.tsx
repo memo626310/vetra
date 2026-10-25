@@ -935,8 +935,7 @@ export default function SettingsPage() {
             </button>
           </div>
         </header>
-
-        {(message || error) && (
+{(message || error) && (
           <div
             className={`mb-6 rounded-2xl border px-4 py-3 text-sm font-semibold ${
               error

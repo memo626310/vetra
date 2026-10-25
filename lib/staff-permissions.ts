@@ -29,6 +29,7 @@ export const permissionDefinitions: PermissionDefinition[] = [
   { key: "finance_page", ar: "صفحة المالية", en: "Finance page", actions: ["view"] },
   { key: "payments", ar: "المدفوعات والخزينة", en: "Payments and cash register", actions: ["view", "create", "edit", "delete", "export"] },
   { key: "inventory", ar: "المخزون والمنتجات", en: "Inventory and products", actions: ["view", "create", "edit", "delete", "export"] },
+  { key: "financial_sensitive_data", ar: "عرض الأسعار والأرقام المالية الحساسة", en: "View sensitive financial values", actions: ["view"] },
   { key: "reports", ar: "التقارير", en: "Reports", actions: ["view", "export"] },
   { key: "messages", ar: "الرسائل", en: "Messages", actions: ["view", "create", "delete"] },
   { key: "staff", ar: "الموظفون والصلاحيات", en: "Staff and permissions", actions: ["view", "create", "edit", "delete"] },
@@ -74,7 +75,11 @@ export function permissionForPath(pathname: string): { key: string; action: Perm
   if (pathname.startsWith("/inventory/purchases")) return { key: "inventory", action: "create" };
   if (pathname.startsWith("/inventory")) return { key: "inventory", action: "view" };
   if (pathname.startsWith("/barcode-test")) return { key: "inventory", action: "view" };
-  if (pathname.startsWith("/clients") || pathname.startsWith("/pets")) return { key: "patients", action: "view" };
+  if (pathname === "/clients/new" || pathname.startsWith("/clients/new/")) return { key: "patients", action: "create" };
+  if (pathname.startsWith("/clients/") && pathname.endsWith("/edit")) return { key: "patients", action: "edit" };
+  if (pathname.startsWith("/clients")) return { key: "patients", action: "view" };
+  if (pathname.startsWith("/pets/") && pathname.endsWith("/edit")) return { key: "patients", action: "edit" };
+  if (pathname.startsWith("/pets")) return { key: "patients", action: "view" };
   if (pathname.startsWith("/appointments")) return { key: "appointments", action: "view" };
   if (pathname.startsWith("/visits") || pathname.startsWith("/dashboard/visits")) return { key: "medical_records", action: "view" };
   if (pathname.startsWith("/vaccinations")) return { key: "vaccinations", action: "view" };
@@ -87,7 +92,16 @@ export function permissionForPath(pathname: string): { key: string; action: Perm
 }
 
 export function normalizeStaffPermissions(value: unknown, fallbackType: "doctor" | "assistant" | "front_desk" = "doctor"): StaffPermissions {
-  const fallback = defaultStaffPermissions(fallbackType);
+  // An omitted payload is used while creating a new staff member, where the
+  // staff-type defaults are intentional. Once a value has been saved, missing
+  // or malformed groups must be denied rather than inheriting role defaults.
+  if (value === undefined) return defaultStaffPermissions(fallbackType);
+  const fallback: StaffPermissions = Object.fromEntries(
+    permissionDefinitions.map((definition) => [
+      definition.key,
+      Object.fromEntries(definition.actions.map((action) => [action, false])),
+    ]),
+  );
   if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
   const source = value as Record<string, unknown>;
   for (const definition of permissionDefinitions) {

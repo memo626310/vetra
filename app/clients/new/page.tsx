@@ -4,9 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { clearClinicCache } from "@/lib/clinic-cache";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 export default function NewClientPage() {
   const router = useRouter();
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -19,6 +21,11 @@ export default function NewClientPage() {
 
   async function saveClient() {
     setError("");
+
+    if (!permissionsLoaded || !can("patients", "create")) {
+      setError("لا تملك صلاحية إضافة العملاء.");
+      return;
+    }
 
     if (!name.trim()) {
       setError("اكتب اسم العميل الأول");
@@ -39,9 +46,7 @@ export default function NewClientPage() {
           email: email.trim() || null,
           address: address.trim() || null,
           notes: notes.trim() || null,
-        })
-        .select("id, client_code")
-        .single();
+        });
 
       if (insertError) {
         console.error(insertError);
@@ -50,15 +55,12 @@ export default function NewClientPage() {
         return;
       }
 
-      if (data?.id) {
-        const context = await getClinicContext();
-        clearClinicCache(context.clinic_id);
-        // The Clinic Database trigger generates the 4-digit Client ID.
-        router.push(`/clients/${data.id}`);
-        return;
-      }
-
-      setError("تم الحفظ لكن لم يتم استرجاع بيانات العميل.");
+      const context = await getClinicContext();
+      clearClinicCache(context.clinic_id);
+      // A create-only user may not be allowed to select the new client row.
+      // Send them back to the directory only when they also have view access.
+      router.push(can("patients", "view") ? "/clients" : "/dashboard");
+      return;
     } catch (err) {
       console.error(err);
 
@@ -185,7 +187,7 @@ export default function NewClientPage() {
             <button
               type="button"
               onClick={saveClient}
-              disabled={saving}
+              disabled={saving || !permissionsLoaded || !can("patients", "create")}
               className="rounded-2xl bg-slate-900 px-7 py-4 font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? "جاري الحفظ..." : "حفظ العميل ✓"}

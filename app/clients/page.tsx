@@ -6,6 +6,7 @@ import { getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { clearClinicCache, readClinicCache, writeClinicCache } from "@/lib/clinic-cache";
 import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type Client = {
   id: string;
@@ -55,6 +56,7 @@ type ClinicContext = {
 
 export default function ClientsPage() {
   const router = useRouter();
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const [clients, setClients] = useState<Client[]>([]);
   const [summaries, setSummaries] = useState<Record<string, ClientSummary>>({});
   const [search, setSearch] = useState("");
@@ -390,12 +392,12 @@ export default function ClientsPage() {
             )}
           </div>
 
-          <button
+          {permissionsLoaded && can("patients", "create") && <button
             onClick={() => router.push("/clients/new")}
             className="rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
           >
             + عميل جديد
-          </button>
+          </button>}
           <ClinicCacheRefreshButton ar darkMode={false} loading={refreshingCache} onRefresh={() => void refreshCache()} />
         </div>
 

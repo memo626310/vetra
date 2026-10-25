@@ -3,6 +3,7 @@ import {
   PushSetupError,
   resolveClinicPushContext,
 } from "@/lib/push-server";
+import { requireClinicPermission } from "@/lib/staff-api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,10 +81,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
       return Response.json({ error: "معرّف العميل غير صالح." }, { status: 400 });
     }
 
-    const { clinicId, clinicDb, role } = await resolveClinicPushContext(request);
-    if (!["owner", "admin"].includes(role)) {
-      return Response.json({ error: "لا تملك صلاحية حذف العملاء. يلزم حساب المالك أو مدير العيادة." }, { status: 403 });
-    }
+    const { clinicId, clinicDb } = await requireClinicPermission(request, "patients", "delete");
 
     const { data, error } = await clinicDb.rpc("vetra_delete_client_cascade", { p_client_id: id });
     let deletion: { clientName?: string; petIds?: unknown } | null = null;

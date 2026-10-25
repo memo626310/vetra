@@ -35,7 +35,7 @@ function normalizePhone(value: string) {
   return normalizeAuthPhone(value).replace(/\D/g, "");
 }
 
-function errorResponse(error: unknown) {
+function errorResponse(error: unknown, stage?: string) {
   if (error instanceof PushSetupError) {
     return Response.json({ error: error.message }, { status: error.status, headers: { "Cache-Control": "no-store" } });
   }
@@ -46,8 +46,19 @@ function errorResponse(error: unknown) {
   if (/phone.*disabled|phone.*not enabled|phone provider/i.test(message)) {
     return Response.json({ error: "تسجيل الدخول برقم الهاتف غير مفعّل في إعدادات VETRA CORE." }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
-  console.error("STAFF ACCOUNT API ERROR:", error);
-  return Response.json({ error: "تعذر إنشاء حساب الموظف. راجع إعدادات VETRA CORE وسجل الخادم." }, { status: 500, headers: { "Cache-Control": "no-store" } });
+  const structuredError = error && typeof error === "object"
+    ? error as { name?: unknown; code?: unknown; message?: unknown; details?: unknown; hint?: unknown }
+    : null;
+  console.error("STAFF ACCOUNT API ERROR:", {
+    stage: stage || "غير محددة",
+    name: typeof structuredError?.name === "string" ? structuredError.name : (error instanceof Error ? error.name : undefined),
+    code: typeof structuredError?.code === "string" ? structuredError.code : undefined,
+    message: typeof structuredError?.message === "string" ? structuredError.message : (error instanceof Error ? error.message : String(error)),
+    details: typeof structuredError?.details === "string" ? structuredError.details : undefined,
+    hint: typeof structuredError?.hint === "string" ? structuredError.hint : undefined,
+  });
+  const stageSuffix = stage ? ` مرحلة الفشل: ${stage}.` : "";
+  return Response.json({ error: `تعذر إنشاء حساب الموظف. راجع سجل الخادم.${stageSuffix}`, stage: stage || null }, { status: 500, headers: { "Cache-Control": "no-store" } });
 }
 
 async function authorize(request: Request, action: "create" | "edit" | "delete" = "create") {
@@ -66,11 +77,15 @@ async function findStaff(db: Awaited<ReturnType<typeof resolveClinicPushContext>
 export async function POST(request: Request) {
   let createdUserId = "";
   let createdMembershipId = "";
+  let failureStage = "قراءة بيانات الطلب";
   try {
     const body = await request.json().catch(() => null) as { staffId?: unknown; language?: unknown } | null;
     if (typeof body?.staffId !== "string") throw new PushSetupError("معرف الموظف غير صالح.", 400);
+    failureStage = "تحميل سياق العيادة";
     const actor = await resolveClinicPushContext(request);
+    failureStage = "تحميل بيانات الموظف من قاعدة العيادة";
     const person = await findStaff(actor.clinicDb, actor.clinicId, body.staffId);
+    failureStage = "التحقق من صلاحية إنشاء/تعديل حساب الموظف";
     await assertClinicStaffPermission(actor, person.auth_user_id ? "edit" : "create");
     const email = (person.email || "").trim().toLowerCase();
     const authPhone = person.phone ? normalizeAuthPhone(person.phone) : "";
@@ -84,12 +99,14 @@ export async function POST(request: Request) {
       throw new PushSetupError("رقم هاتف الموظف غير صالح.", 400);
     }
 
+    failureStage = "تهيئة اتصال VETRA CORE الإداري";
     const admin = getCoreAdminClient();
     const temporaryPassword = makeTemporaryPassword();
     // Keep an internal email for Core records when staff sign in by phone only.
     // The staff member is shown only the real email/phone they supplied.
     const authEmail = email || person.login_email || `staff.${person.id}@staff.vetra.top`;
     const loginIdentifiers = [email, authPhone].filter(Boolean);
+    failureStage = "التحقق من عضوية الموظف في VETRA CORE";
     const existingMembership = person.auth_user_id
       ? await admin.from("clinic_members").select("id,status,must_change_password").eq("clinic_id", actor.clinicId).eq("doctor_id", person.auth_user_id).maybeSingle()
       : { data: null, error: null };
@@ -103,6 +120,7 @@ export async function POST(request: Request) {
           .eq("id", existingMembership.data.id);
         if (memberError) throw memberError;
       } else {
+        failureStage = "إنشاء عضوية الموظف في VETRA CORE";
         const { data: insertedMember, error: memberError } = await admin.from("clinic_members").insert({
           clinic_id: actor.clinicId,
           doctor_id: person.auth_user_id,
@@ -134,6 +152,7 @@ export async function POST(request: Request) {
         authUpdate.phone_confirm = true;
       }
 
+      failureStage = "تحديث بيانات المستخدم في VETRA CORE Auth";
       const { error: passwordError } = await admin.auth.admin.updateUserById(person.auth_user_id, authUpdate);
       if (passwordError) {
         if (existingMembership.data) {
@@ -147,14 +166,17 @@ export async function POST(request: Request) {
         throw passwordError;
       }
 
-      const { error: staffUpdateError } = await actor.clinicDb.rpc("vetra_link_clinic_staff_account", {
-        p_staff_id: person.id,
-        p_auth_user_id: person.auth_user_id,
-        p_login_email: authEmail,
-        p_must_change_password: true,
+      failureStage = "ربط الحساب الموجود بقاعدة بيانات العيادة";
+      // The staff row is already linked to this exact Core user (person.auth_user_id).
+      // Re-issuing credentials should not call the tenant RPC that is required only
+      // when linking a newly created user. The Core clinic_members row above is the
+      // source of truth for must_change_password and is already set to true.
+      console.info("STAFF ACCOUNT: retained existing clinic link", {
+        staffId: person.id,
+        authUserId: person.auth_user_id,
       });
-      if (staffUpdateError) throw staffUpdateError;
     } else {
+      failureStage = "إنشاء مستخدم جديد في VETRA CORE Auth";
       const { data: userData, error: userError } = await admin.auth.admin.createUser({
         email: authEmail,
         email_confirm: true,
@@ -165,6 +187,7 @@ export async function POST(request: Request) {
       if (userError || !userData.user) throw userError || new Error("Could not create staff login.");
       createdUserId = userData.user.id;
 
+      failureStage = "حفظ ملف الطبيب في VETRA CORE";
       const { error: doctorError } = await admin.from("doctors").upsert({
         id: userData.user.id,
         full_name: person.full_name,
@@ -173,6 +196,7 @@ export async function POST(request: Request) {
       }, { onConflict: "id", ignoreDuplicates: true });
       if (doctorError) throw doctorError;
 
+      failureStage = "إضافة عضوية العيادة في VETRA CORE";
       const { data: member, error: memberError } = await admin.from("clinic_members").insert({
         clinic_id: actor.clinicId,
         doctor_id: userData.user.id,
@@ -183,6 +207,7 @@ export async function POST(request: Request) {
       if (memberError) throw memberError;
       createdMembershipId = member.id;
 
+      failureStage = "ربط الحساب الجديد بقاعدة بيانات العيادة";
       const { error: linkError } = await actor.clinicDb.rpc("vetra_link_clinic_staff_account", {
         p_staff_id: person.id,
         p_auth_user_id: userData.user.id,
@@ -217,7 +242,7 @@ export async function POST(request: Request) {
     } catch (rollbackError) {
       console.error("STAFF ACCOUNT ROLLBACK ERROR:", rollbackError);
     }
-    return errorResponse(error);
+    return errorResponse(error, failureStage);
   }
 }
 

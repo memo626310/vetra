@@ -33,6 +33,23 @@ export async function assertClinicStaffPermission(
   return actor;
 }
 
+export async function assertClinicPermission(
+  actor: Awaited<ReturnType<typeof resolveClinicPushContext>>,
+  key: string,
+  action: PermissionAction,
+) {
+  const permissions = await getClinicStaffPermissions(actor);
+  if (!hasStaffPermission(permissions, key, action)) {
+    throw new PushSetupError("لا تملك الصلاحية المطلوبة لتنفيذ هذه العملية.", 403);
+  }
+  return actor;
+}
+
+export async function requireClinicPermission(request: Request, key: string, action: PermissionAction) {
+  const actor = await resolveClinicPushContext(request);
+  return assertClinicPermission(actor, key, action);
+}
+
 export async function requireClinicStaffPermission(request: Request, action: PermissionAction) {
   const actor = await resolveClinicPushContext(request);
   return assertClinicStaffPermission(actor, action);

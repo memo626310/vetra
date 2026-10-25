@@ -7,6 +7,7 @@ import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { clearClinicCache, readClinicCache, writeClinicCache } from "@/lib/clinic-cache";
 import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
+import { useStaffPermissions } from "@/lib/use-staff-permissions";
 
 type Client = {
   id: string;
@@ -51,6 +52,7 @@ type ClientPageCache = {
 export default function ClientPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { loaded: permissionsLoaded, can } = useStaffPermissions();
 
   const clientId = params.id;
 
@@ -239,6 +241,10 @@ export default function ClientPage() {
 
   async function generateNewClientCode() {
     if (!client || generatingClientCode) return;
+    if (!permissionsLoaded || !can("patients", "edit")) {
+      setError("لا تملك صلاحية تغيير Client ID.");
+      return;
+    }
 
     const confirmed = window.confirm(
       "سيتم توليد Client ID جديد بنفس كود بداية العيادة، مع تغيير رقم العميل فقط. الرقم القديم لن يصلح لتسجيل دخول جديد، ولن تتغير روابط الحيوانات أو الزيارات أو الفواتير. هل تريد المتابعة؟"
@@ -335,6 +341,10 @@ export default function ClientPage() {
 
   async function deleteClientPermanently() {
     if (!client || deletingClient) return;
+    if (!permissionsLoaded || !can("patients", "delete")) {
+      setError("لا تملك صلاحية حذف العملاء.");
+      return;
+    }
     const typedName = window.prompt(
       `حذف نهائي لا يمكن التراجع عنه. سيتم حذف العميل "${client.name}" وكل حيواناته وسجلاته الطبية ومواعيده وفواتيره ومدفوعاتها. اكتب اسم العميل كما هو للتأكيد:`
     );
@@ -377,6 +387,11 @@ export default function ClientPage() {
 
     setError("");
     setMessage("");
+
+    if (!permissionsLoaded || !can("patients", "create")) {
+      setError("لا تملك صلاحية إضافة الحيوانات.");
+      return;
+    }
 
     if (!client) {
       setError("بيانات العميل غير متاحة.");
@@ -582,14 +597,14 @@ export default function ClientPage() {
             </div>
 
             {/* Edit Client Button */}
-            <Link
+            {permissionsLoaded && can("patients", "edit") && <Link
               href={`/clients/${client.id}/edit`}
               className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white shadow-sm transition hover:bg-blue-700 hover:shadow-md"
             >
               <span aria-hidden="true">✏️</span>
               <span>تعديل بيانات العميل</span>
-            </Link>
-            <button
+            </Link>}
+            {permissionsLoaded && can("patients", "edit") && <button
               type="button"
               onClick={() => void generateNewClientCode()}
               disabled={generatingClientCode}
@@ -597,8 +612,8 @@ export default function ClientPage() {
             >
               <span aria-hidden="true">🔢</span>
               <span>{generatingClientCode ? "جاري توليد رقم..." : "توليد Client ID جديد"}</span>
-            </button>
-            <button
+            </button>}
+            {permissionsLoaded && can("patients", "delete") && <button
               type="button"
               onClick={() => void deleteClientPermanently()}
               disabled={deletingClient}
@@ -606,7 +621,7 @@ export default function ClientPage() {
             >
               <span aria-hidden="true">🗑️</span>
               <span>{deletingClient ? "جاري حذف العميل..." : "حذف العميل وكل بياناته نهائيًا"}</span>
-            </button>
+            </button>}
             <ClinicCacheRefreshButton ar darkMode={false} loading={refreshingCache} onRefresh={() => void refreshCache()} />
 
           </div>
@@ -769,7 +784,7 @@ export default function ClientPage() {
         </section>
 
         {/* Add Pet */}
-        <section className="rounded-3xl bg-white p-6 shadow-sm">
+        {permissionsLoaded && can("patients", "create") && <section className="rounded-3xl bg-white p-6 shadow-sm">
           <div className="mb-6">
             <h2 className="text-2xl font-black">
               إضافة حيوان جديد
@@ -995,7 +1010,7 @@ export default function ClientPage() {
               </button>
             </div>
           </form>
-        </section>
+        </section>}
       </div>
     </main>
   );
