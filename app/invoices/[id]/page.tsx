@@ -822,7 +822,7 @@ export default function InvoiceDetailsPage() {
               WhatsApp
             </button>}
 
-            {permissionsLoaded && can("invoices", "edit") && isDraft && (
+            {permissionsLoaded && (can("invoices", "edit") || isReception) && !["paid", "partially_paid", "cancelled", "returned", "partially_returned"].includes(invoice.status) && (
               <button
                 onClick={() => router.push(`/invoices/new?draft=${encodeURIComponent(invoice.id)}`)}
                 className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300"

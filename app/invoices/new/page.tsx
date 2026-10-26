@@ -121,6 +121,8 @@ export default function NewInvoicePage() {
   const [followUpFee, setFollowUpFee] = useState(0);
   const [visitId, setVisitId] = useState("");
   const [draftId, setDraftId] = useState("");
+  const [editingInvoiceStatus, setEditingInvoiceStatus] = useState<"draft" | "issued" | "unpaid" | "partially_paid" | "">("");
+  const [editingInvoiceIssuedAt, setEditingInvoiceIssuedAt] = useState<string | null>(null);
   const [visitBillLoading, setVisitBillLoading] = useState(false);
   const [invoiceMedicationNotice, setInvoiceMedicationNotice] = useState("");
   const [requestedPetId, setRequestedPetId] = useState("");
@@ -168,6 +170,7 @@ export default function NewInvoicePage() {
 
     const requestedDraftId = new URLSearchParams(window.location.search).get("draft") || "";
     const canCreateInvoice = ["owner", "admin"].includes(context.role)
+      || (requestedDraftId && context.role === "reception")
       || can("invoices", requestedDraftId ? "edit" : "create");
     if (!canCreateInvoice) {
       setAuthorized(false);
@@ -176,7 +179,8 @@ export default function NewInvoicePage() {
     }
     setCanIssueInvoices(["owner", "admin"].includes(context.role)
       || can("invoices", "create")
-      || (Boolean(requestedDraftId) && can("invoices", "edit")));
+      || (Boolean(requestedDraftId) && can("invoices", "edit"))
+      || (Boolean(requestedDraftId) && context.role === "reception"));
 
     setAuthorized(true);
 
@@ -445,10 +449,10 @@ export default function NewInvoicePage() {
     if (draftFromUrl) {
       const { data: draft, error: draftError } = await db
         .from("invoices")
-        .select("id, client_id, pet_id, visit_id, status, subtotal, discount, notes, payment_method")
+        .select("id, client_id, pet_id, visit_id, status, subtotal, discount, notes, payment_method, issued_at")
         .eq("id", draftFromUrl)
         .eq("clinic_id", context.clinic_id)
-        .eq("status", "draft")
+        .in("status", ["draft", "issued", "unpaid"])
         .maybeSingle();
       const { data: draftItems, error: draftItemsError } = await db
         .from("invoice_items")
@@ -463,6 +467,8 @@ export default function NewInvoicePage() {
         setMessage(draftItemsError.message);
       } else {
         setDraftId(draft.id);
+        setEditingInvoiceStatus(draft.status as "draft" | "issued" | "unpaid");
+        setEditingInvoiceIssuedAt(draft.issued_at || null);
         setVisitId(draft.visit_id || "");
         setClientId(draft.client_id);
         const draftClient = (clientsResult.data || []).find((client) => client.id === draft.client_id);
@@ -883,7 +889,8 @@ export default function NewInvoicePage() {
       }
     }
 
-    const amountToCollect = issueAfterSave && billingMode === "cash" ? paid : 0;
+    const editingIssuedInvoice = Boolean(draftId && editingInvoiceStatus && editingInvoiceStatus !== "draft");
+    const amountToCollect = issueAfterSave && !editingIssuedInvoice && billingMode === "cash" ? paid : 0;
 
     if (amountToCollect > 0 && (!paymentMethod || !financialAccountId)) {
       setMessage(
@@ -909,8 +916,50 @@ setSaving(true);
     const context = await getClinicContext();
     const db = await getClinicDb();
 
+    const receptionIssuedEdit = context.role === "reception"
+      && Boolean(draftId)
+      && editingInvoiceStatus !== "draft";
+    if (receptionIssuedEdit) {
+      const { data: sessionData } = await vetraCore.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        setMessage(language === "ar" ? "انتهت جلسة الدخول. سجّل الدخول مرة أخرى." : "Your session expired. Sign in again.");
+        setSaving(false);
+        return;
+      }
+      const response = await fetch(`/api/reception/invoices/${encodeURIComponent(draftId)}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          petId,
+          discount: invoiceDiscount,
+          notes: notes.trim(),
+          items: lines.map((line) => ({
+            item_type: line.item_type,
+            product_id: line.product_id,
+            service_name: line.service_name.trim(),
+            description: line.description.trim() || line.service_name.trim(),
+            quantity: line.quantity,
+            unit_price: line.unit_price,
+            discount: line.discount,
+          })),
+        }),
+      });
+      const result = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) {
+        setMessage(result?.error || (language === "ar" ? "تعذر تعديل الفاتورة." : "Could not edit the invoice."));
+        setSaving(false);
+        return;
+      }
+      setSuccess(language === "ar" ? "تم حفظ تعديلات الفاتورة." : "Invoice changes saved.");
+      setSaving(false);
+      router.push(`/invoices/${encodeURIComponent(draftId)}`);
+      return;
+    }
+
     const canSaveInvoice = draftId
-      ? can("invoices", "edit")
+      ? can("invoices", "edit") || context.role === "reception"
       : can("invoices", "create");
     if (!permissionsLoaded || (!canSaveInvoice && !["owner", "admin"].includes(context.role))) {
       setAuthorized(false);
@@ -960,14 +1009,16 @@ setSaving(true);
       client_id: clientId,
       pet_id: petId || null,
       visit_id: visitId || null,
-      status: "draft",
-      payment_method: issueAfterSave ? billingMode : null,
+      status: draftId ? (editingInvoiceStatus || "draft") : "draft",
+      payment_method: editingIssuedInvoice ? null : issueAfterSave ? billingMode : null,
       subtotal,
       discount: invoiceDiscount,
       total,
       paid_amount: 0,
       notes: notes.trim() || null,
-      issued_at: null,
+      issued_at: draftId && editingInvoiceStatus !== "draft"
+        ? (editingInvoiceIssuedAt || new Date().toISOString())
+        : null,
       paid_at: null,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
@@ -978,7 +1029,7 @@ setSaving(true);
         .update(invoicePayload)
         .eq("id", draftId)
         .eq("clinic_id", context.clinic_id)
-        .eq("status", "draft")
+        .eq("status", editingInvoiceStatus || "draft")
         .select("id")
         .single()
       : await db
@@ -1056,7 +1107,7 @@ setSaving(true);
       }
     }
 
-    if (issueAfterSave) {
+    if (issueAfterSave && (!draftId || editingInvoiceStatus === "draft")) {
       const { error: issueError } = await db.rpc("issue_invoice", {
         p_invoice_id: invoice.id,
       });
@@ -1097,10 +1148,10 @@ setSaving(true);
     }
 setSuccess(
       language === "ar"
-        ? issueAfterSave
+        ? (issueAfterSave || (draftId && editingInvoiceStatus !== "draft"))
           ? "تم إصدار الفاتورة بنجاح."
           : "تم حفظ الفاتورة كمسودة."
-        : issueAfterSave
+        : (issueAfterSave || (draftId && editingInvoiceStatus !== "draft"))
           ? "Invoice issued successfully."
           : "Invoice saved as draft."
     );
@@ -1469,6 +1520,9 @@ setSuccess(
               </div>
             </section>
 
+          </div>
+
+          <aside className="min-w-0 space-y-4 sm:space-y-6">
             <section
               className={`overflow-hidden rounded-3xl border ${
                 darkMode
@@ -1482,7 +1536,7 @@ setSuccess(
 
               {invoiceMedicationNotice && <p className="mx-3 mt-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-200 sm:mx-5">{invoiceMedicationNotice}</p>}
 
-              <div className="space-y-3 p-3 sm:hidden">
+              <div className="space-y-3 p-3">
                 {lines.map((line) => {
                   const lineTotal = Math.max(0, line.quantity * line.unit_price - line.discount);
                   const field = `w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm ${darkMode ? "border-white/[0.07] bg-[#0F1115]" : "border-slate-200 bg-slate-50"}`;
@@ -1495,151 +1549,11 @@ setSuccess(
                 {!lines.length && <p className="py-8 text-center text-sm text-slate-500">{language === "ar" ? "لسه مفيش بنود في الفاتورة" : "No invoice items yet"}</p>}
               </div>
 
-              <div className="hidden max-w-full overflow-x-auto overscroll-x-contain sm:block">
-                <table className="w-full min-w-[850px] text-sm">
-                  <thead>
-                    <tr className="border-b text-right text-xs text-slate-500">
-                      <th className="px-5 py-4">
-                        {language === "ar" ? "البند" : "Item"}
-                      </th>
-                      <th className="px-5 py-4">
-                        {language === "ar" ? "الكمية" : "Qty"}
-                      </th>
-                      <th className="px-5 py-4">
-                        {language === "ar" ? "السعر" : "Price"}
-                      </th>
-                      <th className="px-5 py-4">
-                        {language === "ar" ? "خصم" : "Discount"}
-                      </th>
-                      <th className="px-5 py-4">
-                        {language === "ar" ? "الإجمالي" : "Total"}
-                      </th>
-                      <th />
-                    </tr>
-                  </thead>
 
-                  <tbody>
-                    {lines.map((line) => {
-                      const lineTotal = Math.max(
-                        0,
-                        line.quantity * line.unit_price - line.discount
-                      );
-
-                      return (
-                        <tr key={line.key} className="border-b last:border-b-0">
-                          <td className="px-5 py-4">
-                            <p className="font-bold">{line.description || line.service_name}</p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {line.item_type === "product"
-                                ? "📦 Product"
-                                : "🩺 Service"}
-                            </p>
-                          </td>
-
-                          <td className="px-5 py-4">
-                            <input
-                              type="number"
-                              min="0.001"
-                              max={
-                                line.item_type === "product"
-                                  ? line.available_quantity ?? undefined
-                                  : undefined
-                              }
-                              step="1"
-                              value={line.quantity}
-                              onChange={(e) =>
-                                updateLine(line.key, {
-                                  quantity: Number(e.target.value) || 0,
-                                })
-                              }
-                              className={`w-24 rounded-xl border px-3 py-2 outline-none focus:border-blue-500 ${
-                                darkMode
-                                  ? "border-white/[0.07] bg-[#0F1115]"
-                                  : "border-slate-200 bg-slate-50"
-                              }`}
-                            />
-                            {line.available_quantity != null && (
-                              <p className="mt-1 text-[11px] text-slate-500">
-                                Stock: {line.available_quantity}
-                              </p>
-                            )}
-                          </td>
-
-                          <td className="px-5 py-4">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={line.unit_price}
-                              onChange={(e) =>
-                                updateLine(line.key, {
-                                  unit_price: Number(e.target.value) || 0,
-                                })
-                              }
-                              className={`w-32 rounded-xl border px-3 py-2 outline-none focus:border-blue-500 ${
-                                darkMode
-                                  ? "border-white/[0.07] bg-[#0F1115]"
-                                  : "border-slate-200 bg-slate-50"
-                              }`}
-                            />
-                          </td>
-
-                          <td className="px-5 py-4">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={line.discount}
-                              onChange={(e) =>
-                                updateLine(line.key, {
-                                  discount: Number(e.target.value) || 0,
-                                })
-                              }
-                              className={`w-28 rounded-xl border px-3 py-2 outline-none focus:border-blue-500 ${
-                                darkMode
-                                  ? "border-white/[0.07] bg-[#0F1115]"
-                                  : "border-slate-200 bg-slate-50"
-                              }`}
-                            />
-                          </td>
-
-                          <td className="px-5 py-4 font-bold">
-                            {money(lineTotal)} EGP
-                          </td>
-
-                          <td className="px-5 py-4">
-                            <button
-                              onClick={() => removeLine(line.key)}
-                              className="rounded-xl px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
-                            >
-                              🗑️
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-
-                    {!lines.length && (
-                      <tr>
-                        <td colSpan={6} className="px-5 py-14 text-center text-slate-500">
-                          🧾
-                          <p className="mt-2 font-semibold">
-                            {language === "ar"
-                              ? "لسه مفيش بنود في الفاتورة"
-                              : "No invoice items yet"}
-                          </p>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
             </section>
-          </div>
 
-          <aside className="min-w-0 space-y-4 sm:space-y-6">
             <section
-              className={`min-w-0 rounded-2xl border p-3 sm:rounded-3xl sm:p-5 xl:sticky xl:top-5 ${
+              className={`min-w-0 rounded-2xl border p-3 sm:rounded-3xl sm:p-5 ${
                 darkMode
                   ? "border-white/[0.06] bg-[#13161B]"
                   : "border-slate-100 bg-white"
@@ -1838,14 +1752,14 @@ setSuccess(
 
                 {canIssueInvoices && <button
                   disabled={saving || (Boolean(visitId) && visitBillLoading)}
-                  onClick={() => saveInvoice(true)}
+                  onClick={() => saveInvoice(Boolean(!draftId || editingInvoiceStatus === "draft"))}
                   className="w-full rounded-2xl bg-blue-600 px-5 py-4 font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
                 >
                   {saving
                     ? "Saving..."
                     : language === "ar"
-                      ? visitId ? "حفظ وإصدار الفاتورة" : "إصدار الفاتورة"
-                      : visitId ? "Save and issue invoice" : "Issue invoice"}
+                      ? draftId && editingInvoiceStatus !== "draft" ? "حفظ تعديلات الفاتورة" : visitId ? "حفظ وإصدار الفاتورة" : "إصدار الفاتورة"
+                      : draftId && editingInvoiceStatus !== "draft" ? "Save invoice changes" : visitId ? "Save and issue invoice" : "Issue invoice"}
                 </button>}
               </div>
             </section>

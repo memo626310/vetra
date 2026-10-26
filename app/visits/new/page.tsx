@@ -1206,7 +1206,7 @@ export default function NewVisitPage() {
           const { data: invoice, error: invoiceError } = await db.from("invoices").insert({
             clinic_id: clinicContext.clinic_id, client_id: selectedClientId, pet_id: selectedPetId, visit_id: visit.id,
             status: "draft", payment_method: null, subtotal, discount: 0, total: subtotal, paid_amount: 0,
-            notes: language === "ar" ? "مسودة فاتورة أُنشئت من الزيارة" : "Draft bill created from visit", issued_at: null, paid_at: null,
+            notes: language === "ar" ? "فاتورة من الزيارة للاستقبال" : "Invoice from visit for reception", issued_at: null, paid_at: null,
             created_by: user.id, updated_by: user.id,
           }).select("id").single();
           if (invoiceError || !invoice) throw invoiceError || new Error(t.saveError);
@@ -1217,6 +1217,10 @@ export default function NewVisitPage() {
             discount: 0, total: line.quantity * line.unit_price,
           })));
           if (itemError) throw itemError;
+          const { error: issueError } = await db.rpc("issue_invoice", {
+            p_invoice_id: invoice.id,
+          });
+          if (issueError) throw issueError;
         }
         const dispenseItems = [
           ...drawerMedications.map((item) => ({ product_id: item.product_id, quantity: item.quantity, source_type: "medication" })),
@@ -1255,7 +1259,7 @@ export default function NewVisitPage() {
 
         if (createBill && createdInvoiceId) {
           window.localStorage.setItem("vetra-data-version", String(Date.now()));
-          router.push(`/invoices/${createdInvoiceId}`);
+          router.push("/dashboard");
           return;
         }
 
@@ -1550,7 +1554,7 @@ export default function NewVisitPage() {
               onOldVisitSelect={setSelectedOldVisit}
             />
 
-            <NewVisitEditorSection darkMode={darkMode} t={t} saving={saving} saveLabel={editVisitId ? (language === "ar" ? "حفظ تعديلات الزيارة" : "Save visit changes") : undefined} onSave={() => saveVisit(false)} onSaveWithBill={editVisitId ? undefined : () => saveVisit(true)} billLabel={language === "ar" ? "حفظ الزيارة وإنشاء فاتورة" : "Save visit & create bill"}>
+            <NewVisitEditorSection darkMode={darkMode} t={t} saving={saving} saveLabel={editVisitId ? (language === "ar" ? "حفظ تعديلات الزيارة" : "Save visit changes") : undefined} onSave={() => saveVisit(false)} onSaveWithBill={editVisitId ? undefined : () => saveVisit(true)} billLabel={language === "ar" ? "حفظ وإرسال الفاتورة للاستقبال" : "Save & send invoice to reception"}>
               {editVisitId && <label className="block text-sm font-semibold lg:col-span-2">{language === "ar" ? "تاريخ ووقت الزيارة" : "Visit date and time"}
                 <input type="datetime-local" required value={visitDate} onChange={(event) => setVisitDate(event.target.value)} className={`mt-2 w-full rounded-xl border p-3 ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-300 bg-white"}`} />
               </label>}

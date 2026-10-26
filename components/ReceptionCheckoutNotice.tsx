@@ -13,6 +13,7 @@ type PendingVisit = {
   created_at: string;
   reason: string | null;
   invoice_id?: string | null;
+  invoice_status?: string | null;
   client: { name: string } | null;
   pet: { name: string } | null;
 };
@@ -65,9 +66,13 @@ export default function ReceptionCheckoutNotice({ clinicId, language, darkMode, 
       setVisits(((visitsResult.data || []) as unknown as PendingVisit[])
         .filter((visit) => {
           const invoice = invoiceByVisit.get(visit.id);
-          return (!invoice || invoice.status === "draft") && !dismissedVisitIds.has(visit.id);
+          return (!invoice || ["draft", "issued", "unpaid", "partially_paid"].includes(invoice.status)) && !dismissedVisitIds.has(visit.id);
         })
-        .map((visit) => ({ ...visit, invoice_id: invoiceByVisit.get(visit.id)?.id || null })));
+        .map((visit) => ({
+          ...visit,
+          invoice_id: invoiceByVisit.get(visit.id)?.id || null,
+          invoice_status: invoiceByVisit.get(visit.id)?.status || null,
+        })));
     } catch (error) {
       console.error("RECEPTION CHECKOUT NOTICE ERROR:", error);
     }
@@ -95,6 +100,11 @@ export default function ReceptionCheckoutNotice({ clinicId, language, darkMode, 
 
   function openInvoice(visit: PendingVisit) {
     router.push(visit.invoice_id ? `/invoices/${encodeURIComponent(visit.invoice_id)}` : `/invoices/new?visit=${encodeURIComponent(visit.id)}&client=${encodeURIComponent(visit.client_id)}&pet=${encodeURIComponent(visit.pet_id)}`);
+  }
+
+  function editInvoice(visit: PendingVisit) {
+    if (!visit.invoice_id) return;
+    router.push(`/invoices/new?draft=${encodeURIComponent(visit.invoice_id)}`);
   }
 
   async function dismissVisit(visitId: string) {
@@ -126,8 +136,8 @@ export default function ReceptionCheckoutNotice({ clinicId, language, darkMode, 
         <div className="flex items-center gap-3">
           <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-xl">🧾</span>
           <div>
-            <h2 className="font-bold">{isAr ? "زيارات مكتملة تحتاج إلى تحصيل" : "Completed visits awaiting checkout"}</h2>
-            <p className="mt-0.5 text-sm text-slate-500">{isAr ? `${visits.length} زيارة بانتظار الفاتورة والتحصيل` : `${visits.length} visits need an invoice and payment`}</p>
+            <h2 className="font-bold">{isAr ? "فواتير الزيارات بانتظار الاستقبال" : "Visit invoices waiting for reception"}</h2>
+            <p className="mt-0.5 text-sm text-slate-500">{isAr ? `${visits.length} فاتورة بانتظار المراجعة والتحصيل` : `${visits.length} invoices need review and payment`}</p>
           </div>
         </div>
         <span className="flex h-8 min-w-8 items-center justify-center rounded-full bg-amber-500 px-2 text-sm font-black text-slate-950">{visits.length}</span>
@@ -153,6 +163,11 @@ export default function ReceptionCheckoutNotice({ clinicId, language, darkMode, 
               </span>
               <span aria-hidden="true" className="shrink-0 text-lg font-bold text-amber-500">{isAr ? "←" : "→"}</span>
             </button>
+            {visit.invoice_id && (visit.invoice_status === "issued" || visit.invoice_status === "unpaid" || (canDismiss && visit.invoice_status === "draft")) && (
+              <button type="button" onClick={() => editInvoice(visit)} className={`shrink-0 border px-3 py-2 text-xs font-bold ${darkMode ? "border-cyan-400/20 text-cyan-300" : "border-cyan-200 text-cyan-700"}`}>
+                {isAr ? "تعديل" : "Edit"}
+              </button>
+            )}
             {canDismiss && (
               <button
                 type="button"

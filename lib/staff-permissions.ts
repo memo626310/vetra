@@ -65,7 +65,7 @@ export function permissionForPath(pathname: string, search = ""): { key: string;
   if (pathname.startsWith("/finance") || pathname.startsWith("/cash-register")) return { key: "finance_page", action: "view" };
   if (/^\/visits\/[^/]+\/edit\/?$/.test(pathname)) return { key: "medical_records", action: "edit" };
   if (pathname.startsWith("/visits/new")) return { key: "medical_records", action: "create" };
-  if (pathname === "/invoices/new" && new URLSearchParams(search).has("draft")) return { key: "invoices", action: "edit" };
+  if (pathname === "/invoices/new" && new URLSearchParams(search).has("draft")) return { key: "invoices", action: "view" };
   if (pathname.startsWith("/invoices/new")) return { key: "invoices", action: "create" };
   if (pathname.startsWith("/invoices")) return { key: "invoices", action: "view" };
   if (pathname.startsWith("/inventory/purchases/history")) return { key: "inventory", action: "view" };

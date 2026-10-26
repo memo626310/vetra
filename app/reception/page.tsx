@@ -13,6 +13,7 @@ type VisitRow = {
   diagnosis: string | null;
   created_at: string;
   invoice_id?: string | null;
+  invoice_status?: string | null;
   client: { name: string; phone: string | null } | null;
   pet: { name: string; species: string } | null;
 };
@@ -72,9 +73,13 @@ export default function ReceptionPage() {
       setVisits(((visitsResult.data || []) as unknown as VisitRow[])
         .filter((visit) => {
           const invoice = invoiceByVisit.get(visit.id);
-          return (!invoice || invoice.status === "draft") && !dismissedVisits.has(visit.id);
+          return (!invoice || ["draft", "issued", "unpaid", "partially_paid"].includes(invoice.status)) && !dismissedVisits.has(visit.id);
         })
-        .map((visit) => ({ ...visit, invoice_id: invoiceByVisit.get(visit.id)?.id || null })));
+        .map((visit) => ({
+          ...visit,
+          invoice_id: invoiceByVisit.get(visit.id)?.id || null,
+          invoice_status: invoiceByVisit.get(visit.id)?.status || null,
+        })));
       setError("");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : (isAr ? "تعذر تحميل الزيارات." : "Could not load visits."));
@@ -165,7 +170,7 @@ export default function ReceptionPage() {
 
         <section className={`overflow-hidden border ${surface}`}>
           <div className="flex items-center justify-between border-b border-slate-200/10 px-4 py-3">
-            <h2 className="text-sm font-bold">{isAr ? "الزيارات المكتملة" : "Completed visits"}</h2>
+            <h2 className="text-sm font-bold">{isAr ? "فواتير الزيارات" : "Visit invoices"}</h2>
             <span className="text-xs text-slate-500">{filteredVisits.length}</span>
           </div>
           {loading ? (
@@ -192,6 +197,9 @@ export default function ReceptionPage() {
                   <button type="button" onClick={() => router.push(visit.invoice_id ? `/invoices/${encodeURIComponent(visit.invoice_id)}` : `/invoices/new?visit=${encodeURIComponent(visit.id)}&client=${encodeURIComponent(visit.client_id)}&pet=${encodeURIComponent(visit.pet_id)}`)} className="min-h-11 shrink-0 rounded-lg bg-teal-500 px-4 text-sm font-bold text-slate-950 hover:bg-teal-400">
                     {visit.invoice_id ? (isAr ? "فتح الفاتورة والتحصيل" : "Open invoice & collect") : (isAr ? "إنشاء فاتورة وتحصيل" : "Create invoice & collect")}
                   </button>
+                  {visit.invoice_id && ["issued", "unpaid"].includes(visit.invoice_status || "") && <button type="button" onClick={() => router.push(`/invoices/new?draft=${encodeURIComponent(visit.invoice_id as string)}`)} className="min-h-11 shrink-0 rounded-lg border border-cyan-400/30 px-4 text-sm font-bold text-cyan-600 dark:text-cyan-300">
+                    {isAr ? "تعديل الفاتورة" : "Edit invoice"}
+                  </button>}
                 </li>
               ))}
             </ul>
