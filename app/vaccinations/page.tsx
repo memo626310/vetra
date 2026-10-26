@@ -1237,6 +1237,23 @@ export default function ClinicVaccinationsPage() {
       && (activeTrackingTab === "all" || item.vaccineType === activeTrackingTab));
   }, [missingVaccines, searchedPets, activeTrackingTab]);
 
+  const groupedMissingVaccines = useMemo(() => {
+    const owners = new Map<string, { client: Client | null; pets: Map<string, { pet: Pet; vaccines: DueItem[] }> }>();
+    for (const item of visibleMissingVaccines) {
+      const ownerKey = item.pet.client_id || item.pet.client?.id || item.pet.id;
+      const owner = owners.get(ownerKey) || { client: item.pet.client, pets: new Map() };
+      const pet = owner.pets.get(item.pet.id) || { pet: item.pet, vaccines: [] };
+      pet.vaccines.push(item);
+      owner.pets.set(item.pet.id, pet);
+      owners.set(ownerKey, owner);
+    }
+    return Array.from(owners.entries()).map(([ownerKey, owner]) => ({
+      ownerKey,
+      client: owner.client,
+      pets: Array.from(owner.pets.values()),
+    }));
+  }, [visibleMissingVaccines]);
+
   const overdueCount = useMemo(
     () =>
       dueItems.filter(
@@ -1641,51 +1658,6 @@ export default function ClinicVaccinationsPage() {
               ))}
             </div>
           </div>
-        </section>
-
-        <section className={dark ? "mt-5 rounded-[2rem] border border-amber-400/15 bg-[#13161B] p-5" : "mt-5 rounded-[2rem] border border-amber-100 bg-white p-5"}>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-black sm:text-2xl">{T[lang].missingTitle}</h2>
-              <p className="mt-1 text-sm text-slate-400">{T[lang].missingHint}</p>
-            </div>
-            <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-sm font-black text-amber-200">{visibleMissingVaccines.length}</span>
-          </div>
-          {visibleMissingVaccines.length === 0 ? (
-            <div className="rounded-2xl border border-white/[0.06] p-5 text-center text-sm text-slate-500">{missingVaccines.length === 0 ? T[lang].noMissing : T[lang].noFilteredResults}</div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {visibleMissingVaccines.map((item) => {
-                const key = `${item.pet.id}-${item.vaccineType}`;
-                return (
-                  <article key={key} className={dark ? "rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4" : "rounded-2xl border border-slate-100 bg-slate-50 p-4"}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-black">{item.pet.name} · {item.vaccine}</div>
-                        <div className="mt-1 text-sm text-slate-400">{item.pet.client?.name || "—"}</div>
-                      </div>
-                      <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-bold ${statusClasses("due")}`}>{lang === "ar" ? "غير مسجل" : "Not recorded"}</span>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Link href={`/pets/${item.pet.id}`} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold">{T[lang].openPet}</Link>
-                      {item.pet.client_id && <button type="button" onClick={() => { setNotifyMessage(""); setNotifyNotes(""); setNotifyKey(notifyKey === key ? "" : key); }} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950">{T[lang].notifyOwner}</button>}
-                      {item.pet.client_id && <button type="button" disabled={!permissionsLoaded || !can("vaccinations", "export")} onClick={() => void shareVaccineWhatsApp(item)} className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-300">{T[lang].whatsapp}</button>}
-                    </div>
-                    {notifyKey === key && (
-                      <div className="mt-3 space-y-2">
-                        <textarea value={notifyNotes} onChange={(event) => setNotifyNotes(event.target.value)} maxLength={300} rows={2} placeholder={T[lang].notificationNotes} className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs outline-none focus:border-cyan-400/50" />
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button type="button" disabled={notifyBusy} onClick={() => void sendVaccineReminder(item)} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-60">{notifyBusy ? T[lang].sending : T[lang].sendReminder}</button>
-                          <button type="button" onClick={() => setNotifyKey("")} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold">{T[lang].cancel}</button>
-                          {notifyMessage && <span role="status" className="text-xs text-slate-300">{notifyMessage}</span>}
-                        </div>
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          )}
         </section>
 
         <section
@@ -2113,6 +2085,187 @@ export default function ClinicVaccinationsPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+        </section>
+
+        <section
+          className={
+            dark
+              ? "mt-5 overflow-hidden rounded-[2rem] border border-amber-400/15 bg-[#13161B]"
+              : "mt-5 overflow-hidden rounded-[2rem] border border-amber-200 bg-white"
+          }
+        >
+          <div className="flex flex-col gap-3 border-b border-white/[0.06] p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs font-bold text-amber-300">
+                {T[lang].missingTitle}
+              </div>
+              <h2 className="mt-1 text-2xl font-black">
+                {T[lang].missingTitle}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                {T[lang].missingHint}
+              </p>
+            </div>
+            <span className="self-start rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1.5 text-sm font-black text-amber-200 sm:self-auto">
+              {groupedMissingVaccines.length}
+            </span>
+          </div>
+
+          {groupedMissingVaccines.length === 0 ? (
+            <div className="p-10 text-center text-sm text-slate-500">
+              {missingVaccines.length === 0
+                ? T[lang].noMissing
+                : T[lang].noFilteredResults}
+            </div>
+          ) : (
+            <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
+              {groupedMissingVaccines.map((group) => (
+                <article
+                  key={group.ownerKey}
+                  className={
+                    dark
+                      ? "rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4"
+                      : "rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  }
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-lg font-black">
+                        {group.client?.name || "—"}
+                      </h3>
+                      {group.client?.client_code && (
+                        <div dir="ltr" className="mt-1 text-xs text-slate-500">
+                          {group.client.client_code}
+                        </div>
+                      )}
+                    </div>
+                    {group.client?.id && (
+                      <Link
+                        href={`/clients/${group.client.id}`}
+                        className="shrink-0 rounded-xl border border-blue-400/15 bg-blue-400/5 px-3 py-2 text-xs font-bold text-blue-300"
+                      >
+                        {T[lang].openOwner}
+                      </Link>
+                    )}
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {group.pets.map(({ pet, vaccines: petVaccines }) => {
+                      const first = petVaccines[0];
+                      const missingNames = petVaccines
+                        .map((item) => item.vaccine)
+                        .join(lang === "ar" ? "، " : ", ");
+                      const reminderItem: DueItem = {
+                        ...first,
+                        vaccine: missingNames.slice(0, 120),
+                      };
+                      const key = `${pet.id}-missing`;
+
+                      return (
+                        <div
+                          key={pet.id}
+                          className={
+                            dark
+                              ? "rounded-xl border border-amber-400/10 bg-amber-400/[0.04] p-3"
+                              : "rounded-xl border border-amber-200 bg-amber-50/70 p-3"
+                          }
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-black">
+                                {petIcon(pet.species)} {pet.name}
+                              </div>
+                              <div className="mt-1 text-xs text-amber-300">
+                                {lang === "ar" ? "غير مسجل:" : "Missing:"} {missingNames}
+                              </div>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-amber-400/10 px-2 py-1 text-[11px] font-black text-amber-300">
+                              {petVaccines.length}
+                            </span>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Link
+                              href={`/pets/${pet.id}`}
+                              className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold"
+                            >
+                              {T[lang].openPet}
+                            </Link>
+                            {permissionsLoaded && can("vaccinations", "create") && can("medical_records", "create") && (
+                              <Link
+                                href={`/visits/new?pet=${encodeURIComponent(pet.id)}`}
+                                className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300"
+                              >
+                                {T[lang].newVisit}
+                              </Link>
+                            )}
+                            {pet.client_id && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNotifyMessage("");
+                                  setNotifyNotes("");
+                                  setNotifyKey(notifyKey === key ? "" : key);
+                                }}
+                                className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950"
+                              >
+                                {T[lang].notifyOwner}
+                              </button>
+                            )}
+                            {pet.client_id && (
+                              <button
+                                type="button"
+                                disabled={!permissionsLoaded || !can("vaccinations", "export")}
+                                onClick={() => void shareVaccineWhatsApp(reminderItem)}
+                                className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-300"
+                              >
+                                {T[lang].whatsapp}
+                              </button>
+                            )}
+                          </div>
+
+                          {notifyKey === key && (
+                            <div className="mt-3 space-y-2">
+                              <textarea
+                                value={notifyNotes}
+                                onChange={(event) => setNotifyNotes(event.target.value)}
+                                maxLength={300}
+                                rows={2}
+                                placeholder={T[lang].notificationNotes}
+                                className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs outline-none focus:border-cyan-400/50"
+                              />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={notifyBusy}
+                                  onClick={() => void sendVaccineReminder(reminderItem)}
+                                  className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-60"
+                                >
+                                  {notifyBusy ? T[lang].sending : T[lang].sendReminder}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setNotifyKey("")}
+                                  className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold"
+                                >
+                                  {T[lang].cancel}
+                                </button>
+                                {notifyMessage && (
+                                  <span role="status" className="text-xs text-slate-300">
+                                    {notifyMessage}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </article>
+              ))}
             </div>
           )}
         </section>

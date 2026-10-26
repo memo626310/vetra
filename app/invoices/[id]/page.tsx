@@ -822,6 +822,15 @@ export default function InvoiceDetailsPage() {
               WhatsApp
             </button>}
 
+            {permissionsLoaded && can("invoices", "edit") && isDraft && (
+              <button
+                onClick={() => router.push(`/invoices/new?draft=${encodeURIComponent(invoice.id)}`)}
+                className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300"
+              >
+                ✏️ {isAr ? "تعديل الفاتورة" : "Edit invoice"}
+              </button>
+            )}
+
             {permissionsLoaded && can("invoices", "edit") && canReturn && (
               <button
                 onClick={openReturnDialog}

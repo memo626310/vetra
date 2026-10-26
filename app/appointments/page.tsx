@@ -623,6 +623,22 @@ export default function AppointmentsPage() {
     }
   }
 
+  async function openVisit(a: Appointment) {
+    setError("");
+    try {
+      const db = await getClinicDb();
+      const { error } = await db.from("appointments").update({
+        status: "in_progress",
+        updated_at: new Date().toISOString(),
+      }).eq("id", a.id).in("status", ["arrived", "in_progress"]);
+      if (error) throw error;
+      router.push(`/visits/new?appointment=${encodeURIComponent(a.id)}&pet=${encodeURIComponent(a.pet_id)}`);
+    } catch (e) {
+      console.error("OPEN APPOINTMENT VISIT ERROR:", e);
+      setError(e instanceof Error ? e.message : t.error);
+    }
+  }
+
   async function notifyPetOwner(
     appointmentId: string,
     status: "confirmed" | "cancelled" | "pending",
@@ -1188,7 +1204,7 @@ export default function AppointmentsPage() {
                           )}
 
                           {(a.status === "arrived" || a.status === "in_progress") && (
-                            <button onClick={() => router.push(`/visits/new?appointment=${a.id}&pet=${a.pet_id}`)} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">{t.startVisit}</button>
+                            <button onClick={() => void openVisit(a)} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white">{t.startVisit}</button>
                           )}
 
                           {a.status === "pending" && (

@@ -75,6 +75,12 @@ const statusLabel = (status: string) => {
 
 const invoiceDateValue = (invoice: Invoice) => invoice.issued_at || invoice.created_at;
 const invoiceDateTimestamp = (invoice: Invoice) => new Date(invoiceDateValue(invoice)).getTime();
+const localDateInputValue = (value = new Date()) => {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 export default function InvoicesPage() {
   const router = useRouter();
@@ -95,6 +101,7 @@ export default function InvoicesPage() {
   const [status, setStatus] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [todayOnly, setTodayOnly] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
@@ -247,6 +254,20 @@ export default function InvoicesPage() {
     } finally {
       setDraftActionId("");
     }
+  }
+
+  function toggleTodayFilter() {
+    if (todayOnly) {
+      setFromDate("");
+      setToDate("");
+      setTodayOnly(false);
+      return;
+    }
+
+    const today = localDateInputValue();
+    setFromDate(today);
+    setToDate(today);
+    setTodayOnly(true);
   }
 
   useEffect(() => {
@@ -433,6 +454,20 @@ export default function InvoicesPage() {
               <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-amber-500 px-1 text-[10px] font-bold leading-5 text-slate-950">{invoices.filter((invoice) => invoice.status === "draft").length}</span>
             </button>
             <button
+              type="button"
+              onClick={toggleTodayFilter}
+              aria-pressed={todayOnly}
+              className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                todayOnly
+                  ? "border-cyan-400/50 bg-cyan-500/15 text-cyan-500"
+                  : darkMode
+                    ? "border-white/10 bg-[#171A20] text-slate-300 hover:bg-[#1D2129]"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              🗓️ {language === "ar" ? "فواتير اليوم" : "Today's invoices"}
+            </button>
+            <button
               onClick={() => {
                 setDarkMode((value) => !value);
               }}
@@ -579,7 +614,10 @@ export default function InvoicesPage() {
                 type="date"
                 value={fromDate}
                 max={toDate || undefined}
-                onChange={(event) => setFromDate(event.target.value)}
+                onChange={(event) => {
+                  setFromDate(event.target.value);
+                  setTodayOnly(false);
+                }}
                 className={`mt-1 w-full rounded-2xl border px-4 py-3 text-sm font-normal outline-none transition focus:border-blue-500 ${darkMode ? "border-white/[0.07] bg-[#0F1115] text-white" : "border-slate-200 bg-slate-50 text-slate-800"}`}
               />
             </label>
@@ -590,12 +628,15 @@ export default function InvoicesPage() {
                 type="date"
                 value={toDate}
                 min={fromDate || undefined}
-                onChange={(event) => setToDate(event.target.value)}
+                onChange={(event) => {
+                  setToDate(event.target.value);
+                  setTodayOnly(false);
+                }}
                 className={`mt-1 w-full rounded-2xl border px-4 py-3 text-sm font-normal outline-none transition focus:border-blue-500 ${darkMode ? "border-white/[0.07] bg-[#0F1115] text-white" : "border-slate-200 bg-slate-50 text-slate-800"}`}
               />
             </label>
           </div>
-          {(fromDate || toDate) && <button type="button" onClick={() => { setFromDate(""); setToDate(""); }} className="mt-3 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">{language === "ar" ? "مسح الفترة" : "Clear date range"}</button>}
+          {(fromDate || toDate) && <button type="button" onClick={() => { setFromDate(""); setToDate(""); setTodayOnly(false); }} className="mt-3 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">{language === "ar" ? "مسح الفترة" : "Clear date range"}</button>}
         </section>
 
         <section

@@ -121,6 +121,10 @@ function AuthGuardContent({
       data: { subscription },
     } = vetraCore.auth.onAuthStateChange(
       (_event, session) => {
+        // A staff member can sign out after changing a temporary password and
+        // sign back in as the same user. Never reuse the previous
+        // mustChangePassword decision across an auth-session transition.
+        verifiedState.current = null;
         if (!session && !isPublicPath(pathname)) {
           router.replace("/login");
           return;

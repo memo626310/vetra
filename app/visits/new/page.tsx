@@ -124,7 +124,7 @@ export default function NewVisitPage() {
   const [vaccineProductMappings, setVaccineProductMappings] = useState<Record<string, string[]>>({});
   const [drawerMedications, setDrawerMedications] = useState<DrawerMedication[]>([]);
   const [medicalRecordDraft, setMedicalRecordDraft] = useState<MedicalRecordDraft>(emptyMedicalRecordDraft);
-  const [originalMedicalRecords, setOriginalMedicalRecords] = useState<Array<{ id: string; record_type: string; status: string | null }>>([]);
+  const [originalMedicalRecords, setOriginalMedicalRecords] = useState<Array<{ id: string; record_type: string; title: string; status: string | null }>>([]);
 
   const t = translations[language];
 
@@ -159,11 +159,13 @@ export default function NewVisitPage() {
   }, [language]);
 
   useEffect(() => {
-    loadClients();
-    loadMedications();
-  }, []);
+    if (!permissionsLoaded || !can("medical_records", editVisitId ? "edit" : "create")) return;
+    void loadClients();
+    void loadMedications();
+  }, [permissionsLoaded, editVisitId, can]);
 
   useEffect(() => {
+    if (!permissionsLoaded || !can("medical_records", editVisitId ? "edit" : "create")) return;
     if (editVisitId) return;
     if (!selectedClientId) {
       setPets([]);
@@ -172,17 +174,19 @@ export default function NewVisitPage() {
     }
 
     loadPets(selectedClientId);
-  }, [selectedClientId, editVisitId]);
+  }, [selectedClientId, editVisitId, permissionsLoaded, can]);
 
   useEffect(() => {
+    if (!permissionsLoaded || !can("medical_records", editVisitId ? "edit" : "create")) return;
     if (!petFromUrl) return;
 
     loadPetFromUrl(petFromUrl);
-  }, [petFromUrl]);
+  }, [petFromUrl, permissionsLoaded, editVisitId, can]);
 
   useEffect(() => {
+    if (!permissionsLoaded || !can("medical_records", "edit")) return;
     if (editVisitId) void loadVisitForEdit(editVisitId);
-  }, [editVisitId]);
+  }, [editVisitId, permissionsLoaded, can]);
 
   async function loadClients(forceRefresh = false) {
     setLoadingClients(true);
@@ -492,12 +496,12 @@ export default function NewVisitPage() {
       }));
       setVaccinations(loadedVaccinations);
       setOriginalVaccinations(loadedVaccinations);
-      setOriginalMedicalRecords(medicalRows.map((row) => ({ id: row.id, record_type: row.record_type, status: row.status })));
+      setOriginalMedicalRecords(medicalRows.map((row) => ({ id: row.id, record_type: row.record_type, title: row.title, status: row.status })));
       const labRows = medicalRows.filter((row) => row.record_type === "lab");
       const surgeryRow = medicalRows.find((row) => row.record_type === "surgery");
       setMedicalRecordDraft({
-        labTests: labRows.map((row) => row.title).join("\n"), labNotes: labRows.map((row) => row.notes || "").filter(Boolean).join("\n"),
-        labRecordIds: labRows.map((row) => row.id), surgeryRecordId: surgeryRow?.id || null,
+        labTests: labRows.map((row) => ({ id: row.id, title: row.title })), labNotes: labRows.map((row) => row.notes || "").filter(Boolean).join("\n"),
+        surgeryRecordId: surgeryRow?.id || null,
         surgeryTitle: surgeryRow?.title || "", surgeryStatus: surgeryRow?.status === "completed" ? "completed" : "planned",
         surgeryBeforeStatus: String(surgeryRow?.notes || "").match(/Before:\s*(.*)/)?.[1] || getNoteValue(/^(?:Pre-surgery status|الحالة قبل الجراحة):/i),
         surgeryAfterStatus: String(surgeryRow?.notes || "").match(/After:\s*(.*)/)?.[1] || getNoteValue(/^(?:Post-surgery status|الحالة بعد الجراحة):/i),
@@ -639,8 +643,8 @@ export default function NewVisitPage() {
       const { data, error } = await db.from("appointments")
         .select("id, appointment_date, start_time, reason")
         .eq("client_id", clientId).eq("pet_id", petId)
-        .in("status", ["pending", "confirmed", "arrived"])
-        .gte("appointment_date", new Date().toISOString().slice(0, 10))
+        .in("status", ["pending", "confirmed", "arrived", "in_progress"])
+        .gte("appointment_date", formatLocalDateTime(new Date()).slice(0, 10))
         .order("appointment_date", { ascending: true });
       if (error) throw error;
       setAppointmentOptions(data || []);
@@ -926,11 +930,15 @@ export default function NewVisitPage() {
       const clinicContext = await getClinicContext();
       const { data: currentPet, error: currentPetError } = await db
         .from("pets")
-        .select("is_deceased")
+        .select("is_deceased, client_id")
         .eq("id", selectedPetId)
         .single();
 
       if (currentPetError || !currentPet) throw currentPetError || new Error(t.loadError);
+      if (currentPet.client_id !== selectedClientId) {
+        setMessage(language === "ar" ? "الحيوان المحدد غير مرتبط بهذا العميل." : "The selected pet does not belong to this client.");
+        return;
+      }
       if (currentPet.is_deceased && !editVisitId) {
         setMessage(t.deceasedPet);
         setStarted(false);
@@ -1025,13 +1033,16 @@ export default function NewVisitPage() {
         }
 
         const medicalRows = [
-          ...medicalRecordDraft.labTests.split(/\r?\n/).map((name) => name.trim()).filter(Boolean).map((title, index) => ({
-            ...(editVisitId ? { id: medicalRecordDraft.labRecordIds[index] || crypto.randomUUID() } : {}),
-            clinic_id: clinicContext.clinic_id, pet_id: selectedPetId, client_id: selectedClientId,
-            visit_id: visit.id, record_type: "lab", title,
-            status: originalMedicalRecords.find((row) => row.id === medicalRecordDraft.labRecordIds[index])?.status || "ordered",
-            notes: medicalRecordDraft.labNotes.trim() || null,
-          })),
+          ...medicalRecordDraft.labTests.filter((test) => test.title.trim()).map((test) => {
+            const matchedRecord = originalMedicalRecords.find((row) => row.id === test.id && row.record_type === "lab");
+            return {
+              ...(editVisitId ? { id: test.id || crypto.randomUUID() } : {}),
+              clinic_id: clinicContext.clinic_id, pet_id: selectedPetId, client_id: selectedClientId,
+              visit_id: visit.id, record_type: "lab", title: test.title.trim(),
+              status: matchedRecord?.status || "ordered",
+              notes: medicalRecordDraft.labNotes.trim() || null,
+            };
+          }),
           ...(reason === "surgery" && medicalRecordDraft.surgeryTitle.trim() ? [{
             ...(editVisitId ? { id: medicalRecordDraft.surgeryRecordId || crypto.randomUUID() } : {}),
             clinic_id: clinicContext.clinic_id, pet_id: selectedPetId, client_id: selectedClientId,
@@ -1084,7 +1095,7 @@ export default function NewVisitPage() {
           const retainedIds = medicationDrafts.map((draft) => draft.id);
           const { data: existingRows, error: existingRowsError } = await db.from("visit_medications").select("id").eq("visit_id", visit.id);
           if (existingRowsError) throw existingRowsError;
-          const removedIds = originalVaccinations.map(row => row.id).filter(id => !retainedIds.includes(id));
+          const removedIds = (existingRows || []).map((row) => row.id).filter((id) => !retainedIds.includes(id));
           if (removedIds.length) {
             const { error: removeError } = await db.from("visit_medications").delete().in("id", removedIds).eq("visit_id", visit.id);
             if (removeError) throw removeError;
@@ -1229,6 +1240,17 @@ export default function NewVisitPage() {
             const { error: categoryError } = await db.from("visit_attachments").update({ category: item.category }).eq("id", item.id).eq("visit_id", visit.id);
             if (categoryError) throw categoryError;
           }
+        }
+
+        if (appointmentId && visitSource === "appointment") {
+          const completedAt = new Date().toISOString();
+          const { data: completedAppointment, error: appointmentError } = await db.from("appointments").update({
+            status: "completed",
+            completed_at: completedAt,
+            updated_at: completedAt,
+          }).eq("id", appointmentId).eq("client_id", selectedClientId).eq("pet_id", selectedPetId).select("id").maybeSingle();
+          if (appointmentError) throw appointmentError;
+          if (!completedAppointment) throw new Error(language === "ar" ? "لم يتم العثور على الموعد المرتبط بهذه الزيارة." : "The appointment linked to this visit could not be found.");
         }
 
         if (createBill && createdInvoiceId) {

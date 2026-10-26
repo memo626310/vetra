@@ -1,9 +1,8 @@
 "use client";
 
 export type MedicalRecordDraft = {
-  labTests: string;
+  labTests: Array<{ id: string | null; title: string }>;
   labNotes: string;
-  labRecordIds: string[];
   surgeryRecordId: string | null;
   surgeryTitle: string;
   surgeryStatus: "planned" | "completed";
@@ -14,9 +13,8 @@ export type MedicalRecordDraft = {
 };
 
 export const emptyMedicalRecordDraft: MedicalRecordDraft = {
-  labTests: "",
+  labTests: [],
   labNotes: "",
-  labRecordIds: [],
   surgeryRecordId: null,
   surgeryTitle: "",
   surgeryStatus: "planned",
@@ -50,7 +48,28 @@ export default function NewVisitMedicalRecordsFields({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className={card}>
           <label className="mb-2 block text-sm font-semibold">{ar ? "طلب تحاليل" : "Order lab tests"}</label>
-          <textarea className={field} rows={3} value={value.labTests} onChange={(event) => update({ labTests: event.target.value })} placeholder={ar ? "اكتب كل تحليل في سطر، مثال: صورة دم كاملة" : "One test per line, e.g. CBC"} />
+          <div className="space-y-2">
+            {value.labTests.map((test, index) => <div key={test.id || `new-lab-${index}`} className="flex items-center gap-2">
+              <input
+                className={field}
+                value={test.title}
+                onChange={(event) => update({ labTests: value.labTests.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item) })}
+                placeholder={ar ? "اسم التحليل، مثال: صورة دم كاملة" : "Test name, e.g. CBC"}
+                aria-label={ar ? `اسم التحليل ${index + 1}` : `Lab test ${index + 1}`}
+              />
+              <button
+                type="button"
+                onClick={() => update({ labTests: value.labTests.filter((_, itemIndex) => itemIndex !== index) })}
+                className="rounded-lg px-2 py-2 text-rose-500 hover:bg-rose-500/10"
+                aria-label={ar ? "حذف التحليل" : "Remove lab test"}
+              >×</button>
+            </div>)}
+          </div>
+          <button
+            type="button"
+            onClick={() => update({ labTests: [...value.labTests, { id: null, title: "" }] })}
+            className="mt-2 rounded-lg border border-dashed border-cyan-500/40 px-3 py-2 text-xs font-semibold text-cyan-700 dark:text-cyan-300"
+          >{ar ? "+ إضافة تحليل" : "+ Add test"}</button>
           <input className={`${field} mt-2`} value={value.labNotes} onChange={(event) => update({ labNotes: event.target.value })} placeholder={ar ? "ملاحظات للمعمل (اختياري)" : "Lab notes (optional)"} />
         </div>
         {visitReason === "surgery" && <div className={card}>
