@@ -46,7 +46,7 @@ export default function ReceptionPage() {
       setAuthorized(true);
 
       const db = await getClinicDb();
-      const [visitsResult, invoicesResult, dismissalsResult] = await Promise.all([
+      const [visitsResult, invoicesResult, dismissalsResult, queueResult] = await Promise.all([
         db.from("visits")
           .select("id,client_id,pet_id,visit_date,reason,diagnosis,created_at,client:clients(name,phone),pet:pets(name,species)")
           .eq("clinic_id", context.clinic_id)
@@ -59,21 +59,28 @@ export default function ReceptionPage() {
         db.from("clinic_checkout_dismissals")
           .select("visit_id")
           .eq("clinic_id", context.clinic_id),
+        db.from("clinic_reception_queue")
+          .select("visit_id")
+          .eq("clinic_id", context.clinic_id),
       ]);
 
       if (visitsResult.error) throw visitsResult.error;
       if (invoicesResult.error) throw invoicesResult.error;
       if (dismissalsResult.error && !isMissingTable(dismissalsResult.error)) throw dismissalsResult.error;
+      if (queueResult.error) throw queueResult.error;
 
       const invoiceByVisit = new Map<string, { id: string; status: string }>();
       for (const invoice of invoicesResult.data || []) {
         if (invoice.visit_id) invoiceByVisit.set(String(invoice.visit_id), { id: String(invoice.id), status: String(invoice.status) });
       }
       const dismissedVisits = new Set((dismissalsResult.data || []).map((row) => String(row.visit_id)));
+      const sentVisits = new Set((queueResult.data || []).map((row) => String(row.visit_id)));
       setVisits(((visitsResult.data || []) as unknown as VisitRow[])
         .filter((visit) => {
           const invoice = invoiceByVisit.get(visit.id);
-          return (!invoice || ["draft", "issued", "unpaid", "partially_paid"].includes(invoice.status)) && !dismissedVisits.has(visit.id);
+          return sentVisits.has(visit.id)
+            && (!invoice || ["draft", "issued", "unpaid", "partially_paid"].includes(invoice.status))
+            && !dismissedVisits.has(visit.id);
         })
         .map((visit) => ({
           ...visit,
