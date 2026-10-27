@@ -1061,6 +1061,7 @@ export default function Home() {
               language={isArabic ? "ar" : "en"}
               darkMode={darkMode}
               canDismiss={["owner", "admin"].includes(String(clinicContext.role || "").toLowerCase())}
+              canHideInvoice={String(clinicContext.role || "").toLowerCase() === "owner"}
             />
           )}
 

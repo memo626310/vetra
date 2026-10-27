@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
+import { vetraCore } from "@/lib/vetra-core";
 
 type VisitRow = {
   id: string;
@@ -28,6 +29,7 @@ export default function ReceptionPage() {
   const [language, setLanguage] = useState<"ar" | "en">("ar");
   const [dark, setDark] = useState(true);
   const [authorized, setAuthorized] = useState<boolean | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
   const [visits, setVisits] = useState<VisitRow[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -38,11 +40,13 @@ export default function ReceptionPage() {
   const loadQueue = useCallback(async () => {
     try {
       const context = await getClinicContext();
-      if (context.role !== "reception") {
+      const role = context.role.toLowerCase();
+      if (role !== "reception" && role !== "owner") {
         setAuthorized(false);
         setLoading(false);
         return;
       }
+      setIsOwner(role === "owner");
       setAuthorized(true);
 
       const db = await getClinicDb();
@@ -53,7 +57,7 @@ export default function ReceptionPage() {
           .order("created_at", { ascending: false })
           .limit(250),
         db.from("invoices")
-          .select("id,visit_id,status")
+          .select("id,visit_id,status,notes")
           .eq("clinic_id", context.clinic_id)
           .not("visit_id", "is", null),
         db.from("clinic_checkout_dismissals")
@@ -67,14 +71,23 @@ export default function ReceptionPage() {
       if (visitsResult.error) throw visitsResult.error;
       if (invoicesResult.error) throw invoicesResult.error;
       if (dismissalsResult.error && !isMissingTable(dismissalsResult.error)) throw dismissalsResult.error;
-      if (queueResult.error) throw queueResult.error;
+      if (queueResult.error && !isMissingTable(queueResult.error)) throw queueResult.error;
 
       const invoiceByVisit = new Map<string, { id: string; status: string }>();
+      const legacySentVisitIds = new Set<string>();
       for (const invoice of invoicesResult.data || []) {
-        if (invoice.visit_id) invoiceByVisit.set(String(invoice.visit_id), { id: String(invoice.id), status: String(invoice.status) });
+        if (invoice.visit_id) {
+          const visitId = String(invoice.visit_id);
+          invoiceByVisit.set(visitId, { id: String(invoice.id), status: String(invoice.status) });
+          if (invoice.notes === "فاتورة من الزيارة للاستقبال" || invoice.notes === "Invoice from visit for reception") {
+            legacySentVisitIds.add(visitId);
+          }
+        }
       }
       const dismissedVisits = new Set((dismissalsResult.data || []).map((row) => String(row.visit_id)));
-      const sentVisits = new Set((queueResult.data || []).map((row) => String(row.visit_id)));
+      const sentVisits = queueResult.error
+        ? legacySentVisitIds
+        : new Set((queueResult.data || []).map((row) => String(row.visit_id)));
       setVisits(((visitsResult.data || []) as unknown as VisitRow[])
         .filter((visit) => {
           const invoice = invoiceByVisit.get(visit.id);
@@ -94,6 +107,31 @@ export default function ReceptionPage() {
       setLoading(false);
     }
   }, [isAr]);
+
+  async function hideInvoice(visitId: string) {
+    if (!isOwner) return;
+    const confirmed = window.confirm(isAr
+      ? "سيتم إخفاء الفاتورة من الداشبورد والاستقبال مع الاحتفاظ بها في سجل الفواتير. هل تريد المتابعة؟"
+      : "Hide this invoice from the dashboard and reception while keeping it in the invoice history?");
+    if (!confirmed) return;
+
+    setError("");
+    try {
+      const { data, error: sessionError } = await vetraCore.auth.getSession();
+      const token = data.session?.access_token;
+      if (sessionError || !token) throw new Error(isAr ? "انتهت الجلسة. سجّل الدخول مرة أخرى." : "Your session expired. Sign in again.");
+      const response = await fetch("/api/reception/checkout-dismissals", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ visitId }),
+      });
+      const result = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(result?.error || (isAr ? "تعذر إخفاء الفاتورة من القوائم." : "Could not hide the invoice from the lists."));
+      setVisits((current) => current.filter((visit) => visit.id !== visitId));
+    } catch (hideError) {
+      setError(hideError instanceof Error ? hideError.message : (isAr ? "تعذر إخفاء الفاتورة." : "Could not hide the invoice."));
+    }
+  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -150,7 +188,7 @@ export default function ReceptionPage() {
           <div>
             <p className="text-xs font-bold text-teal-500">VETRA / RECEPTION</p>
             <h1 className="mt-1 text-2xl font-black">{isAr ? "استقبال وتحصيل" : "Reception & checkout"}</h1>
-            <p className="mt-1 text-sm text-slate-500">{isAr ? "الزيارات المحفوظة التي تحتاج إلى فاتورة وتحصيل" : "Saved visits waiting for an invoice and checkout"}</p>
+            <p className="mt-1 text-sm text-slate-500">{isAr ? "الزيارات التي أرسلها الطبيب للاستقبال بانتظار المراجعة والتحصيل" : "Visits the doctor sent to reception for review and checkout"}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => router.push("/dashboard")} className="min-h-10 rounded-lg bg-teal-500 px-4 text-sm font-bold text-slate-950 transition hover:bg-teal-400">
@@ -206,6 +244,9 @@ export default function ReceptionPage() {
                   </button>
                   {visit.invoice_id && ["issued", "unpaid"].includes(visit.invoice_status || "") && <button type="button" onClick={() => router.push(`/invoices/new?draft=${encodeURIComponent(visit.invoice_id as string)}`)} className="min-h-11 shrink-0 rounded-lg border border-cyan-400/30 px-4 text-sm font-bold text-cyan-600 dark:text-cyan-300">
                     {isAr ? "تعديل الفاتورة" : "Edit invoice"}
+                  </button>}
+                  {isOwner && visit.invoice_id && <button type="button" onClick={() => void hideInvoice(visit.id)} className="min-h-11 shrink-0 rounded-lg border border-red-400/30 px-4 text-sm font-bold text-red-600 dark:text-red-300">
+                    {isAr ? "إخفاء الفاتورة" : "Hide invoice"}
                   </button>}
                 </li>
               ))}

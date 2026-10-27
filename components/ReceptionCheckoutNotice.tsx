@@ -23,6 +23,7 @@ type Props = {
   language: "ar" | "en";
   darkMode: boolean;
   canDismiss: boolean;
+  canHideInvoice: boolean;
 };
 
 function isMissingTable(error: { code?: string; message?: string }) {
@@ -30,7 +31,7 @@ function isMissingTable(error: { code?: string; message?: string }) {
     || /relation .* does not exist|table .* not found|could not find the table/i.test(error.message || "");
 }
 
-export default function ReceptionCheckoutNotice({ clinicId, language, darkMode, canDismiss }: Props) {
+export default function ReceptionCheckoutNotice({ clinicId, language, darkMode, canDismiss, canHideInvoice }: Props) {
   const router = useRouter();
   const [visits, setVisits] = useState<PendingVisit[]>([]);
   const [dismissedVisitId, setDismissedVisitId] = useState<string | null>(null);
@@ -47,7 +48,7 @@ export default function ReceptionCheckoutNotice({ clinicId, language, darkMode, 
           .order("created_at", { ascending: false })
           .limit(250),
         db.from("invoices")
-          .select("id,visit_id,status")
+          .select("id,visit_id,status,notes")
           .eq("clinic_id", clinicId)
           .not("visit_id", "is", null),
         db.from("clinic_checkout_dismissals")
@@ -60,14 +61,23 @@ export default function ReceptionCheckoutNotice({ clinicId, language, darkMode, 
       if (visitsResult.error) throw visitsResult.error;
       if (invoicesResult.error) throw invoicesResult.error;
       if (dismissalsResult.error && !isMissingTable(dismissalsResult.error)) throw dismissalsResult.error;
-      if (queueResult.error) throw queueResult.error;
+      if (queueResult.error && !isMissingTable(queueResult.error)) throw queueResult.error;
 
       const invoiceByVisit = new Map<string, { id: string; status: string }>();
+      const legacySentVisitIds = new Set<string>();
       for (const invoice of invoicesResult.data || []) {
-        if (invoice.visit_id) invoiceByVisit.set(String(invoice.visit_id), { id: String(invoice.id), status: String(invoice.status) });
+        if (invoice.visit_id) {
+          const visitId = String(invoice.visit_id);
+          invoiceByVisit.set(visitId, { id: String(invoice.id), status: String(invoice.status) });
+          if (invoice.notes === "فاتورة من الزيارة للاستقبال" || invoice.notes === "Invoice from visit for reception") {
+            legacySentVisitIds.add(visitId);
+          }
+        }
       }
       const dismissedVisitIds = new Set((dismissalsResult.data || []).map((dismissal) => String(dismissal.visit_id)));
-      const sentVisitIds = new Set((queueResult.data || []).map((row) => String(row.visit_id)));
+      const sentVisitIds = queueResult.error
+        ? legacySentVisitIds
+        : new Set((queueResult.data || []).map((row) => String(row.visit_id)));
       setVisits(((visitsResult.data || []) as unknown as PendingVisit[])
         .filter((visit) => {
           const invoice = invoiceByVisit.get(visit.id);
@@ -81,7 +91,13 @@ export default function ReceptionCheckoutNotice({ clinicId, language, darkMode, 
           invoice_status: invoiceByVisit.get(visit.id)?.status || null,
         })));
     } catch (error) {
-      console.error("RECEPTION CHECKOUT NOTICE ERROR:", error);
+      const detail = error as { code?: string; message?: string; details?: string; hint?: string };
+      console.error("RECEPTION CHECKOUT NOTICE ERROR:", {
+        code: detail?.code,
+        message: detail?.message || (error instanceof Error ? error.message : String(error)),
+        details: detail?.details,
+        hint: detail?.hint,
+      });
     }
   }, [clinicId]);
 
@@ -137,6 +153,35 @@ export default function ReceptionCheckoutNotice({ clinicId, language, darkMode, 
     }
   }
 
+  async function hideInvoice(visitId: string) {
+    if (!canHideInvoice) return;
+    const confirmed = window.confirm(isAr
+      ? "سيتم إخفاء الفاتورة من الداشبورد والاستقبال مع الاحتفاظ بها في سجل الفواتير. هل تريد المتابعة؟"
+      : "Hide this invoice from the dashboard and reception while keeping it in the invoice history?");
+    if (!confirmed) return;
+
+    setDismissedVisitId(visitId);
+    setActionError("");
+    try {
+      const { data, error } = await vetraCore.auth.getSession();
+      const token = data.session?.access_token;
+      if (error || !token) throw new Error(isAr ? "انتهت الجلسة. سجّل الدخول مرة أخرى." : "Your session expired. Sign in again.");
+
+      const response = await fetch("/api/reception/checkout-dismissals", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ visitId }),
+      });
+      const result = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(result?.error || (isAr ? "تعذر إخفاء الفاتورة من القوائم." : "Could not hide the invoice from the lists."));
+      setVisits((current) => current.filter((visit) => visit.id !== visitId));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : (isAr ? "تعذر إخفاء الفاتورة." : "Could not hide the invoice."));
+    } finally {
+      setDismissedVisitId(null);
+    }
+  }
+
   return (
     <section role="status" aria-live="polite" className={`mb-5 border p-4 sm:p-5 ${surface}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -175,7 +220,19 @@ export default function ReceptionCheckoutNotice({ clinicId, language, darkMode, 
                 {isAr ? "تعديل" : "Edit"}
               </button>
             )}
-            {canDismiss && (
+            {canHideInvoice && visit.invoice_id && (
+              <button
+                type="button"
+                onClick={() => void hideInvoice(visit.id)}
+                disabled={dismissedVisitId !== null}
+                title={isAr ? "إخفاء من الداشبورد والاستقبال" : "Hide from dashboard and reception"}
+                aria-label={`${isAr ? "إخفاء الفاتورة" : "Hide invoice"}: ${visit.client?.name || visit.id}`}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center border text-lg font-semibold transition disabled:cursor-wait disabled:opacity-50 ${darkMode ? "border-white/10 text-slate-400 hover:border-red-400/40 hover:text-red-300" : "border-slate-200 text-slate-500 hover:border-red-300 hover:text-red-600"}`}
+              >
+                {dismissedVisitId === visit.id ? "…" : "×"}
+              </button>
+            )}
+            {canDismiss && !visit.invoice_id && (
               <button
                 type="button"
                 onClick={() => void dismissVisit(visit.id)}
