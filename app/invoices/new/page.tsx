@@ -7,6 +7,7 @@ import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { writeVetraThemeMode } from "@/lib/theme";
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
+import { clearFormDraft, getFormDraftStorageKey, readFormDraft, writeFormDraft } from "@/lib/form-drafts";
 
 type Client = {
   id: string;
@@ -126,6 +127,8 @@ export default function NewInvoicePage() {
   const [visitBillLoading, setVisitBillLoading] = useState(false);
   const [invoiceMedicationNotice, setInvoiceMedicationNotice] = useState("");
   const [requestedPetId, setRequestedPetId] = useState("");
+  const [draftKey, setDraftKey] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
   const visitPrefilledRef = useRef(false);
 
   useEffect(() => {
@@ -142,8 +145,47 @@ export default function NewInvoicePage() {
     setVisitId(params.get("visit") || "");
     setDraftId(params.get("draft") || "");
     setQuickSaleMode(params.get("mode") === "quick-sale");
-    setReady(true);
+    const draftMode = params.get("mode") === "quick-sale" ? "quick-sale" : "invoice";
+    const draftScope = params.get("draft") || params.get("visit") || draftMode;
+    void getFormDraftStorageKey(`new-${draftScope}`).then((key) => {
+      if (key) {
+        const draft = readFormDraft<{
+          financialAccountId: string; clientId: string; petId: string; productSearch: string;
+          selectedCategoryId: string; clientSearch: string; showNewClient: boolean;
+          newClientName: string; newClientPhone: string; lines: InvoiceLine[];
+          discount: string; discountMode: "amount" | "percentage"; paidAmount: string;
+          paidAmountTouched: boolean; paymentMethod: string; billingMode: "cash" | "credit";
+          notes: string; serviceName: string; servicePrice: string;
+        }>(key);
+        if (draft) {
+          setFinancialAccountId(draft.financialAccountId || "");
+          setClientId(draft.clientId || params.get("client") || ""); setPetId(draft.petId || params.get("pet") || "");
+          setProductSearch(draft.productSearch || ""); setSelectedCategoryId(draft.selectedCategoryId || "");
+          setClientSearch(draft.clientSearch || ""); setShowNewClient(Boolean(draft.showNewClient));
+          setNewClientName(draft.newClientName || ""); setNewClientPhone(draft.newClientPhone || "");
+          setLines(Array.isArray(draft.lines) ? draft.lines : []); setDiscount(draft.discount || "0");
+          setDiscountMode(draft.discountMode || "amount"); setPaidAmount(draft.paidAmount || "0");
+          setPaidAmountTouched(Boolean(draft.paidAmountTouched)); setPaymentMethod(draft.paymentMethod || "");
+          setBillingMode(draft.billingMode || "cash"); setNotes(draft.notes || "");
+          setServiceName(draft.serviceName || ""); setServicePrice(draft.servicePrice || "");
+        }
+        setDraftKey(key);
+      }
+      setDraftRestored(true);
+      setReady(true);
+    });
   }, []);
+
+  useEffect(() => {
+    if (!draftRestored || !draftKey) return;
+    writeFormDraft(draftKey, {
+      financialAccountId, clientId, petId, productSearch, selectedCategoryId, clientSearch,
+      showNewClient, newClientName, newClientPhone, lines, discount, discountMode, paidAmount,
+      paidAmountTouched, paymentMethod, billingMode, notes, serviceName, servicePrice,
+    });
+  }, [draftRestored, draftKey, financialAccountId, clientId, petId, productSearch, selectedCategoryId,
+    clientSearch, showNewClient, newClientName, newClientPhone, lines, discount, discountMode,
+    paidAmount, paidAmountTouched, paymentMethod, billingMode, notes, serviceName, servicePrice]);
 
   useEffect(() => {
     if (!ready) return;
@@ -477,7 +519,9 @@ export default function NewInvoicePage() {
         setRequestedPetId(draft.pet_id || "");
         setDiscount(String(draft.discount || 0));
         setNotes(draft.notes || "");
-        setBillingMode(draft.payment_method === "cash" ? "cash" : "credit");
+        // Visit invoices sent to reception are still awaiting collection, so a
+        // missing payment method means "not collected yet", not credit billing.
+        setBillingMode(draft.payment_method === "credit" ? "credit" : "cash");
         setLines((draftItems || []).map((item) => ({
           key: item.id,
           item_type: item.item_type as InvoiceLine["item_type"],
@@ -953,6 +997,8 @@ setSaving(true);
         return;
       }
       setSuccess(language === "ar" ? "تم حفظ تعديلات الفاتورة." : "Invoice changes saved.");
+      clearFormDraft(draftKey);
+      setDraftKey(null);
       setSaving(false);
       router.push(`/invoices/${encodeURIComponent(draftId)}`);
       return;
@@ -1155,6 +1201,8 @@ setSuccess(
           ? "Invoice issued successfully."
           : "Invoice saved as draft."
     );
+    clearFormDraft(draftKey);
+    setDraftKey(null);
 
     setSaving(false);
 

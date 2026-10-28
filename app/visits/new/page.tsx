@@ -1,6 +1,7 @@
 "use client";
 
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
+import { clearFormDraft, clearFormDraftFiles, getFormDraftStorageKey, readFormDraft, readFormDraftFiles, writeFormDraft, writeFormDraftFiles } from "@/lib/form-drafts";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -125,8 +126,79 @@ export default function NewVisitPage() {
   const [drawerMedications, setDrawerMedications] = useState<DrawerMedication[]>([]);
   const [medicalRecordDraft, setMedicalRecordDraft] = useState<MedicalRecordDraft>(emptyMedicalRecordDraft);
   const [originalMedicalRecords, setOriginalMedicalRecords] = useState<Array<{ id: string; record_type: string; title: string; status: string | null }>>([]);
+  const [draftKey, setDraftKey] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(Boolean(editVisitId));
 
   const t = translations[language];
+
+  useEffect(() => {
+    if (editVisitId) return;
+    const params = new URLSearchParams(window.location.search);
+    const scope = params.get("appointment") || params.get("pet") || "new";
+    void getFormDraftStorageKey(`new-visit-${scope}`).then(async (key) => {
+      if (key) {
+        const draft = readFormDraft<{
+          selectedClientId: string; selectedPetId: string; clientSearch: string; petSearch: string;
+          started: boolean; visitSource: "appointment" | "new_visit"; appointmentId: string;
+          performingDoctor: string; groomingType: string; consultationFee: number; followUpFee: number;
+          injectionFee: number; medicationChargePrices: Record<string, number>;
+          medicationChargeQuantities: Record<string, number>; symptoms: SymptomDraft[];
+          visitServices: VisitServiceDraft[]; visitDate: string; reason: string; examStatus: "normal" | "abnormal" | "";
+          examination: string; followUp: string; followUpDetails: string; diagnosis: string; treatment: string;
+          visitNotes: string; weight: string; temperature: string; heartRate: string; respiratoryRate: string;
+          medicationSearch: string; selectedMedicationId: string; medicationDrafts: MedicationDraft[];
+          formularyDrafts: FormularyVisitDraft[]; externalMedicationDrafts: ExternalMedicationDraft[];
+          vaccinations: VaccinationDraft[]; drawerMedications: DrawerMedication[]; medicalRecordDraft: MedicalRecordDraft;
+        }>(key);
+        const savedAttachments = await readFormDraftFiles<VisitAttachmentDraft[]>(key);
+        if (draft) {
+          setSelectedClientId(draft.selectedClientId || ""); setSelectedPetId(draft.selectedPetId || params.get("pet") || "");
+          setClientSearch(draft.clientSearch || ""); setPetSearch(draft.petSearch || ""); setStarted(Boolean(draft.started));
+          setVisitSource(draft.visitSource || (params.has("appointment") ? "appointment" : "new_visit"));
+          setAppointmentId(draft.appointmentId || params.get("appointment") || "");
+          setPerformingDoctor(draft.performingDoctor || ""); setGroomingType(draft.groomingType || "");
+          setConsultationFee(Number(draft.consultationFee) || 0); setFollowUpFee(Number(draft.followUpFee) || 0);
+          setInjectionFee(Number(draft.injectionFee) || 0); setMedicationChargePrices(draft.medicationChargePrices || {});
+          setMedicationChargeQuantities(draft.medicationChargeQuantities || {}); setSymptoms(draft.symptoms || []);
+          setVisitServices(draft.visitServices || []); setVisitDate(draft.visitDate || ""); setReason(draft.reason || "examination");
+          setExamStatus(draft.examStatus || ""); setExamination(draft.examination || ""); setFollowUp(draft.followUp || "");
+          setFollowUpDetails(draft.followUpDetails || ""); setDiagnosis(draft.diagnosis || ""); setTreatment(draft.treatment || "");
+          setVisitNotes(draft.visitNotes || ""); setWeight(draft.weight || ""); setTemperature(draft.temperature || "");
+          setHeartRate(draft.heartRate || ""); setRespiratoryRate(draft.respiratoryRate || "");
+          setMedicationSearch(draft.medicationSearch || ""); setSelectedMedicationId(draft.selectedMedicationId || "");
+          setMedicationDrafts(draft.medicationDrafts || []); setFormularyDrafts(draft.formularyDrafts || []);
+          setExternalMedicationDrafts(draft.externalMedicationDrafts || []); setVaccinations(draft.vaccinations || []);
+          setDrawerMedications(draft.drawerMedications || []);
+          if (draft.medicalRecordDraft) setMedicalRecordDraft(draft.medicalRecordDraft);
+        }
+        if (savedAttachments) setAttachments(savedAttachments);
+        setDraftKey(key);
+      }
+      setDraftRestored(true);
+    });
+  }, [editVisitId]);
+
+  useEffect(() => {
+    if (!draftRestored || !draftKey || editVisitId) return;
+    writeFormDraft(draftKey, {
+      selectedClientId, selectedPetId, clientSearch, petSearch, started, visitSource, appointmentId,
+      performingDoctor, groomingType, consultationFee, followUpFee, injectionFee, medicationChargePrices,
+      medicationChargeQuantities, symptoms, visitServices, visitDate, reason, examStatus, examination,
+      followUp, followUpDetails, diagnosis, treatment, visitNotes, weight, temperature, heartRate,
+      respiratoryRate, medicationSearch, selectedMedicationId, medicationDrafts, formularyDrafts,
+      externalMedicationDrafts, vaccinations, drawerMedications, medicalRecordDraft,
+    });
+  }, [draftRestored, draftKey, editVisitId, selectedClientId, selectedPetId, clientSearch, petSearch,
+    started, visitSource, appointmentId, performingDoctor, groomingType, consultationFee, followUpFee,
+    injectionFee, medicationChargePrices, medicationChargeQuantities, symptoms, visitServices, visitDate,
+    reason, examStatus, examination, followUp, followUpDetails, diagnosis, treatment, visitNotes, weight,
+    temperature, heartRate, respiratoryRate, medicationSearch, selectedMedicationId, medicationDrafts,
+    formularyDrafts, externalMedicationDrafts, vaccinations, drawerMedications, medicalRecordDraft]);
+
+  useEffect(() => {
+    if (!draftRestored || !draftKey || editVisitId) return;
+    void writeFormDraftFiles(draftKey, attachments);
+  }, [draftRestored, draftKey, editVisitId, attachments]);
 
   useEffect(() => {
     const savedLanguage = window.localStorage.getItem(
@@ -1295,6 +1367,9 @@ export default function NewVisitPage() {
       }
 
       setReason("examination");
+      clearFormDraft(draftKey);
+      void clearFormDraftFiles(draftKey);
+      setDraftKey(null);
       setPerformingDoctor(clinicContext.doctor_name || "__any__");
       setGroomingType("");
       setAppointmentId("");
@@ -1386,6 +1461,10 @@ export default function NewVisitPage() {
 
   if (!permissionsLoaded || !can("medical_records", editVisitId ? "edit" : "create")) {
     return <main className="p-6" role="status">{!permissionsLoaded ? (language === "ar" ? "جارٍ تحميل الصلاحيات..." : "Loading permissions...") : (language === "ar" ? "لا تملك صلاحية إضافة أو تعديل هذه الزيارة." : "You do not have permission to add or edit this visit.")}</main>;
+  }
+
+  if (!draftRestored && !editVisitId) {
+    return <main className="flex min-h-screen items-center justify-center bg-[#0F1115] text-white"><p>{language === "ar" ? "جارٍ استعادة مسودة الزيارة..." : "Restoring visit draft..."}</p></main>;
   }
 
   return (

@@ -7,6 +7,7 @@ import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 import { writeVetraThemeMode } from "@/lib/theme";
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
+import { clearFormDraft, getFormDraftStorageKey, readFormDraft, writeFormDraft } from "@/lib/form-drafts";
 
 type Supplier = { id: string; name: string; phone: string | null; notes: string | null };
 type Category = { id: string; name: string };
@@ -63,6 +64,8 @@ export default function InventoryPurchasesPage() {
   const [barcodeInput, setBarcodeInput] = useState("");
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [draftKey, setDraftKey] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
 
   const isAr = language === "ar";
   const inputClass = `w-full rounded-xl border px-3 py-3 outline-none focus:border-cyan-500 ${dark ? "border-white/10 bg-[#0F1115] text-white" : "border-slate-200 bg-slate-50 text-slate-900"}`;
@@ -78,8 +81,49 @@ export default function InventoryPurchasesPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLanguage(savedLanguage === "en" ? "en" : "ar");
     setDark(savedTheme !== "light");
-    setReady(true);
+    void getFormDraftStorageKey("inventory-purchase").then((key) => {
+      if (key) {
+        const draft = readFormDraft<{
+          supplierId: string; invoiceReference: string; notes: string; accountId: string;
+          productId: string; quantity: string; unitCost: string; lines: Line[];
+          showSupplierForm: boolean; newSupplierName: string; newSupplierPhone: string; newSupplierNotes: string;
+          showProductForm: boolean; newProductName: string; newProductCategoryId: string; newCategoryName: string;
+          newProductBarcode: string; newProductUnit: string; newProductWholesalePrice: string;
+          newProductRetailPrice: string; newProductReorderLevel: string; newProductExpiryDate: string;
+        }>(key);
+        if (draft) {
+          setSupplierId(draft.supplierId || ""); setInvoiceReference(draft.invoiceReference || "");
+          setNotes(draft.notes || ""); setAccountId(draft.accountId || "");
+          setProductId(draft.productId || ""); setQuantity(draft.quantity || ""); setUnitCost(draft.unitCost || "");
+          setLines(Array.isArray(draft.lines) ? draft.lines : []);
+          setShowSupplierForm(Boolean(draft.showSupplierForm)); setNewSupplierName(draft.newSupplierName || "");
+          setNewSupplierPhone(draft.newSupplierPhone || ""); setNewSupplierNotes(draft.newSupplierNotes || "");
+          setShowProductForm(Boolean(draft.showProductForm)); setNewProductName(draft.newProductName || "");
+          setNewProductCategoryId(draft.newProductCategoryId || ""); setNewCategoryName(draft.newCategoryName || "");
+          setNewProductBarcode(draft.newProductBarcode || ""); setNewProductUnit(draft.newProductUnit || "piece");
+          setNewProductWholesalePrice(draft.newProductWholesalePrice || ""); setNewProductRetailPrice(draft.newProductRetailPrice || "");
+          setNewProductReorderLevel(draft.newProductReorderLevel || "0"); setNewProductExpiryDate(draft.newProductExpiryDate || "");
+        }
+        setDraftKey(key);
+      }
+      setDraftRestored(true);
+      setReady(true);
+    });
   }, []);
+
+  useEffect(() => {
+    if (!draftRestored || !draftKey) return;
+    writeFormDraft(draftKey, {
+      supplierId, invoiceReference, notes, accountId, productId, quantity, unitCost, lines,
+      showSupplierForm, newSupplierName, newSupplierPhone, newSupplierNotes,
+      showProductForm, newProductName, newProductCategoryId, newCategoryName,
+      newProductBarcode, newProductUnit, newProductWholesalePrice, newProductRetailPrice,
+      newProductReorderLevel, newProductExpiryDate,
+    });
+  }, [draftRestored, draftKey, supplierId, invoiceReference, notes, accountId, productId, quantity, unitCost,
+    lines, showSupplierForm, newSupplierName, newSupplierPhone, newSupplierNotes, showProductForm,
+    newProductName, newProductCategoryId, newCategoryName, newProductBarcode, newProductUnit,
+    newProductWholesalePrice, newProductRetailPrice, newProductReorderLevel, newProductExpiryDate]);
 
   useEffect(() => {
     if (!ready) return;
@@ -349,6 +393,8 @@ export default function InventoryPurchasesPage() {
       setLines([]);
       setInvoiceReference("");
       setNotes("");
+      clearFormDraft(draftKey);
+      setDraftKey(null);
       setNotice(isAr ? "تم تسجيل الشراء وزيادة المخزون وخصم المبلغ من الخزنة." : "Purchase recorded, stock increased, and the bill deducted from the vault.");
       await loadData();
     } catch (err) {

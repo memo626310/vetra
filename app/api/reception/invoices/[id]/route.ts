@@ -44,7 +44,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       p_notes: typeof body.notes === "string" ? body.notes : "",
       p_items: body.items,
     });
-    if (error) throw error;
+    if (error) {
+      if (/vetra_update_reception_invoice|function .* does not exist|schema cache/i.test(error.message || "")) {
+        throw new PushSetupError(
+          "يلزم تشغيل ملف supabase/tenant-sql/vetra_reception_invoice_edit.sql على قاعدة بيانات العيادة لتفعيل تعديل فواتير الاستقبال.",
+          503,
+        );
+      }
+      throw error;
+    }
     return Response.json({ invoice: data }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof PushSetupError) return Response.json({ error: error.message }, { status: error.status });
