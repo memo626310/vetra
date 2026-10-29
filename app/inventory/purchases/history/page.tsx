@@ -10,7 +10,8 @@ import { useStaffPermissions } from "@/lib/use-staff-permissions";
 type Purchase = {
   id: string;
   supplier_name: string;
-  account_id: string;
+  account_id: string | null;
+  payment_type: "cash" | "credit";
   total_amount: number;
   invoice_reference: string | null;
   notes: string | null;
@@ -99,13 +100,22 @@ export default function PurchaseHistoryPage() {
       if (!["owner", "admin"].includes(context.role) && !can("inventory", "view")) { setAuthorized(false); return; }
       setAuthorized(true);
       const db = await getClinicDb();
-      const [purchaseResult, accountResult] = await Promise.all([
-        db.from("inventory_purchases").select("id,supplier_name,account_id,total_amount,invoice_reference,notes,created_at").eq("clinic_id", context.clinic_id).order("created_at", { ascending: false }).limit(1000),
+      const purchaseColumns = "id,supplier_name,account_id,total_amount,invoice_reference,notes,created_at";
+      const loadPurchases = (includePaymentType: boolean) => db.from("inventory_purchases")
+        .select(includePaymentType ? `${purchaseColumns},payment_type` : purchaseColumns)
+        .eq("clinic_id", context.clinic_id).order("created_at", { ascending: false }).limit(1000)
+        .returns<(Omit<Purchase, "payment_type"> & { payment_type?: Purchase["payment_type"] })[]>();
+      const [initialPurchaseResult, accountResult] = await Promise.all([
+        loadPurchases(true),
         db.from("financial_account_balances").select("id,name").eq("clinic_id", context.clinic_id),
       ]);
+      // Existing cash invoices remain readable before the clinic SQL upgrade.
+      const purchaseResult = initialPurchaseResult.error?.code === "42703" && /payment_type/.test(initialPurchaseResult.error.message)
+        ? await loadPurchases(false) : initialPurchaseResult;
       if (purchaseResult.error) throw purchaseResult.error;
       if (accountResult.error) throw accountResult.error;
-      setPurchases((purchaseResult.data || []) as Purchase[]);
+      const rows = purchaseResult.data || [];
+      setPurchases(rows.map((purchase) => ({ ...purchase, payment_type: purchase.payment_type === "credit" ? "credit" : "cash" })));
       setAccounts((accountResult.data || []) as Account[]);
     } catch (loadError) {
       const detail = errorText(loadError, isAr ? "تعذر تحميل فواتير الشراء." : "Could not load purchase invoices.");
@@ -115,7 +125,7 @@ export default function PurchaseHistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [isAr, router, can, permissionsLoaded]);
+  }, [isAr, router, can]);
 
   useEffect(() => {
     // Data loading synchronizes this view with the active clinic database.
@@ -153,7 +163,7 @@ export default function PurchaseHistoryPage() {
       setEditProducts(productsResult.data as ProductOption[] || []);
       setEditLines(lines.map((item) => ({ product_id: item.product_id, quantity: String(item.quantity), unit_cost: String(item.unit_cost) })));
       setEditSupplier(purchase.supplier_name);
-      setEditAccountId(purchase.account_id);
+      setEditAccountId(purchase.account_id || "");
       setEditReference(purchase.invoice_reference || "");
       setEditNotes(purchase.notes || "");
       setEditingPurchase(purchase);
@@ -166,8 +176,8 @@ export default function PurchaseHistoryPage() {
 
   async function saveEdit() {
     if (!can("financial_sensitive_data", "view") || !can("inventory", "edit") || !can("finance_page", "view")) { setEditError(isAr ? "لا تملك صلاحية تعديل فواتير الشراء والخزنة." : "You do not have permission to edit purchase invoices."); return; }
-    if (!editingPurchase || !editSupplier.trim() || !editAccountId || !editLines.length) {
-      setEditError(isAr ? "أكمل المورد والخزنة وأضف صنفًا واحدًا على الأقل." : "Enter a supplier, choose a vault, and add at least one item.");
+    if (!editingPurchase || !editSupplier.trim() || (editingPurchase.payment_type !== "credit" && !editAccountId) || !editLines.length || !Number.isFinite(editTotal) || editTotal <= 0) {
+      setEditError(isAr ? "أكمل المورد والخزنة لفواتير الكاش وأضف أصنافًا بإجمالي أكبر من صفر." : "Enter a supplier and a vault for cash invoices, then add items with a positive total.");
       return;
     }
     if (editLines.some((line) => !line.product_id || Number(line.quantity) <= 0 || Number(line.unit_cost) < 0 || !Number.isFinite(Number(line.quantity)) || !Number.isFinite(Number(line.unit_cost)))) {
@@ -181,7 +191,7 @@ export default function PurchaseHistoryPage() {
       const { error: updateError } = await db.rpc("vetra_update_inventory_purchase", {
         p_purchase_id: editingPurchase.id,
         p_supplier_name: editSupplier.trim(),
-        p_account_id: editAccountId,
+        p_account_id: editingPurchase.payment_type === "credit" ? null : editAccountId,
         p_items: editLines.map((line) => ({ product_id: line.product_id, quantity: Number(line.quantity), unit_cost: Number(line.unit_cost) })),
         p_invoice_reference: editReference.trim() || null,
         p_notes: editNotes.trim() || null,
@@ -234,7 +244,7 @@ export default function PurchaseHistoryPage() {
       <div className="mx-auto max-w-[1250px] space-y-6 px-5 py-6 sm:px-8 lg:px-10">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <button type="button" onClick={() => router.push("/inventory/purchases")} className="mb-3 text-sm text-slate-500 hover:text-cyan-500">← {isAr ? "العودة للمشتريات" : "Back to purchases"}</button>
+            <button type="button" onClick={() => router.push("/inventory/purchases")} className="mb-3 text-sm text-slate-500 hover:text-cyan-500">← {isAr ? "فاتورة شراء جديدة" : "New purchase invoice"}</button>
             <p className="text-sm font-semibold text-cyan-500">VETRA / INVENTORY</p>
             <h1 className="mt-2 text-3xl font-black">{isAr ? "فواتير الشراء السابقة" : "Purchase history"}</h1>
             <p className="mt-2 text-sm text-slate-500">{isAr ? "راجع مشتريات الموردين وتفاصيل الأصناف المسجلة." : "Review supplier purchases and the items recorded on each bill."}</p>
@@ -270,7 +280,7 @@ export default function PurchaseHistoryPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[850px] text-sm">
               <thead><tr className={`border-b text-right text-xs text-slate-500 ${dark ? "border-white/[0.07]" : "border-slate-100"}`}>
-                <th className="px-4 py-4">{isAr ? "التاريخ" : "Date"}</th><th className="px-4 py-4">{isAr ? "المورد" : "Supplier"}</th><th className="px-4 py-4">{isAr ? "رقم الفاتورة" : "Invoice reference"}</th><th className="px-4 py-4">{isAr ? "الخزنة" : "Vault"}</th><th className="px-4 py-4">{isAr ? "الإجمالي" : "Total"}</th><th className="px-4 py-4" />
+                <th className="px-4 py-4">{isAr ? "التاريخ" : "Date"}</th><th className="px-4 py-4">{isAr ? "المورد" : "Supplier"}</th><th className="px-4 py-4">{isAr ? "رقم الفاتورة" : "Invoice reference"}</th><th className="px-4 py-4">{isAr ? "نوع الدفع / الخزنة" : "Payment / Vault"}</th><th className="px-4 py-4">{isAr ? "الإجمالي" : "Total"}</th><th className="px-4 py-4" />
               </tr></thead>
               <tbody>
                 {filteredPurchases.map((purchase) => (
@@ -283,9 +293,9 @@ export default function PurchaseHistoryPage() {
         </section>
       </div>
       {editingPurchase && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"><section dir={isAr ? "rtl" : "ltr"} className={`max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border p-5 shadow-2xl sm:p-7 ${dark ? "border-white/10 bg-[#13161B] text-white" : "border-slate-200 bg-white text-slate-900"}`}>
-        <header className="mb-5 flex items-start justify-between gap-4"><div><h2 className="text-xl font-black">{isAr ? "تعديل فاتورة الشراء" : "Edit purchase invoice"}</h2><p className="mt-1 text-xs text-slate-500">{isAr ? "سيتم تحديث المخزون وتسجيل فرق المبلغ في الخزنة تلقائيًا." : "Stock and the vault ledger will be adjusted automatically."}</p></div><button type="button" onClick={() => setEditingPurchase(null)} className="rounded-lg px-3 py-2 text-xl text-slate-500" aria-label={isAr ? "إغلاق" : "Close"}>×</button></header>
+        <header className="mb-5 flex items-start justify-between gap-4"><div><h2 className="text-xl font-black">{isAr ? "تعديل فاتورة الشراء" : "Edit purchase invoice"}</h2><p className="mt-1 text-xs text-slate-500">{editingPurchase.payment_type === "credit" ? (isAr ? "فاتورة آجلة: سيتم تحديث المخزون والمبلغ المستحق للمورد بدون أي حركة على الخزنة." : "Credit invoice: stock and the amount owed to the supplier will be updated without a vault transaction.") : (isAr ? "فاتورة كاش: سيتم تحديث المخزون وتسجيل فرق المبلغ في الخزنة تلقائيًا." : "Cash invoice: stock and the vault ledger will be adjusted automatically.")}</p></div><button type="button" onClick={() => setEditingPurchase(null)} className="rounded-lg px-3 py-2 text-xl text-slate-500" aria-label={isAr ? "إغلاق" : "Close"}>×</button></header>
         {editError && <div role="alert" className="mb-4 rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">{editError}</div>}
-        <div className="grid gap-3 sm:grid-cols-2"><label><span className="mb-1 block text-xs font-bold text-slate-500">{isAr ? "المورد" : "Supplier"}</span><input value={editSupplier} onChange={(event) => setEditSupplier(event.target.value)} className={inputClass} /></label><label><span className="mb-1 block text-xs font-bold text-slate-500">{isAr ? "الخزنة" : "Vault"}</span><select value={editAccountId} onChange={(event) => setEditAccountId(event.target.value)} className={inputClass}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label><label><span className="mb-1 block text-xs font-bold text-slate-500">{isAr ? "رقم فاتورة المورد" : "Supplier invoice reference"}</span><input value={editReference} onChange={(event) => setEditReference(event.target.value)} className={inputClass} /></label><label><span className="mb-1 block text-xs font-bold text-slate-500">{isAr ? "ملاحظات" : "Notes"}</span><input value={editNotes} onChange={(event) => setEditNotes(event.target.value)} className={inputClass} /></label></div>
+        <div className="grid gap-3 sm:grid-cols-2"><label><span className="mb-1 block text-xs font-bold text-slate-500">{isAr ? "المورد" : "Supplier"}</span><input value={editSupplier} onChange={(event) => setEditSupplier(event.target.value)} className={inputClass} /></label>{editingPurchase.payment_type === "credit" ? <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-bold text-amber-500">{isAr ? "نوع الدفع: آجل — بدون خصم من الخزنة" : "Payment: credit — no vault debit"}</div> : <label><span className="mb-1 block text-xs font-bold text-slate-500">{isAr ? "الخزنة" : "Vault"}</span><select value={editAccountId} onChange={(event) => setEditAccountId(event.target.value)} className={inputClass}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>}<label><span className="mb-1 block text-xs font-bold text-slate-500">{isAr ? "رقم فاتورة المورد" : "Supplier invoice reference"}</span><input value={editReference} onChange={(event) => setEditReference(event.target.value)} className={inputClass} /></label><label><span className="mb-1 block text-xs font-bold text-slate-500">{isAr ? "ملاحظات" : "Notes"}</span><input value={editNotes} onChange={(event) => setEditNotes(event.target.value)} className={inputClass} /></label></div>
         <div className="mt-6 flex items-center justify-between gap-3"><h3 className="font-black">{isAr ? "أصناف الفاتورة" : "Invoice items"}</h3><button type="button" onClick={() => setEditLines((current) => [...current, { product_id: "", quantity: "1", unit_cost: "0" }])} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-500">+ {isAr ? "إضافة صنف" : "Add item"}</button></div>
         <div className="mt-3 space-y-2">{editLines.map((line, index) => <div key={`${line.product_id}-${index}`} className={`grid gap-2 rounded-xl border p-3 sm:grid-cols-[minmax(0,1fr)_110px_140px_40px] ${dark ? "border-white/[0.07] bg-[#0F1115]" : "border-slate-100 bg-slate-50"}`}><select value={line.product_id} onChange={(event) => setEditLines((current) => current.map((item, i) => i === index ? { ...item, product_id: event.target.value } : item))} className={inputClass}><option value="">{isAr ? "اختار المنتج" : "Select product"}</option>{editProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.unit || "piece"}</option>)}</select><input aria-label={isAr ? "الكمية" : "Quantity"} type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => setEditLines((current) => current.map((item, i) => i === index ? { ...item, quantity: event.target.value } : item))} className={inputClass} /><input aria-label={isAr ? "سعر الوحدة" : "Unit cost"} type="number" min="0" step="0.01" value={line.unit_cost} onChange={(event) => setEditLines((current) => current.map((item, i) => i === index ? { ...item, unit_cost: event.target.value } : item))} className={inputClass} /><button type="button" onClick={() => setEditLines((current) => current.filter((_, i) => i !== index))} className="rounded-lg text-xl text-rose-400" aria-label={isAr ? "حذف الصنف" : "Remove item"}>×</button></div>)}</div>
         <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-lg font-black">{isAr ? "الإجمالي الجديد:" : "New total:"} <span className="text-cyan-500">{money(editTotal)}</span></p><div className="flex gap-2"><button type="button" onClick={() => setEditingPurchase(null)} className={`rounded-xl border px-4 py-3 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200"}`}>{isAr ? "إلغاء" : "Cancel"}</button><button type="button" onClick={() => void saveEdit()} disabled={savingEdit} className="rounded-xl bg-cyan-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{savingEdit ? (isAr ? "جارٍ الحفظ..." : "Saving...") : (isAr ? "حفظ التعديل" : "Save changes")}</button></div></div>
@@ -314,7 +324,7 @@ function FragmentPurchase({ purchase, accountName, expanded, items, loadingDetai
       <td className="px-4 py-4 whitespace-nowrap text-slate-500">{dateText(purchase.created_at)}</td>
       <td className="px-4 py-4 font-bold">{purchase.supplier_name}</td>
       <td className="px-4 py-4">{purchase.invoice_reference || "—"}</td>
-      <td className="px-4 py-4">{accountName}</td>
+      <td className="px-4 py-4"><span className={`block text-xs font-bold ${purchase.payment_type === "credit" ? "text-amber-500" : "text-emerald-500"}`}>{purchase.payment_type === "credit" ? (isAr ? "آجل — مستحق للمورد" : "Credit — owed to supplier") : (isAr ? "كاش" : "Cash")}</span>{purchase.payment_type !== "credit" && <span className="mt-1 block">{accountName}</span>}</td>
       <td className="px-4 py-4 whitespace-nowrap font-black">{money(Number(purchase.total_amount || 0))}</td>
       <td className="px-4 py-4"><div className="flex gap-2"><button type="button" onClick={onToggle} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-500">{expanded ? (isAr ? "إخفاء" : "Hide") : (isAr ? "التفاصيل" : "Details")}</button>{canEdit && <button type="button" onClick={onEdit} className="rounded-lg border border-amber-500/30 px-3 py-2 text-xs font-bold text-amber-500">{isAr ? "تعديل" : "Edit"}</button>}</div></td>
     </tr>

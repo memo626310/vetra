@@ -56,6 +56,7 @@ export default function ReceptionPage() {
           .eq("clinic_id", context.clinic_id)
           .order("created_at", { ascending: false })
           .limit(250),
+        // Keep issued invoices in this lookup so they are not treated as missing.
         db.from("invoices")
           .select("id,visit_id,status,notes")
           .eq("clinic_id", context.clinic_id)
@@ -85,14 +86,15 @@ export default function ReceptionPage() {
         }
       }
       const dismissedVisits = new Set((dismissalsResult.data || []).map((row) => String(row.visit_id)));
-      const sentVisits = queueResult.error
-        ? legacySentVisitIds
-        : new Set((queueResult.data || []).map((row) => String(row.visit_id)));
+      const sentVisits = new Set([
+        ...legacySentVisitIds,
+        ...(queueResult.data || []).map((row) => String(row.visit_id)),
+      ]);
       setVisits(((visitsResult.data || []) as unknown as VisitRow[])
         .filter((visit) => {
           const invoice = invoiceByVisit.get(visit.id);
           return sentVisits.has(visit.id)
-            && (!invoice || ["draft", "issued", "unpaid", "partially_paid"].includes(invoice.status))
+            && (!invoice || invoice.status === "draft")
             && !dismissedVisits.has(visit.id);
         })
         .map((visit) => ({
@@ -188,7 +190,7 @@ export default function ReceptionPage() {
           <div>
             <p className="text-xs font-bold text-teal-500">VETRA / RECEPTION</p>
             <h1 className="mt-1 text-2xl font-black">{isAr ? "استقبال وتحصيل" : "Reception & checkout"}</h1>
-            <p className="mt-1 text-sm text-slate-500">{isAr ? "الزيارات التي أرسلها الطبيب للاستقبال بانتظار المراجعة والتحصيل" : "Visits the doctor sent to reception for review and checkout"}</p>
+            <p className="mt-1 text-sm text-slate-500">{isAr ? "الزيارات التي أرسلها الطبيب للاستقبال بانتظار مراجعة وإصدار الفاتورة" : "Visits the doctor sent to reception for invoice review and issuance"}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => router.push("/dashboard")} className="min-h-10 rounded-lg bg-teal-500 px-4 text-sm font-bold text-slate-950 transition hover:bg-teal-400">
@@ -202,7 +204,7 @@ export default function ReceptionPage() {
 
         <section className={`mb-4 grid grid-cols-2 gap-3 border p-4 sm:grid-cols-3 ${surface}`}>
           <div>
-            <p className="text-xs text-slate-500">{isAr ? "بانتظار التحصيل" : "Awaiting checkout"}</p>
+            <p className="text-xs text-slate-500">{isAr ? "بانتظار الإصدار" : "Awaiting issuance"}</p>
             <p className="mt-1 text-2xl font-black tabular-nums">{visits.length}</p>
           </div>
           <label className="col-span-2 sm:col-span-2">
@@ -221,7 +223,7 @@ export default function ReceptionPage() {
           {loading ? (
             <p className="p-10 text-center text-sm text-slate-500">{isAr ? "جارٍ تحميل القائمة..." : "Loading queue..."}</p>
           ) : filteredVisits.length === 0 ? (
-            <p className="p-10 text-center text-sm text-slate-500">{isAr ? "لا توجد زيارات جديدة للتحصيل." : "No visits are waiting for checkout."}</p>
+            <p className="p-10 text-center text-sm text-slate-500">{isAr ? "لا توجد فواتير بانتظار المراجعة والإصدار." : "No invoices are waiting for review and issuance."}</p>
           ) : (
             <ul className="divide-y divide-slate-200/10">
               {filteredVisits.map((visit) => (
@@ -239,12 +241,9 @@ export default function ReceptionPage() {
                       {new Date(visit.visit_date || visit.created_at).toLocaleString(isAr ? "ar-EG" : "en-EG", { dateStyle: "medium", timeStyle: "short" })}
                     </p>
                   </div>
-                  <button type="button" onClick={() => router.push(visit.invoice_id ? `/invoices/${encodeURIComponent(visit.invoice_id)}` : `/invoices/new?visit=${encodeURIComponent(visit.id)}&client=${encodeURIComponent(visit.client_id)}&pet=${encodeURIComponent(visit.pet_id)}`)} className="min-h-11 shrink-0 rounded-lg bg-teal-500 px-4 text-sm font-bold text-slate-950 hover:bg-teal-400">
-                    {visit.invoice_id ? (isAr ? "فتح الفاتورة والتحصيل" : "Open invoice & collect") : (isAr ? "إنشاء فاتورة وتحصيل" : "Create invoice & collect")}
+                  <button type="button" onClick={() => router.push(visit.invoice_id ? `/invoices/new?draft=${encodeURIComponent(visit.invoice_id)}` : `/invoices/new?visit=${encodeURIComponent(visit.id)}&client=${encodeURIComponent(visit.client_id)}&pet=${encodeURIComponent(visit.pet_id)}`)} className="min-h-11 shrink-0 rounded-lg bg-teal-500 px-4 text-sm font-bold text-slate-950 hover:bg-teal-400">
+                    {visit.invoice_id ? (isAr ? "مراجعة وإصدار الفاتورة" : "Review & issue invoice") : (isAr ? "إنشاء وإصدار فاتورة" : "Create & issue invoice")}
                   </button>
-                  {visit.invoice_id && ["issued", "unpaid"].includes(visit.invoice_status || "") && <button type="button" onClick={() => router.push(`/invoices/new?draft=${encodeURIComponent(visit.invoice_id as string)}`)} className="min-h-11 shrink-0 rounded-lg border border-cyan-400/30 px-4 text-sm font-bold text-cyan-600 dark:text-cyan-300">
-                    {isAr ? "تعديل الفاتورة" : "Edit invoice"}
-                  </button>}
                   {isOwner && visit.invoice_id && <button type="button" onClick={() => void hideInvoice(visit.id)} className="min-h-11 shrink-0 rounded-lg border border-red-400/30 px-4 text-sm font-bold text-red-600 dark:text-red-300">
                     {isAr ? "إخفاء الفاتورة" : "Hide invoice"}
                   </button>}

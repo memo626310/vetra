@@ -8,20 +8,23 @@ export function useStaffPermissions() {
   const [permissions, setPermissions] = useState<StaffPermissions | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  // Use ref to keep permissions up-to-date without causing re-renders
+  // Keep can() stable so permission updates do not restart page loading effects.
   const permissionsRef = useRef<StaffPermissions | null>(null);
-  permissionsRef.current = permissions;
+  useEffect(() => { permissionsRef.current = permissions; }, [permissions]);
 
   useEffect(() => {
     let mounted = true;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let requestSequence = 0;
+    let permissionUserId: string | null = null;
 
     async function load(attempt = 0) {
       retryTimer = null;
       const sequence = ++requestSequence;
+      let granted = false;
       try {
         const { data } = await vetraCore.auth.getSession();
+        if (!mounted || sequence !== requestSequence) return;
         const token = data.session?.access_token;
         if (!token) {
           // The auth session can become available a moment after a client-side
@@ -42,6 +45,8 @@ export function useStaffPermissions() {
         const result = await response.json().catch(() => null) as { permissions?: StaffPermissions; error?: string } | null;
 
         if (mounted && sequence === requestSequence && response.ok && result?.permissions) {
+          permissionUserId = data.session!.user.id;
+          granted = true;
           setPermissions(result.permissions);
           setLoaded(true);
           return;
@@ -65,6 +70,11 @@ export function useStaffPermissions() {
         }
       } finally {
         if (mounted && sequence === requestSequence && !retryTimer) {
+          // Failed revalidation must still revoke the previously loaded grant.
+          if (!granted) {
+            permissionUserId = null;
+            setPermissions(null);
+          }
           setLoaded(true);
         }
       }
@@ -72,13 +82,21 @@ export function useStaffPermissions() {
 
     const {
       data: { subscription },
-    } = vetraCore.auth.onAuthStateChange((event) => {
+    } = vetraCore.auth.onAuthStateChange((event, session) => {
       if (["SIGNED_IN", "TOKEN_REFRESHED", "USER_UPDATED"].includes(event)) {
         if (retryTimer) clearTimeout(retryTimer);
-        setPermissions(null);
-        setLoaded(false);
+        // Supabase can emit SIGNED_IN again when the tab regains focus. Keep
+        // the current user's page mounted while refreshing their permissions.
+        // Account changes still clear all permissions immediately.
+        if (!session || permissionUserId !== session.user.id) {
+          permissionUserId = null;
+          setPermissions(null);
+          setLoaded(false);
+        }
         void load();
       } else if (event === "SIGNED_OUT") {
+        ++requestSequence;
+        permissionUserId = null;
         if (retryTimer) clearTimeout(retryTimer);
         setPermissions(null);
         setLoaded(false);

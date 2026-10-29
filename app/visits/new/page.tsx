@@ -27,6 +27,8 @@ import NewVisitPatientSelector from "@/components/visits/NewVisitPatientSelector
 import NewVisitPatientOverview from "@/components/visits/NewVisitPatientOverview";
 import NewVisitClinicalFields from "@/components/visits/NewVisitClinicalFields";
 import NewVisitTreatmentFields from "@/components/visits/NewVisitTreatmentFields";
+import NewVisitVetTools from "@/components/visits/NewVisitVetTools";
+import { humanPrescriptionDetails, humanPrescriptionFromDraft, isHumanMedication, parseHumanPrescription, serializeHumanPrescription, validHumanSchedule } from "@/lib/human-prescriptions";
 import NewVisitEditorSection from "@/components/visits/NewVisitEditorSection";
 import NewVisitHistory from "@/components/visits/NewVisitHistory";
 import NewVisitDetailsModal from "@/components/visits/NewVisitDetailsModal";
@@ -40,6 +42,8 @@ type VisitAttachmentDraft = { id: string; file: File; category: "analysis" | "xr
 type ExistingVisitAttachment = { id: string; file_name: string; storage_path: string; category: "analysis" | "xray"; url: string };
 type VaccineStockProduct = { id: string; name: string; active_ingredient: string | null; quantity: number; unit: string | null; retail_price: number; barcode?: string | null; category_id?: string | null };
 type DrawerMedication = { id: string; product_id: string; quantity: number };
+
+const NEW_VISIT_DRAFT_MAX_AGE_MS = 5 * 60 * 1000;
 
 export default function NewVisitPage() {
   const { loaded: permissionsLoaded, can } = useStaffPermissions();
@@ -149,11 +153,18 @@ export default function NewVisitPage() {
           medicationSearch: string; selectedMedicationId: string; medicationDrafts: MedicationDraft[];
           formularyDrafts: FormularyVisitDraft[]; externalMedicationDrafts: ExternalMedicationDraft[];
           vaccinations: VaccinationDraft[]; drawerMedications: DrawerMedication[]; medicalRecordDraft: MedicalRecordDraft;
-        }>(key);
-        const savedAttachments = await readFormDraftFiles<VisitAttachmentDraft[]>(key);
+        }>(key, NEW_VISIT_DRAFT_MAX_AGE_MS);
+        // Remove expired/orphaned files before autosave can create a fresh draft.
+        let savedAttachments: VisitAttachmentDraft[] | null = null;
+        if (draft) {
+          savedAttachments = await readFormDraftFiles<VisitAttachmentDraft[]>(key);
+        } else {
+          await clearFormDraftFiles(key);
+        }
         if (draft) {
           setSelectedClientId(draft.selectedClientId || ""); setSelectedPetId(draft.selectedPetId || params.get("pet") || "");
-          setClientSearch(draft.clientSearch || ""); setPetSearch(draft.petSearch || ""); setStarted(Boolean(draft.started));
+          setClientSearch(draft.clientSearch || ""); setPetSearch(draft.petSearch || "");
+          setStarted(Boolean(draft.started && draft.selectedClientId && draft.selectedPetId));
           setVisitSource(draft.visitSource || (params.has("appointment") ? "appointment" : "new_visit"));
           setAppointmentId(draft.appointmentId || params.get("appointment") || "");
           setPerformingDoctor(draft.performingDoctor || ""); setGroomingType(draft.groomingType || "");
@@ -178,22 +189,24 @@ export default function NewVisitPage() {
     });
   }, [editVisitId]);
 
-  useEffect(() => {
-    if (!draftRestored || !draftKey || editVisitId) return;
-    writeFormDraft(draftKey, {
+  const visitDraft = useMemo(() => ({
       selectedClientId, selectedPetId, clientSearch, petSearch, started, visitSource, appointmentId,
       performingDoctor, groomingType, consultationFee, followUpFee, injectionFee, medicationChargePrices,
       medicationChargeQuantities, symptoms, visitServices, visitDate, reason, examStatus, examination,
       followUp, followUpDetails, diagnosis, treatment, visitNotes, weight, temperature, heartRate,
       respiratoryRate, medicationSearch, selectedMedicationId, medicationDrafts, formularyDrafts,
       externalMedicationDrafts, vaccinations, drawerMedications, medicalRecordDraft,
-    });
-  }, [draftRestored, draftKey, editVisitId, selectedClientId, selectedPetId, clientSearch, petSearch,
+    }), [selectedClientId, selectedPetId, clientSearch, petSearch,
     started, visitSource, appointmentId, performingDoctor, groomingType, consultationFee, followUpFee,
     injectionFee, medicationChargePrices, medicationChargeQuantities, symptoms, visitServices, visitDate,
     reason, examStatus, examination, followUp, followUpDetails, diagnosis, treatment, visitNotes, weight,
     temperature, heartRate, respiratoryRate, medicationSearch, selectedMedicationId, medicationDrafts,
     formularyDrafts, externalMedicationDrafts, vaccinations, drawerMedications, medicalRecordDraft]);
+
+  useEffect(() => {
+    if (!draftRestored || !draftKey || editVisitId) return;
+    writeFormDraft(draftKey, visitDraft, true);
+  }, [draftRestored, draftKey, editVisitId, visitDraft, attachments]);
 
   useEffect(() => {
     if (!draftRestored || !draftKey || editVisitId) return;
@@ -238,7 +251,7 @@ export default function NewVisitPage() {
 
   useEffect(() => {
     if (!permissionsLoaded || !can("medical_records", editVisitId ? "edit" : "create")) return;
-    if (editVisitId) return;
+    if (editVisitId || !draftRestored) return;
     if (!selectedClientId) {
       setPets([]);
       setSelectedPetId("");
@@ -246,14 +259,53 @@ export default function NewVisitPage() {
     }
 
     loadPets(selectedClientId);
-  }, [selectedClientId, editVisitId, permissionsLoaded, can]);
+  }, [selectedClientId, editVisitId, draftRestored, permissionsLoaded, can]);
+
+  useEffect(() => {
+    if (!permissionsLoaded || !can("medical_records", "create")) return;
+    if (editVisitId || !draftRestored || !started || petDetails) return;
+
+    // A draft stores the selection, but patient details must be loaded again.
+    // Otherwise `started` hides the selector while the editor has no patient.
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const db = await getClinicDb();
+        const { data, error } = await db.from("pets")
+          .select("*, client:clients (id, name, phone, email)")
+          .eq("id", selectedPetId)
+          .eq("client_id", selectedClientId)
+          .single();
+
+        if (cancelled) return;
+        if (error || !data || data.is_deceased) {
+          setMessage(data?.is_deceased ? t.deceasedPet : t.loadError);
+          setStarted(false);
+          return;
+        }
+
+        setPetDetails(data as PetDetails);
+        void loadVisits(data.id);
+        void loadAppointments(data.client_id, data.id);
+      } catch (error) {
+        if (cancelled) return;
+        console.error("RESTORE VISIT PATIENT ERROR:", error);
+        setMessage(error instanceof Error ? error.message : t.loadError);
+        setStarted(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [editVisitId, draftRestored, permissionsLoaded, can, started, selectedClientId, selectedPetId, petDetails, t.deceasedPet, t.loadError]);
 
   useEffect(() => {
     if (!permissionsLoaded || !can("medical_records", editVisitId ? "edit" : "create")) return;
+    if (editVisitId || !draftRestored || started) return;
     if (!petFromUrl) return;
 
     loadPetFromUrl(petFromUrl);
-  }, [petFromUrl, permissionsLoaded, editVisitId, can]);
+  }, [petFromUrl, draftRestored, permissionsLoaded, editVisitId, can]);
 
   useEffect(() => {
     if (!permissionsLoaded || !can("medical_records", "edit")) return;
@@ -526,7 +578,7 @@ export default function NewVisitPage() {
           return false;
         }
         const medicationText = lines.some((line) => [...medicationNames.values()].some((name) => line.startsWith(`${name}:`)));
-        const prescriptionText = lines.some((line) => prescriptionRows.some((row) => line.startsWith(`${row.medication_name} -`) || line.startsWith(`[DrugEye`) || line.startsWith(`[Clinic medication`)));
+        const prescriptionText = lines.some((line) => line.startsWith("[Human medication]") || prescriptionRows.some((row) => line.startsWith(`${row.medication_name} -`) || line.startsWith(`[DrugEye`) || line.startsWith(`[Clinic medication`)));
         return !medicationText && !prescriptionText;
       });
       setVisitServices(serviceRows);
@@ -558,6 +610,8 @@ export default function NewVisitPage() {
         return { id: row.id, product_id: row.product_id || null, drugId: 0, drugName: row.medication_name || "", activeIngredient: row.active_ingredient || "", species: pet.species || "", route, doseUnit: "", doseBasis: null, doseExpression: appliedDose, doseText: appliedDose, sourcePage: 0, sourceMin: 0, sourceMax: 0, calculatedMin: null, calculatedMax: null, appliedDose, adminDoseUnit: "", calculatedVolumeMin: null, calculatedVolumeMax: null, concentrationMgPerMl: null, clinicConcentrationMgPerMl: null, frequency, autoCalculated: false };
       }));
       setExternalMedicationDrafts(prescriptionRows.filter((row) => row.source !== "bsava").map((row) => {
+        const human = parseHumanPrescription(row.prescription);
+        if (human) return { id: row.id, category: "human" as const, product_id: null, productName: row.medication_name || "", activeIngredient: row.active_ingredient || null, manufacturer: null, price: null, ...human, frequency: human.intervalHours ? `Every ${human.intervalHours} hours` : "", duration: human.durationDays ? `For ${human.durationDays} days` : "", weightKg: null, source: row.source === "drug_eye" ? "DrugEye" as const : "manual" as const, bsavaDrugName: null };
         const [doseText = "", route = "", frequency = "", duration = "", instructions = ""] = String(row.prescription || "").split(" · ");
         return { id: row.id, product_id: row.product_id || null, productName: row.medication_name || "", activeIngredient: row.active_ingredient || null, manufacturer: null, price: null, doseText, route, frequency, duration, instructions, weightKg: null, source: row.source === "manual" ? "manual" as const : "DrugEye" as const, bsavaDrugName: null };
       }));
@@ -760,16 +814,6 @@ export default function NewVisitPage() {
     }
   }
 
-  const filteredMedications = useMemo(() => {
-    const species = (petDetails?.species || "").toLowerCase();
-    const q = medicationSearch.trim().toLowerCase();
-    return medications.filter((med) => {
-      const speciesOk = !med.species?.length || med.species.some((x) => String(x).toLowerCase() === species);
-      const searchOk = !q || med.name.toLowerCase().includes(q) || (med.active_ingredient || "").toLowerCase().includes(q);
-      return speciesOk && searchOk;
-    });
-  }, [medications, medicationSearch, petDetails?.species]);
-
   function calculateMedicationDraft(
     med: Medication,
     weightOverride?: number
@@ -959,6 +1003,12 @@ export default function NewVisitPage() {
     }
     setMessage("");
 
+    const invalidHumanMedication = externalMedicationDrafts.find((draft) => draft.category === "human" && (!draft.productName.trim() || !validHumanSchedule(humanPrescriptionFromDraft(draft))));
+    if (invalidHumanMedication) {
+      setMessage(language === "ar" ? `حدد التكرار بالساعات والمدة بالأيام لدواء ${invalidHumanMedication.productName}.` : `Choose a valid interval in hours and duration in days for ${invalidHumanMedication.productName}.`);
+      return;
+    }
+
     if (editVisitId && (!visitDate || Number.isNaN(new Date(visitDate).getTime()))) {
       setMessage(language === "ar" ? "حدد تاريخ ووقتًا صحيحين للزيارة." : "Choose a valid visit date and time.");
       return;
@@ -1032,6 +1082,7 @@ export default function NewVisitPage() {
           .join(" - ");
       }).join("\n");
       const externalMedicationText = externalMedicationDrafts.map((draft) => {
+        if (draft.category === "human") return `[Human medication] ${draft.productName}: ${humanPrescriptionDetails(humanPrescriptionFromDraft(draft), language === "ar")}`;
         const details = [draft.doseText, draft.route, draft.frequency, draft.duration, draft.instructions]
           .map((value) => String(value || "").trim())
           .filter(Boolean);
@@ -1189,10 +1240,10 @@ export default function NewVisitPage() {
             ...(editVisitId ? { id: draft.id } : {}),
             clinic_id: clinicContext.clinic_id,
             visit_id: visit.id,
-            product_id: draft.product_id || null,
+            product_id: isHumanMedication(draft) ? null : draft.product_id || null,
             medication_name: draft.productName,
             active_ingredient: draft.activeIngredient || null,
-            prescription: [draft.doseText, draft.route, draft.frequency, draft.duration, draft.instructions].filter(Boolean).join(" · ") || null,
+            prescription: draft.category === "human" ? serializeHumanPrescription(humanPrescriptionFromDraft(draft)) : [draft.doseText, draft.route, draft.frequency, draft.duration, draft.instructions].filter(Boolean).join(" · ") || null,
             source: draft.source === "manual" ? "manual" as const : "drug_eye" as const,
           })),
         ];
@@ -1277,7 +1328,7 @@ export default function NewVisitPage() {
           const subtotal = invoiceLines.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
           const { data: invoice, error: invoiceError } = await db.from("invoices").insert({
             clinic_id: clinicContext.clinic_id, client_id: selectedClientId, pet_id: selectedPetId, visit_id: visit.id,
-            status: "draft", payment_method: null, subtotal, discount: 0, total: subtotal, paid_amount: 0,
+            status: "draft", payment_method: "cash", subtotal, discount: 0, total: subtotal, paid_amount: 0,
             notes: language === "ar" ? "فاتورة من الزيارة للاستقبال" : "Invoice from visit for reception", issued_at: null, paid_at: null,
             created_by: user.id, updated_by: user.id,
           }).select("id").single();
@@ -1289,10 +1340,17 @@ export default function NewVisitPage() {
             discount: 0, total: line.quantity * line.unit_price,
           })));
           if (itemError) throw itemError;
-          const { error: issueError } = await db.rpc("issue_invoice", {
-            p_invoice_id: invoice.id,
-          });
-          if (issueError) throw issueError;
+          // Reception reviews the draft and issues it when collecting payment.
+          const { error: queueError } = await db.from("clinic_reception_queue").upsert({
+            clinic_id: clinicContext.clinic_id,
+            visit_id: visit.id,
+            sent_by: user.id,
+          }, { onConflict: "clinic_id,visit_id", ignoreDuplicates: true });
+          // Older tenants use the invoice's reception notes as the queue marker.
+          if (queueError && queueError.code !== "42P01" && queueError.code !== "PGRST205"
+            && !/relation .* does not exist|table .* not found|could not find the table/i.test(queueError.message || "")) {
+            throw queueError;
+          }
         }
         const dispenseItems = [
           ...drawerMedications.map((item) => ({ product_id: item.product_id, quantity: item.quantity, source_type: "medication" })),
@@ -1331,6 +1389,9 @@ export default function NewVisitPage() {
 
         if (createBill && createdInvoiceId) {
           window.localStorage.setItem("vetra-data-version", String(Date.now()));
+          clearFormDraft(draftKey);
+          void clearFormDraftFiles(draftKey);
+          setDraftKey(null);
           router.push("/dashboard");
           return;
         }
@@ -1440,7 +1501,7 @@ export default function NewVisitPage() {
   const medicationBillLines: MedicationBillLine[] = [
     ...medicationDrafts.map((draft) => ({ id: `clinic:${draft.id}`, name: medications.find((medication) => medication.id === draft.medication_id)?.name || "Medication" })),
     ...formularyDrafts.map((draft) => ({ id: `bsava:${draft.id}`, name: draft.drugName })),
-    ...externalMedicationDrafts.map((draft) => ({ id: `external:${draft.id}`, name: draft.productName })),
+    ...externalMedicationDrafts.filter((draft) => !isHumanMedication(draft)).map((draft) => ({ id: `external:${draft.id}`, name: draft.productName })),
     ...drawerMedications.map((item) => ({
       id: `drawer:${item.id}`,
       name: clinicStockProducts.find((product) => product.id === item.product_id)?.name || (language === "ar" ? "دواء من درج الأدوية" : "Medication drawer item"),
@@ -1570,6 +1631,12 @@ export default function NewVisitPage() {
           </div>
         )}
 
+        {!editVisitId && started && !petDetails && (
+          <div className="py-8 text-center text-sm" role="status">
+            {language === "ar" ? "جارٍ استعادة بيانات الحيوان..." : "Restoring patient details..."}
+          </div>
+        )}
+
         {!editVisitId && <NewVisitPatientSelector
           started={started}
           darkMode={darkMode}
@@ -1621,7 +1688,23 @@ export default function NewVisitPage() {
 
         {/* EXAMINATION */}
         {started && petDetails && (
-          <div className="space-y-6">
+          <div className="space-y-6 pe-0 sm:pe-24 max-sm:has-[[data-vet-tools-expanded=true]]:pe-[4.5rem]">
+            <NewVisitVetTools
+              clinicId={clinicId}
+              language={language}
+              darkMode={darkMode}
+              petDetails={petDetails}
+              weight={weight}
+              medications={medications}
+              medicationDrafts={medicationDrafts}
+              formularyDrafts={formularyDrafts}
+              setFormularyDrafts={setFormularyDrafts}
+              externalMedicationDrafts={externalMedicationDrafts}
+              onAddManualExternalMedication={(draft) => setExternalMedicationDrafts((current) => [...current, draft])}
+              addMedication={addMedication}
+              message={message}
+              setMessage={setMessage}
+            />
             <NewVisitPatientOverview
               petDetails={petDetails}
               visits={visits}
@@ -1691,20 +1774,28 @@ export default function NewVisitPage() {
               />
               <NewVisitTreatmentFields
                 clinicId={clinicId}
+                onUpdateExternalMedication={(id, patch) => setExternalMedicationDrafts((current) => current.map((draft) => draft.id === id ? { ...draft, ...patch } : draft))}
+                onSaveExternalMedication={(draft) => {
+                  if (editVisitId) {
+                    return language === "ar" ? "تم تأكيد بيانات الدواء. اضغط حفظ الزيارة لتسجيل التغييرات." : "Medication confirmed. Save Visit to apply your changes.";
+                  }
+                  if (!draftRestored || !draftKey || !writeFormDraft(draftKey, {
+                    ...visitDraft,
+                    externalMedicationDrafts: externalMedicationDrafts.map((item) => item.id === draft.id ? draft : item),
+                  }, true)) {
+                    throw new Error(language === "ar" ? "تعذر حفظ المسودة على الجهاز. يمكنك حفظ الزيارة من الزر أسفل الصفحة." : "Could not save the draft on this device. You can save the visit using the button below.");
+                  }
+                  return language === "ar" ? "تم حفظ الدواء في مسودة الزيارة على هذا الجهاز. احفظ الزيارة لإضافته للروشتة والفاتورة." : "Medication saved to this visit draft on this device. Save Visit to finalize the prescription and invoice.";
+                }}
                 language={language}
                 darkMode={darkMode}
                 t={t}
-                petDetails={petDetails}
                 weight={weight}
                 formularyDrafts={formularyDrafts}
                 setFormularyDrafts={setFormularyDrafts}
                 externalMedicationDrafts={externalMedicationDrafts}
                 onAddManualExternalMedication={(draft) => setExternalMedicationDrafts((current) => [...current, draft])}
                 onRemoveManualExternalMedication={(id) => setExternalMedicationDrafts((current) => current.filter((draft) => draft.id !== id))}
-                medicationSearch={medicationSearch}
-                setMedicationSearch={setMedicationSearch}
-                filteredMedications={filteredMedications}
-                addMedication={addMedication}
                 medications={medications}
                 setMessage={setMessage}
                 medicationDrafts={medicationDrafts}

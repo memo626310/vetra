@@ -1,38 +1,25 @@
-import { useEffect, useState } from "react";
-import { BSAVAFormularyPicker, createBsavaVisitDraft, type FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
-import type { ExternalMedicationDraft, Language, Medication, MedicationDraft, PetDetails, VaccinationDraft, VisitTranslations } from "./new-visit-types";
+import { useState } from "react";
+import HumanPrescriptionEditor from "./HumanPrescriptionEditor";
+import type { FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
+import type { ExternalMedicationDraft, Language, Medication, MedicationDraft, VaccinationDraft, VisitTranslations } from "./new-visit-types";
 import { getVaccinationStageOptions, calculateNextVaccinationDose } from "./new-visit-utils";
-import DrugEyeProductLinks from "./DrugEyeProductLinks";
-import NewVisitCommonConditions from "./NewVisitCommonConditions";
-
-type DrugEyeResult = {
-  id: string;
-  name: string;
-  price: string | null;
-  activeIngredient: string | null;
-  category: string | null;
-  manufacturer: string | null;
-};
 type VaccineStockProduct = { id: string; name: string; quantity: number; unit: string | null; retail_price: number };
 type ClinicStockProduct = VaccineStockProduct & { active_ingredient: string | null; barcode?: string | null };
 type DrawerMedication = { id: string; product_id: string; quantity: number };
 
 type Props = {
   clinicId: string;
+  onUpdateExternalMedication: (id: string, patch: Partial<ExternalMedicationDraft>) => void;
+  onSaveExternalMedication: (draft: ExternalMedicationDraft) => string;
   language: Language;
   darkMode: boolean;
   t: VisitTranslations;
-  petDetails: PetDetails;
   weight: string;
   formularyDrafts: FormularyVisitDraft[];
   setFormularyDrafts: (value: FormularyVisitDraft[] | ((current: FormularyVisitDraft[]) => FormularyVisitDraft[])) => void;
   externalMedicationDrafts: ExternalMedicationDraft[];
   onAddManualExternalMedication: (draft: ExternalMedicationDraft) => void;
   onRemoveManualExternalMedication: (id: string) => void;
-  medicationSearch: string;
-  setMedicationSearch: (value: string) => void;
-  filteredMedications: Medication[];
-  addMedication: (medicationId?: string) => boolean;
   medications: Medication[];
   setMessage: (value: string) => void;
   medicationDrafts: MedicationDraft[];
@@ -63,10 +50,9 @@ type Props = {
 };
 
 export default function NewVisitTreatmentFields({
-  clinicId, language, darkMode, t, petDetails, weight, formularyDrafts, setFormularyDrafts,
-  externalMedicationDrafts, onAddManualExternalMedication, onRemoveManualExternalMedication,
-  medicationSearch, setMedicationSearch,
-  filteredMedications, addMedication, medications, setMessage, medicationDrafts, removeMedication,
+  clinicId, language, darkMode, t, formularyDrafts, setFormularyDrafts,
+  externalMedicationDrafts, onAddManualExternalMedication, onRemoveManualExternalMedication, onUpdateExternalMedication, onSaveExternalMedication,
+  medications, medicationDrafts, removeMedication,
   treatment, setTreatment, vaccinations, addVaccination, updateVaccination, removeVaccination,
   vaccineStockProducts, vaccineProductMappings,
   clinicStockProducts,
@@ -75,259 +61,71 @@ export default function NewVisitTreatmentFields({
   followUpDetails, setFollowUpDetails, canViewVaccination = false, canAddVaccination = false, canEditVaccination = false, canDeleteVaccination = false, vaccinationIsSaved = () => true,
 }: Props) {
   const [showTreatmentNotes, setShowTreatmentNotes] = useState(Boolean(treatment));
-  const [drugEyeResults, setDrugEyeResults] = useState<DrugEyeResult[]>([]);
-  const [drugEyeLoading, setDrugEyeLoading] = useState(false);
-  const [drugEyeError, setDrugEyeError] = useState("");
-  const [drugEyeResultQuery, setDrugEyeResultQuery] = useState("");
-  const [manualEntryOpen, setManualEntryOpen] = useState(false);
-  const [manualDrugName, setManualDrugName] = useState("");
-  const [manualDose, setManualDose] = useState("");
-  const [manualRoute, setManualRoute] = useState("");
   const [drawerSearch, setDrawerSearch] = useState("");
-  const query = medicationSearch.trim().replace(/\s+/g, " ");
-  const matchingMedications = query ? filteredMedications.slice(0, 8) : [];
   const matchingDrawerProducts = clinicStockProducts.filter((product) => {
     const search = drawerSearch.trim().toLocaleLowerCase();
     return !search || product.name.toLocaleLowerCase().includes(search) || (product.active_ingredient || "").toLocaleLowerCase().includes(search) || (product.barcode || "").toLocaleLowerCase().includes(search);
   }).slice(0, 20);
 
-  function addManualMedication() {
-    if (!manualDrugName.trim() || !manualDose.trim()) {
-      setMessage(language === "ar" ? "اكتب اسم الدواء والجرعة." : "Enter the medication name and dose.");
-      return;
-    }
-    onAddManualExternalMedication({
-      id: crypto.randomUUID(),
-      product_id: null,
-      productName: manualDrugName.trim(),
-      activeIngredient: null,
-      manufacturer: null,
-      price: null,
-      doseText: manualDose.trim(),
-      route: manualRoute.trim(),
-      frequency: "",
-      duration: "",
-      instructions: "",
-      weightKg: weight.trim() && Number.isFinite(Number(weight)) ? Number(weight) : null,
-      source: "manual",
-      bsavaDrugName: null,
-    });
-    setManualDrugName("");
-    setManualDose("");
-    setManualRoute("");
-    setManualEntryOpen(false);
-    setMessage("");
-  }
-
-  async function applyCommonProtocol(ids: string[]) {
-    const clinicMedicationIds = ids.filter((id) => !id.startsWith("bsava:"));
-    const failedClinicMeds = clinicMedicationIds.filter((id) => !addMedication(id));
-    if (failedClinicMeds.length) {
-      setMessage(language === "ar"
-        ? "بعض أدوية البروتوكول لم تُضف: تحقق من الوزن والجرعة المسجلة في مكتبة الأدوية."
-        : "Some protocol medications could not be added. Check the pet weight and each library dose.");
-    }
-    const formularyReferences = ids.filter((id) => id.startsWith("bsava:"));
-    if (!formularyReferences.length) return;
-    try {
-      const nextDrafts = await Promise.all(formularyReferences.map(async (reference) => {
-        const [, id, route] = reference.split(":");
-        return createBsavaVisitDraft(Number(id), petDetails?.species || "", route || "", weight ? Number(weight) : null);
-      }));
-      const usable = nextDrafts.filter((draft): draft is FormularyVisitDraft => Boolean(draft));
-      if (!usable.length) {
-        setMessage(language === "ar" ? "أدخل وزن الحيوان لاستخدام جرعة BSAVA المحسوبة." : "Enter the pet's weight to calculate the BSAVA dose.");
-        return;
-      }
-      setFormularyDrafts((current) => {
-        const added = usable.filter((draft) => !current.some((item) => item.drugId === draft.drugId && item.route === draft.route));
-        return [...current, ...added];
-      });
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : (language === "ar" ? "تعذر تحميل مرجع BSAVA." : "Could not load BSAVA reference."));
-    }
-  }
-
-  // Query DrugEye from VETRA's own route after a short pause. Abort stale requests
-  // so a slow response for an earlier query never replaces the latest results.
-  useEffect(() => {
-    const normalizedQuery = medicationSearch.trim().replace(/\s+/g, " ");
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    setDrugEyeError("");
-    setDrugEyeResults([]);
-    setDrugEyeResultQuery("");
-    setDrugEyeLoading(false);
-
-    if (normalizedQuery.length < 2) {
-      return () => controller.abort();
-    }
-
-    timer = setTimeout(async () => {
-      setDrugEyeLoading(true);
-      try {
-        const response = await fetch(`/api/drug-eye/search?q=${encodeURIComponent(normalizedQuery)}`, {
-          method: "GET",
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const payload = await response.json() as { results?: DrugEyeResult[]; error?: string };
-        if (!response.ok) throw new Error(payload.error || `DrugEye search failed (${response.status}).`);
-        if (controller.signal.aborted) return;
-        setDrugEyeResults(Array.isArray(payload.results) ? payload.results : []);
-        setDrugEyeResultQuery(normalizedQuery);
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        setDrugEyeResults([]);
-        setDrugEyeResultQuery(normalizedQuery);
-        setDrugEyeError(error instanceof Error && error.message ? error.message : "DrugEye search is unavailable.");
-      } finally {
-        if (!controller.signal.aborted) setDrugEyeLoading(false);
-      }
-    }, 350);
-
-    return () => {
-      if (timer) clearTimeout(timer);
-      controller.abort();
-    };
-  }, [medicationSearch]);
-
   return (<>
-                <div className="lg:col-span-2">
-                  <NewVisitCommonConditions
-                    clinicId={clinicId}
-                    petSpecies={petDetails?.species || ""}
-                    language={language}
-                    darkMode={darkMode}
-                    medications={medications}
-                    medicationDrafts={medicationDrafts}
-                    formularyDrafts={formularyDrafts}
-                    onApply={applyCommonProtocol}
-                  />
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <label className={`block text-sm font-semibold ${darkMode ? "text-slate-300" : "text-slate-700"}`}>{t.treatment}</label>
-                      <p className={`mt-1 text-xs ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                        {language === "ar" ? "ابحث في خانة واحدة: أدوية العيادة أولًا، ثم BSAVA البيطري، ثم DrugEye. جرعات BSAVA تُحسب حسب الوزن والطريق." : "One search: clinic medications first, then BSAVA veterinary protocols, then DrugEye references. BSAVA doses use weight and route."}
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-blue-500/10 px-3 py-1 text-[11px] font-bold text-blue-600 dark:text-blue-300">Medication Library + dose calculator</span>
-                  </div>
-
-                  <div className={`rounded-2xl border p-3 sm:p-4 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-slate-50"}`}>
-                    <div className="relative">
-                      <input
-                        value={medicationSearch}
-                        onChange={(e) => setMedicationSearch(e.target.value)}
-                        placeholder={language === "ar" ? "ابحث باسم الدواء أو المادة الفعالة..." : "Search by medication or active ingredient..."}
-                        autoComplete="off"
-                        className={`w-full rounded-xl border px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 ${darkMode ? "border-slate-700 bg-slate-900 text-white placeholder:text-slate-500" : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"}`}
-                      />
-                      {query && (
-                        <div className={`absolute inset-x-0 top-full z-30 mt-1 max-h-[min(70vh,30rem)] overflow-y-auto rounded-xl border shadow-xl ${darkMode ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"}`}>
-                          {matchingMedications.length > 0 && (
-                            <>
-                              <div className={`sticky top-0 z-10 border-b px-3 py-2 text-[11px] font-bold uppercase tracking-wide ${darkMode ? "border-slate-800 bg-slate-900 text-slate-400" : "border-slate-100 bg-slate-50 text-slate-500"}`}>
-                                {language === "ar" ? "مكتبة أدوية VETRA" : "VETRA medication library"}
-                              </div>
-                              {matchingMedications.map((med) => (
-                                <button
-                                  key={med.id}
-                                  type="button"
-                                  onClick={() => addMedication(med.id)}
-                                  className={`flex w-full items-center justify-between gap-3 border-b px-3 py-3 text-left last:border-b-0 ${darkMode ? "border-slate-800 hover:bg-slate-800" : "border-slate-100 hover:bg-blue-50"}`}
-                                >
-                                  <span className="min-w-0">
-                                    <span className="block truncate text-sm font-semibold">{med.name}</span>
-                                    {med.active_ingredient && <span className="mt-0.5 block truncate text-xs text-slate-500">{med.active_ingredient}</span>}
-                                  </span>
-                                  <span className="shrink-0 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-bold text-white">{language === "ar" ? "+ إضافة" : "+ Add"}</span>
-                                </button>
-                              ))}
-                            </>
-                          )}
-
-                          {matchingMedications.length === 0 && (
-                            <div className={`px-3 py-2 text-xs ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                              {language === "ar" ? "لا توجد نتيجة مطابقة في مكتبة VETRA." : "No matching result in VETRA's library."}
-                            </div>
-                          )}
-
-                          <section className={`border-b px-3 py-3 ${darkMode ? "border-slate-800" : "border-slate-100"}`}>
-                            <div className={`mb-2 text-[11px] font-bold uppercase tracking-wide ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
-                              {language === "ar" ? "مرجع بيطري — BSAVA" : "Veterinary reference — BSAVA"}
-                            </div>
-                            <BSAVAFormularyPicker
-                              language={language}
-                              darkMode={darkMode}
-                              petSpecies={petDetails?.species}
-                              weightKg={weight ? Number(weight) : null}
-                              drafts={formularyDrafts}
-                              onChange={setFormularyDrafts}
-                              searchQuery={medicationSearch}
-                              onSearchQueryChange={setMedicationSearch}
-                              hideSearchInput
-                              hideDrafts
-                            />
-                          </section>
-
-                          <div className={`sticky top-0 z-10 flex items-center justify-between gap-3 border-y px-3 py-2 text-[11px] font-bold uppercase tracking-wide ${darkMode ? "border-slate-800 bg-slate-900 text-sky-300" : "border-slate-100 bg-sky-50 text-sky-800"}`}>
-                            <span>DrugEye</span>
-                            <span className="font-medium normal-case tracking-normal">
-                              {query.length < 2
-                                ? (language === "ar" ? "اكتب حرفين على الأقل" : "Type at least 2 characters")
-                                : drugEyeLoading
-                                  ? (language === "ar" ? "جاري البحث…" : "Searching…")
-                                  : drugEyeResultQuery === query && !drugEyeError
-                                    ? `${drugEyeResults.length} ${language === "ar" ? "نتيجة" : "results"}`
-                                    : ""}
-                            </span>
-                          </div>
-
-                          {query.length >= 2 && drugEyeLoading && drugEyeResultQuery !== query && (
-                            <div className={`px-3 py-3 text-sm ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                              {language === "ar" ? "بنبحث في DrugEye…" : "Searching DrugEye…"}
-                            </div>
-                          )}
-
-                          {drugEyeResultQuery === query && Boolean(drugEyeError) && (
-                            <div className="px-3 py-3 text-sm text-rose-600">
-                              {language === "ar" ? "تعذر البحث في DrugEye: " : "DrugEye search failed: "}{drugEyeError}
-                            </div>
-                          )}
-
-                          {query.length >= 2 && drugEyeResultQuery === query && !drugEyeLoading && !drugEyeError && drugEyeResults.length === 0 && (
-                            <div className={`px-3 py-3 text-sm ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
-                              {language === "ar" ? "لا توجد نتائج من DrugEye لهذا البحث." : "No DrugEye results for this search."}
-                            </div>
-                          )}
-
-                          <DrugEyeProductLinks
-                            results={drugEyeResultQuery === query ? drugEyeResults : []}
-                            language={language}
-                            darkMode={darkMode}
-                            medications={medications}
-                            petSpecies={petDetails?.species}
-                            weightKg={weight.trim() ? Number(weight) : null}
-                            onAddMedication={addMedication}
-                            onAddBsavaDraft={(draft) => {
-                              const duplicate = formularyDrafts.some((item) => item.drugId === draft.drugId && item.route === draft.route && item.doseExpression === draft.doseExpression);
-                              if (duplicate) return false;
-                              setFormularyDrafts([...formularyDrafts, draft]);
-                              return true;
-                            }}
-                            onAddManualDraft={onAddManualExternalMedication}
+                <details className={`group rounded-2xl border lg:col-span-2 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-white"}`}>
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-4 text-lg font-bold focus-visible:outline-2 focus-visible:outline-cyan-500 [&::-webkit-details-marker]:hidden">
+                    <span>{language === "ar" ? "الروشتة — Prescription" : "Prescription"}</span>
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5 shrink-0 text-cyan-600 transition-transform group-open:rotate-180"><path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" /></svg>
+                  </summary>
+                  <div className="space-y-4 px-3 pb-4 sm:px-4">
+                  <HumanPrescriptionEditor clinicId={clinicId} language={language} darkMode={darkMode} drafts={externalMedicationDrafts} onAdd={onAddManualExternalMedication} onUpdate={onUpdateExternalMedication} onSave={onSaveExternalMedication} onRemove={onRemoveManualExternalMedication} />
+                    <div className="mt-3 border-t pt-3" style={{ borderColor: darkMode ? "#334155" : "#e2e8f0" }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowTreatmentNotes((value) => !value)}
+                        className={`text-xs font-semibold ${darkMode ? "text-blue-300 hover:text-blue-200" : "text-blue-700 hover:text-blue-800"}`}
+                      >
+                        {showTreatmentNotes
+                          ? (language === "ar" ? "− إخفاء ملاحظات العلاج" : "− Hide treatment note")
+                          : (language === "ar" ? "+ إضافة ملاحظات علاج اختيارية" : "+ Add optional treatment note")}
+                      </button>
+                      {showTreatmentNotes && (
+                        <div className="mt-2">
+                          <label className={`mb-1.5 block text-xs font-medium ${darkMode ? "text-slate-300" : "text-slate-600"}`}>
+                            {language === "ar" ? "خطة علاج أو تعليمات إضافية (اختياري)" : "Additional treatment plan / instructions (optional)"}
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={treatment}
+                            onChange={(e) => setTreatment(e.target.value)}
+                            placeholder={language === "ar" ? "اكتب أي تعليمات إضافية غير موجودة في الأدوية المضافة..." : "Add instructions not covered by the selected medications..."}
+                            className={`w-full resize-y rounded-xl border px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 ${darkMode ? "border-slate-700 bg-slate-900 text-white placeholder:text-slate-500" : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"}`}
                           />
-
-                          <div className={`border-t px-3 py-2 text-[11px] leading-5 ${darkMode ? "border-slate-800 text-slate-400" : "border-slate-100 text-slate-500"}`}>
-                            {language === "ar"
-                              ? "لو فيه بروتوكول BSAVA مناسب، احسب الجرعة بوزن الحيوان؛ ولو مفيش، سجّل جرعة يدوية يحددها الطبيب."
-                              : "Use a compatible BSAVA protocol for weight-based calculation; otherwise record a clinician-entered manual dose."}
-                          </div>
                         </div>
                       )}
                     </div>
+                  </div>
+                </details>
+
+                <div className="lg:col-span-2">
+                  <section className={`mb-4 rounded-xl border p-3 ${darkMode ? "border-cyan-900/60 bg-slate-950/60" : "border-cyan-200 bg-cyan-50/40"}`}>
+                    <div className="mb-2 text-sm font-bold">{language === "ar" ? "درج الأدوية" : "Medication drawer"}</div>
+                    <input value={drawerSearch} onChange={(event) => setDrawerSearch(event.target.value)} placeholder={language === "ar" ? "ابحث بالاسم أو المادة الفعالة أو الباركود" : "Search name, active ingredient, or barcode"} className={`mb-2 w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
+                    <div className="flex gap-2"><select value="" onChange={(event) => {
+                      const product = clinicStockProducts.find((item) => item.id === event.target.value);
+                      if (!product || drawerMedications.some((item) => item.product_id === product.id)) return;
+                      setDrawerMedications((current) => [...current, { id: crypto.randomUUID(), product_id: product.id, quantity: 1 }]);
+                      setDrawerSearch("");
+                    }} className={`min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`}>
+                      <option value="">{language === "ar" ? "اختار دواء من العيادة" : "Select a clinic medication"}</option>
+                      {matchingDrawerProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.quantity} {product.unit || ""}</option>)}
+                    </select></div>
+                    {drawerMedications.length > 0 && <div className="mt-2 space-y-2">{drawerMedications.map((item) => {
+                      const product = clinicStockProducts.find((candidate) => candidate.id === item.product_id);
+                      if (!product) return null;
+                      return <div key={item.id} className={`grid grid-cols-[minmax(0,1fr)_100px_36px] items-center gap-2 rounded-lg border p-2 ${darkMode ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
+                        <div className="min-w-0"><div className="truncate text-sm font-semibold">{product.name}</div><div className="text-xs text-slate-500">{language === "ar" ? "المتاح" : "Available"}: {product.quantity} {product.unit || ""}</div></div>
+                        <input type="number" min="1" max={product.quantity} step="1" value={item.quantity} aria-label={language === "ar" ? `كمية صرف ${product.name}` : `Quantity for ${product.name}`} onChange={(event) => setDrawerMedications((current) => current.map((row) => row.id === item.id ? { ...row, quantity: Math.max(1, Math.floor(Number(event.target.value) || 1)) } : row))} className={`w-full rounded-lg border px-2 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-950 text-white" : "border-slate-200 bg-white"}`} />
+                        <button type="button" aria-label={language === "ar" ? "إزالة الدواء" : "Remove medication"} onClick={() => setDrawerMedications((current) => current.filter((row) => row.id !== item.id))} className="text-lg text-rose-500">×</button>
+                      </div>;
+                    })}</div>}
+                  </section>
 
                     {medicationDrafts.length > 0 && (
                       <div className="mt-3 space-y-2">
@@ -374,12 +172,12 @@ export default function NewVisitTreatmentFields({
                       </div>
                     )}
 
-                    {externalMedicationDrafts.length > 0 && (
+                    {externalMedicationDrafts.some((draft) => draft.category !== "human") && (
                       <div className="mt-3 space-y-2">
                         <div className={`text-[11px] font-bold uppercase tracking-wide ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
                           {language === "ar" ? "أدوية DrugEye وأدوية العيادة اليدوية" : "DrugEye and manually entered clinic medications"}
                         </div>
-                        {externalMedicationDrafts.map((draft) => (
+                        {externalMedicationDrafts.filter((draft) => draft.category !== "human").map((draft) => (
                           <div key={draft.id} className={`rounded-xl border px-3 py-2.5 ${darkMode ? "border-amber-900/70 bg-slate-900" : "border-amber-200 bg-amber-50/50"}`}>
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
@@ -395,73 +193,6 @@ export default function NewVisitTreatmentFields({
                         ))}
                       </div>
                     )}
-
-                    <div className="mt-3 border-t pt-3" style={{ borderColor: darkMode ? "#334155" : "#e2e8f0" }}>
-                      <button
-                        type="button"
-                        onClick={() => setShowTreatmentNotes((value) => !value)}
-                        className={`text-xs font-semibold ${darkMode ? "text-blue-300 hover:text-blue-200" : "text-blue-700 hover:text-blue-800"}`}
-                      >
-                        {showTreatmentNotes
-                          ? (language === "ar" ? "− إخفاء ملاحظات العلاج" : "− Hide treatment note")
-                          : (language === "ar" ? "+ إضافة ملاحظات علاج اختيارية" : "+ Add optional treatment note")}
-                      </button>
-                      {showTreatmentNotes && (
-                        <div className="mt-2">
-                          <label className={`mb-1.5 block text-xs font-medium ${darkMode ? "text-slate-300" : "text-slate-600"}`}>
-                            {language === "ar" ? "خطة علاج أو تعليمات إضافية (اختياري)" : "Additional treatment plan / instructions (optional)"}
-                          </label>
-                          <textarea
-                            rows={2}
-                            value={treatment}
-                            onChange={(e) => setTreatment(e.target.value)}
-                            placeholder={language === "ar" ? "اكتب أي تعليمات إضافية غير موجودة في الأدوية المضافة..." : "Add instructions not covered by the selected medications..."}
-                            className={`w-full resize-y rounded-xl border px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 ${darkMode ? "border-slate-700 bg-slate-900 text-white placeholder:text-slate-500" : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"}`}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-3">
-                    <button type="button" onClick={() => { setManualEntryOpen((open) => !open); setManualDrugName(medicationSearch.trim()); }} className={`text-xs font-semibold ${darkMode ? "text-cyan-300" : "text-cyan-700"}`}>
-                      {manualEntryOpen ? (language === "ar" ? "− إغلاق إدخال دواء يدوي" : "− Close manual medication") : (language === "ar" ? "+ إضافة دواء غير موجود في المكتبات" : "+ Add a medication not found in the libraries")}
-                    </button>
-                    {manualEntryOpen && (
-                      <div className={`mt-2 grid gap-2 rounded-xl border p-3 sm:grid-cols-2 ${darkMode ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-white"}`}>
-                        <input value={manualDrugName} onChange={(event) => setManualDrugName(event.target.value)} placeholder={language === "ar" ? "اسم الدواء" : "Medication name"} className={`w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`} />
-                        <input value={manualDose} onChange={(event) => setManualDose(event.target.value)} placeholder={language === "ar" ? "الجرعة والوحدة" : "Dose and unit"} className={`w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`} />
-                        <input value={manualRoute} onChange={(event) => setManualRoute(event.target.value)} placeholder={language === "ar" ? "طريقة الإعطاء (اختياري)" : "Route (optional)"} className={`w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`} />
-                        <button type="button" onClick={addManualMedication} className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-bold text-white hover:bg-cyan-700">{language === "ar" ? "إضافة للكشف" : "Add to visit"}</button>
-                        <p className="sm:col-span-2 text-[11px] text-slate-500">{language === "ar" ? "سيُضاف كدواء من العيادة ويُسعّر بسعر الحقنة الافتراضي، ويمكن تعديل سعره في بنود الفاتورة." : "Added as a clinic medication at the default injection fee; adjust its price in the bill items."}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="lg:col-span-2">
-                  <section className={`mb-4 rounded-xl border p-3 ${darkMode ? "border-cyan-900/60 bg-slate-950/60" : "border-cyan-200 bg-cyan-50/40"}`}>
-                    <div className="mb-2 text-sm font-bold">{language === "ar" ? "درج الأدوية" : "Medication drawer"}</div>
-                    <input value={drawerSearch} onChange={(event) => setDrawerSearch(event.target.value)} placeholder={language === "ar" ? "ابحث بالاسم أو المادة الفعالة أو الباركود" : "Search name, active ingredient, or barcode"} className={`mb-2 w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
-                    <div className="flex gap-2"><select value="" onChange={(event) => {
-                      const product = clinicStockProducts.find((item) => item.id === event.target.value);
-                      if (!product || drawerMedications.some((item) => item.product_id === product.id)) return;
-                      setDrawerMedications((current) => [...current, { id: crypto.randomUUID(), product_id: product.id, quantity: 1 }]);
-                      setDrawerSearch("");
-                    }} className={`min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`}>
-                      <option value="">{language === "ar" ? "اختار دواء من العيادة" : "Select a clinic medication"}</option>
-                      {matchingDrawerProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.quantity} {product.unit || ""}</option>)}
-                    </select></div>
-                    {drawerMedications.length > 0 && <div className="mt-2 space-y-2">{drawerMedications.map((item) => {
-                      const product = clinicStockProducts.find((candidate) => candidate.id === item.product_id);
-                      if (!product) return null;
-                      return <div key={item.id} className={`grid grid-cols-[minmax(0,1fr)_100px_36px] items-center gap-2 rounded-lg border p-2 ${darkMode ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
-                        <div className="min-w-0"><div className="truncate text-sm font-semibold">{product.name}</div><div className="text-xs text-slate-500">{language === "ar" ? "المتاح" : "Available"}: {product.quantity} {product.unit || ""}</div></div>
-                        <input type="number" min="1" max={product.quantity} step="1" value={item.quantity} aria-label={language === "ar" ? `كمية صرف ${product.name}` : `Quantity for ${product.name}`} onChange={(event) => setDrawerMedications((current) => current.map((row) => row.id === item.id ? { ...row, quantity: Math.max(1, Math.floor(Number(event.target.value) || 1)) } : row))} className={`w-full rounded-lg border px-2 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-950 text-white" : "border-slate-200 bg-white"}`} />
-                        <button type="button" aria-label={language === "ar" ? "إزالة الدواء" : "Remove medication"} onClick={() => setDrawerMedications((current) => current.filter((row) => row.id !== item.id))} className="text-lg text-rose-500">×</button>
-                      </div>;
-                    })}</div>}
-                  </section>
 
                   {(canViewVaccination || canAddVaccination) && <>
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -615,5 +346,7 @@ export default function NewVisitTreatmentFields({
                       }`}
                     />
                   )}
-                </div>  </>);
+                </div>
+
+  </>);
 }

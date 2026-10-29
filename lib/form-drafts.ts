@@ -1,6 +1,12 @@
 import { getClinicContext } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
 
+type TimedFormDraft<T> = {
+  __vetraDraftVersion: 1;
+  updatedAt: number;
+  data: T;
+};
+
 /** Keeps an unfinished form private to the signed-in user and active clinic. */
 export async function getFormDraftStorageKey(form: string) {
   try {
@@ -16,20 +22,41 @@ export async function getFormDraftStorageKey(form: string) {
   }
 }
 
-export function readFormDraft<T>(key: string): T | null {
+export function readFormDraft<T>(key: string, maxAgeMs?: number): T | null {
   try {
     const value = window.localStorage.getItem(key);
-    return value ? JSON.parse(value) as T : null;
+    if (!value) return null;
+
+    const stored = JSON.parse(value) as T | TimedFormDraft<T> | null;
+    if (stored && typeof stored === "object" && "__vetraDraftVersion" in stored && stored.__vetraDraftVersion === 1) {
+      const timed = stored as TimedFormDraft<T>;
+      if (!Number.isFinite(timed.updatedAt) || !("data" in timed) ||
+        (maxAgeMs !== undefined && Date.now() - timed.updatedAt >= maxAgeMs)) {
+        clearFormDraft(key);
+        return null;
+      }
+      return timed.data;
+    }
+
+    // Older drafts have no timestamp. Give them a full expiry window on their
+    // first timed read rather than discarding an unfinished form immediately.
+    if (stored !== null && maxAgeMs !== undefined) writeFormDraft(key, stored, true);
+    return stored as T | null;
   } catch {
     return null;
   }
 }
 
-export function writeFormDraft(key: string, value: unknown) {
+export function writeFormDraft(key: string, value: unknown, timed = false) {
   try {
-    window.localStorage.setItem(key, JSON.stringify(value));
+    const stored = timed
+      ? { __vetraDraftVersion: 1, updatedAt: Date.now(), data: value } satisfies TimedFormDraft<unknown>
+      : value;
+    window.localStorage.setItem(key, JSON.stringify(stored));
+    return true;
   } catch {
     // Storage can be unavailable or full; the form remains usable in memory.
+    return false;
   }
 }
 

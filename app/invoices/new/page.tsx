@@ -7,6 +7,8 @@ import { vetraCore } from "@/lib/vetra-core";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { writeVetraThemeMode } from "@/lib/theme";
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
+import VisitHumanMedications from "@/components/VisitHumanMedications";
+import { isHumanMedication } from "@/lib/human-prescriptions";
 import { clearFormDraft, getFormDraftStorageKey, readFormDraft, writeFormDraft } from "@/lib/form-drafts";
 
 type Client = {
@@ -324,7 +326,7 @@ export default function NewInvoicePage() {
           .eq("visit_id", visitFromUrl);
         const { data: visitPrescriptionRows, error: visitPrescriptionsError } = await db
           .from("visit_prescriptions")
-          .select("product_id,medication_name,active_ingredient,prescription")
+          .select("product_id,medication_name,active_ingredient,prescription,source")
           .eq("visit_id", visitFromUrl);
         if (visitMedicationError) {
           setInvoiceMedicationNotice(language === "ar" ? `تعذر تحميل أدوية الزيارة: ${visitMedicationError.message}` : `Could not load visit medications: ${visitMedicationError.message}`);
@@ -375,7 +377,8 @@ export default function NewInvoicePage() {
           details: [row.calculated_dose != null ? `${row.calculated_dose} ${row.calculated_dose_unit || ""}` : "", row.calculated_volume != null ? `${row.calculated_volume} ${row.volume_unit || "mL"}` : "", row.route, row.frequency, row.duration_days ? `${row.duration_days} days` : ""].filter(Boolean).join(" · "),
         }));
         const selectedNames = new Set(visitMedicationDrafts.map((draft) => normalizeProductName(draft.name)));
-        const treatmentLines = String(visitBillingData?.treatment || "").split(/\r?\n/).map((rawLine) => rawLine.trim()).filter(Boolean);
+        const treatmentLines = String(visitBillingData?.treatment || "").split(/\r?\n/).map((rawLine) => rawLine.trim())
+          .filter((line) => Boolean(line) && !/^\[(?:Human medication[^\]]*|DrugEye\s*\/[^\]]*)\]/i.test(line));
         const serviceLines: InvoiceLine[] = treatmentLines.flatMap((line) => {
           const match = line.match(/^(.+?)\s*[×x]\s*(\d+(?:\.\d+)?)\s*\((\d+(?:\.\d+)?)\s*EGP\)$/i);
           if (!match) return [];
@@ -396,8 +399,6 @@ export default function NewInvoicePage() {
           }];
         });
         const structuredTreatmentDrafts = treatmentLines.map((line) => {
-          const externalMatch = line.match(/^\[DrugEye\s*\/[^\]]*\]\s*(.+?)(?:\s+\([^)]*\))?:\s*(.*)$/i);
-          if (externalMatch) return { name: externalMatch[1].trim(), details: externalMatch[2].trim() };
           if (line.includes(" - ") && /\b(?:IV|IM|SC|PO|oral|intravenous|intramuscular|subcutaneous)\b/i.test(line)) {
             const [name, ...details] = line.split(" - ");
             return { name: name.trim(), details: details.join(" · ").trim() };
@@ -422,6 +423,7 @@ export default function NewInvoicePage() {
           return [];
         });
         const prescriptionLines: InvoiceLine[] = (visitPrescriptionRows || []).flatMap((row) => {
+          if (isHumanMedication(row)) return [];
           const product = products.find((item) => item.id === row.product_id);
           if (!product) return [];
           return [{ key: crypto.randomUUID(), item_type: "product", product_id: product.id, service_name: "", description: `${product.name}${row.prescription ? ` — ${row.prescription}` : ""}`, quantity: 1, unit_price: Number(product.retail_price) || 0, discount: 0, available_quantity: Number(product.quantity), autoMedication: true }];
@@ -522,6 +524,10 @@ export default function NewInvoicePage() {
         // Visit invoices sent to reception are still awaiting collection, so a
         // missing payment method means "not collected yet", not credit billing.
         setBillingMode(draft.payment_method === "credit" ? "credit" : "cash");
+        if (draft.status === "draft"
+          && ["فاتورة من الزيارة للاستقبال", "Invoice from visit for reception"].includes(draft.notes || "")) {
+          setPaidAmountTouched(false);
+        }
         setLines((draftItems || []).map((item) => ({
           key: item.id,
           item_type: item.item_type as InvoiceLine["item_type"],
@@ -960,6 +966,11 @@ setSaving(true);
     const context = await getClinicContext();
     const db = await getClinicDb();
 
+    const receptionDraftEdit = context.role === "reception"
+      && Boolean(draftId) && editingInvoiceStatus === "draft";
+    const draftPermissionMessage = language === "ar"
+      ? "يلزم تشغيل ملف supabase/tenant-sql/vetra_reception_draft_checkout.sql على قاعدة بيانات العيادة لتفعيل مراجعة مسودات الاستقبال."
+      : "Run supabase/tenant-sql/vetra_reception_draft_checkout.sql on the clinic database to enable reception draft checkout.";
     const receptionIssuedEdit = context.role === "reception"
       && Boolean(draftId)
       && editingInvoiceStatus !== "draft";
@@ -1013,7 +1024,7 @@ setSaving(true);
       return;
     }
 
-    const canCreateVisitInvoice = context.role === "reception" && Boolean(visitId);
+    const canCreateVisitInvoice = context.role === "reception" && Boolean(visitId) && !draftId;
     if (!canSaveInvoice && !["owner", "admin"].includes(context.role)) {
       setAuthorized(false);
       setSaving(false);
@@ -1056,7 +1067,7 @@ setSaving(true);
       pet_id: petId || null,
       visit_id: visitId || null,
       status: draftId ? (editingInvoiceStatus || "draft") : "draft",
-      payment_method: editingIssuedInvoice ? null : issueAfterSave ? billingMode : null,
+      payment_method: editingIssuedInvoice ? null : (issueAfterSave || visitId) ? billingMode : null,
       subtotal,
       discount: invoiceDiscount,
       total,
@@ -1088,7 +1099,8 @@ setSaving(true);
         .single();
 
     if (invoiceError || !invoice) {
-      setMessage(invoiceError?.message || "Could not create invoice.");
+      setMessage(receptionDraftEdit && invoiceError?.code === "42501"
+        ? draftPermissionMessage : invoiceError?.message || "Could not create invoice.");
       setSaving(false);
       return;
     }
@@ -1122,7 +1134,8 @@ setSaving(true);
         .eq("invoice_id", invoice.id)
         .eq("clinic_id", context.clinic_id);
       if (deleteItemsError) {
-        setMessage(deleteItemsError.message);
+        setMessage(receptionDraftEdit && deleteItemsError.code === "42501"
+          ? draftPermissionMessage : deleteItemsError.message);
         setSaving(false);
         return;
       }
@@ -1133,7 +1146,7 @@ setSaving(true);
       .insert(tenantItemRows);
 
     if (itemsError) {
-      await db.from("invoices").delete().eq("id", invoice.id).eq("clinic_id", context.clinic_id);
+      if (!draftId) await db.from("invoices").delete().eq("id", invoice.id).eq("clinic_id", context.clinic_id);
       setMessage(itemsError.message);
       setSaving(false);
       return;
@@ -1583,6 +1596,7 @@ setSuccess(
               </div>
 
               {invoiceMedicationNotice && <p className="mx-3 mt-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-200 sm:mx-5">{invoiceMedicationNotice}</p>}
+              {visitId && <div className="px-3 sm:px-5"><VisitHumanMedications key={visitId} visitId={visitId} ar={language === "ar"} darkMode={darkMode} /></div>}
 
               <div className="space-y-3 p-3">
                 {lines.map((line) => {
@@ -1786,7 +1800,7 @@ setSuccess(
                   />
                 </div>
 
-                {!visitId && <button
+                {(!visitId || editingInvoiceStatus === "draft") && <button
                   disabled={saving}
                   onClick={() => saveInvoice(false)}
                   className="w-full rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300"

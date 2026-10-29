@@ -118,7 +118,7 @@ const translations = {
       ["سجل الزيارات", "عرض وتعديل الكشوفات السابقة", "📋"],
       ["رسائل واتساب", "قوالب الرسائل ومشاركتها", "💬"],
       ["فريق العيادة", "الأطباء والمساعدون والاستقبال", "👩‍⚕️"],
-      ["مشتريات المخزون", "إضافة مشتريات من مورد", "🧾"],
+      ["فاتورة شراء", "إضافة مشتريات من مورد", "🧾"],
       ["الفواتير", "عرض وإدارة الفواتير", "📄"],
     ],
 
@@ -183,7 +183,7 @@ const translations = {
       ["Visit History", "Review and edit previous visits", "📋"],
       ["WhatsApp Messages", "Templates and customer sharing", "💬"],
       ["Clinic Staff", "Doctors, assistants, and front desk", "👩‍⚕️"],
-      ["Inventory Purchases", "Add stock from a supplier", "🧾"],
+      ["Purchase invoice", "Add stock from a supplier", "🧾"],
       ["Invoices", "View and manage invoices", "📄"],
     ],
 

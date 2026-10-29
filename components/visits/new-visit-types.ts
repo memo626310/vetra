@@ -75,6 +75,9 @@ export type MedicationDraft = {
 
 
 export type ExternalMedicationDraft = {
+  category?: "human";
+  intervalHours?: string;
+  durationDays?: string;
   id: string;
   product_id: string | null;
   productName: string;

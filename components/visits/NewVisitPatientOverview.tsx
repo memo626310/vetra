@@ -102,8 +102,15 @@ export default function NewVisitPatientOverview({
             </section>
 
             {/* PATIENT SUMMARY */}
-            <section>
-              <div className="mb-4 flex items-center justify-between">
+            <details
+              key={petDetails.id}
+              className={`group rounded-2xl border shadow-sm transition-colors duration-200 ${
+                darkMode
+                  ? "border-white/[0.07] bg-[#181B21]"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-2xl p-4 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 sm:p-5 [&::-webkit-details-marker]:hidden">
                 <div>
                   <h2
                     className={`text-xl font-bold ${
@@ -123,8 +130,20 @@ export default function NewVisitPatientOverview({
                     {t.previousVisits}: {visits.length}
                   </p>
                 </div>
-              </div>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  className="h-5 w-5 shrink-0 text-cyan-600 transition-transform group-open:rotate-180 dark:text-cyan-300"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+                </svg>
+              </summary>
 
+              <div className="space-y-5 px-4 pb-4 sm:px-5 sm:pb-5">
+              <section>
               <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4">
                 <div
                   className={`min-w-[148px] shrink-0 rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg sm:min-w-0 sm:p-5 ${
@@ -407,9 +426,19 @@ export default function NewVisitPatientOverview({
               </div>
             </section>
 
+              </div>
+            </details>
+
             {/* VITAL GRAPHS */}
-            <section>
-              <div className="mb-4">
+            <details
+              key={`${petDetails.id}-trends`}
+              className={`group rounded-2xl border shadow-sm transition-colors duration-200 ${
+                darkMode
+                  ? "border-white/[0.07] bg-[#181B21]"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-2xl p-4 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 sm:p-5 [&::-webkit-details-marker]:hidden">
                 <h2
                   className={`text-xl font-bold ${
                     darkMode ? "text-white" : "text-slate-900"
@@ -417,9 +446,21 @@ export default function NewVisitPatientOverview({
                 >
                   {t.trends}
                 </h2>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  className="h-5 w-5 shrink-0 text-cyan-600 transition-transform group-open:rotate-180 dark:text-cyan-300"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+                </svg>
+              </summary>
 
+              <div className="space-y-4 px-4 pb-4 sm:px-5 sm:pb-5">
                 <p
-                  className={`mt-1 text-sm ${
+                  className={`text-sm ${
                     darkMode
                       ? "text-slate-500"
                       : "text-slate-500"
@@ -427,7 +468,6 @@ export default function NewVisitPatientOverview({
                 >
                   Click any point to open that examination.
                 </p>
-              </div>
 
               <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-4">
                 <VitalCard
@@ -482,7 +522,8 @@ export default function NewVisitPatientOverview({
                   compact
                 />
               </div>
-            </section>
+              </div>
+            </details>
 
 
   </>);

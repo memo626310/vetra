@@ -449,7 +449,7 @@ export default function FinancePage() {
           {can("finance_page", "view") && <button type="button" onClick={() => { setActiveTab("collections"); setShowPayment(true); }} className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">{isAr ? "تحصيل دفعة من عميل" : "Collect customer payment"}</button>}
           {can("finance_page", "view") && <button type="button" onClick={() => router.push("/cash-register")} className="rounded-xl bg-rose-600 px-4 py-3 text-sm font-bold text-white">{isAr ? "تسجيل مصروف أو مقبوض" : "Record expense or income"}</button>}
           <button type="button" onClick={() => router.push("/invoices/new")} className={`rounded-xl border px-4 py-3 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200 bg-white"}`}>{isAr ? "إنشاء فاتورة بيع" : "Create sales invoice"}</button>
-          <button type="button" onClick={() => router.push("/inventory/purchases")} className={`rounded-xl border px-4 py-3 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200 bg-white"}`}>{isAr ? "مشتريات المخزون" : "Inventory purchases"}</button>
+          <button type="button" onClick={() => router.push("/inventory/purchases")} className={`rounded-xl border px-4 py-3 text-sm font-bold ${dark ? "border-white/10" : "border-slate-200 bg-white"}`}>{isAr ? "فاتورة شراء" : "Purchase invoice"}</button>
         </section>}
 
         {(activeTab === "accounts" || activeTab === "collections") && <section className={`grid gap-6 ${activeTab === "accounts" ? "" : "xl:grid-cols-1"}`}>

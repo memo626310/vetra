@@ -3,6 +3,8 @@
 "use client";
 
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
+import { HumanMedicationList, type HumanMedicationEntry } from "@/components/VisitHumanMedications";
+import { humanPrescriptionFromRecord } from "@/lib/human-prescriptions";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -137,6 +139,7 @@ export default function InvoiceDetailsPage() {
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [items, setItems] = useState<InvoiceItem[]>([]);
+  const [humanMedications, setHumanMedications] = useState<HumanMedicationEntry[]>([]);
   const [clientCredit, setClientCredit] = useState(0);
   const [receivedAmount, setReceivedAmount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -252,6 +255,18 @@ export default function InvoiceDetailsPage() {
 
       if (itemError) throw itemError;
 
+      let humanEntries: HumanMedicationEntry[] = [];
+      if (data.visit_id) {
+        const { data: prescriptionData, error: prescriptionError } = await db.from("visit_prescriptions")
+          .select("id,medication_name,prescription,source").eq("clinic_id", context.clinic_id)
+          .eq("visit_id", data.visit_id).order("created_at", { ascending: true });
+        if (prescriptionError) throw prescriptionError;
+        humanEntries = (prescriptionData || []).flatMap((row) => {
+          const prescription = humanPrescriptionFromRecord(row);
+          return prescription ? [{ id: String(row.id), name: String(row.medication_name), prescription }] : [];
+        });
+      }
+
       const { data: paymentData, error: paymentError } = await db
         .from("financial_transactions")
         .select("amount, direction, status")
@@ -294,6 +309,7 @@ export default function InvoiceDetailsPage() {
 
       setInvoice(data as Invoice);
       setItems((itemData || []) as InvoiceItem[]);
+      setHumanMedications(humanEntries);
       setClientCredit(Math.max(creditTotal, 0));
       setReceivedAmount(Math.max(receivedTotal, Number(data.paid_amount || 0)));
     } catch (err: any) {
@@ -930,6 +946,7 @@ export default function InvoiceDetailsPage() {
           </div>
 
           <div className="p-6 md:p-8">
+            <HumanMedicationList entries={humanMedications} ar={isAr} darkMode={darkMode} showBillingNote />
             <div className="space-y-3 sm:hidden print:hidden">
               {items.map((item, index) => {
                 const itemName = item.item_type === "product" ? item.product?.name || item.description || "Product" : item.service_name || item.description || "Service";

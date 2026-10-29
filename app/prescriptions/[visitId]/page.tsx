@@ -7,6 +7,8 @@ import Image from "next/image";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
 import { loadClinicProfile } from "@/lib/clinic-profile";
+import { HumanMedicationList, type HumanMedicationEntry } from "@/components/VisitHumanMedications";
+import { humanPrescriptionDetails, humanPrescriptionFromRecord } from "@/lib/human-prescriptions";
 import {
   buildPrescriptionPdfBlob,
   downloadBlob,
@@ -164,6 +166,7 @@ export default function PrescriptionPage() {
   const [visitMedications, setVisitMedications] = useState<VisitMedication[]>([]);
   const [medications, setMedications] = useState<Record<string, Medication>>({});
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
+  const [humanMedications, setHumanMedications] = useState<HumanMedicationEntry[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -184,6 +187,10 @@ export default function PrescriptionPage() {
     () => extractFollowUp(visit?.notes || null),
     [visit?.notes]
   );
+
+  const treatmentNotes = humanMedications.length
+    ? (visit?.treatment || "").split("\n").filter((line) => !/^\[(?:Human medication[^\]]*|DrugEye\s*\/[^\]]*)\]/i.test(line.trim())).join("\n").trim()
+    : visit?.treatment || "";
 
   const pdfFilename = useMemo(() => {
     const petName = (pet?.name || "Pet")
@@ -258,6 +265,7 @@ export default function PrescriptionPage() {
     clinic?.logo_url,
     clinic?.doctor_name,
     visitMedications,
+    humanMedications,
     vaccinations,
     medications,
   ]);
@@ -281,7 +289,7 @@ export default function PrescriptionPage() {
         throw visitError || new Error("Prescription visit was not found.");
       }
 
-      const [{ data: petData, error: petError }, { data: clientData, error: clientError }, { data: medicationRowsData, error: medicationRowsError }, { data: vaccinationData, error: vaccinationError }] =
+      const [{ data: petData, error: petError }, { data: clientData, error: clientError }, { data: medicationRowsData, error: medicationRowsError }, { data: vaccinationData, error: vaccinationError }, { data: prescriptionData, error: prescriptionError }] =
         await Promise.all([
           db
             .from("pets")
@@ -302,12 +310,19 @@ export default function PrescriptionPage() {
             .select("id, vaccine_name, vaccine_type, administered_at, next_dose_at, dose, route, batch_number, manufacturer, notes")
             .eq("visit_id", visitId)
             .order("administered_at", { ascending: true }),
+          db
+            .from("visit_prescriptions")
+            .select("id,medication_name,prescription,source")
+            .eq("clinic_id", context.clinic_id)
+            .eq("visit_id", visitId)
+            .order("created_at", { ascending: true }),
         ]);
 
       if (petError) throw petError;
       if (clientError) throw clientError;
       if (medicationRowsError) throw medicationRowsError;
       if (vaccinationError) throw vaccinationError;
+      if (prescriptionError) throw prescriptionError;
 
       const rows = (medicationRowsData || []) as VisitMedication[];
       const medicationIds = [...new Set(rows.map((row) => row.medication_id).filter(Boolean))];
@@ -331,6 +346,10 @@ export default function PrescriptionPage() {
       setVisitMedications(rows);
       setMedications(medicationMap);
       setVaccinations((vaccinationData || []) as Vaccination[]);
+      setHumanMedications((prescriptionData || []).flatMap((row) => {
+        const prescription = humanPrescriptionFromRecord(row);
+        return prescription ? [{ id: String(row.id), name: String(row.medication_name), prescription }] : [];
+      }));
     } catch (loadError) {
       console.error("LOAD PRESCRIPTION ERROR:", loadError);
       setError(
@@ -397,7 +416,8 @@ export default function PrescriptionPage() {
       `Pet: ${pet.name}`,
       `Owner: ${client?.name || "-"}`,
       visit.diagnosis ? `Diagnosis: ${visit.diagnosis}` : "",
-      medicationText ? `Treatment:\n${medicationText}` : visit.treatment ? `Treatment:\n${visit.treatment}` : "",
+      medicationText ? `Treatment:\n${medicationText}` : treatmentNotes ? `Treatment:\n${treatmentNotes}` : "",
+      humanMedications.length ? `الأدوية البشرية / Human medications:\n${humanMedications.map((entry) => `- ${entry.name}: ${humanPrescriptionDetails(entry.prescription, true)}`).join("\n")}` : "",
       visit.examination ? `Examination:\n${visit.examination}` : "",
       visit.notes ? `Notes:\n${visit.notes}` : "",
       visit.weight != null || visit.temperature != null || visit.heart_rate != null || visit.respiratory_rate != null
@@ -588,7 +608,8 @@ export default function PrescriptionPage() {
                   <h3 className="font-bold">{index + 1}. {medication?.name || "Medication"}</h3>
                   <p>{[row.calculated_dose != null ? `${formatNumber(row.calculated_dose)} ${row.calculated_dose_unit || ""}` : "", row.calculated_volume != null ? `${formatNumber(row.calculated_volume)} ${row.volume_unit || "mL"}` : "", row.route, row.frequency, row.duration_days != null ? `${row.duration_days} days` : ""].filter(Boolean).join(" · ")}</p>
                   {row.instructions && <p className="whitespace-pre-wrap text-slate-600">{row.instructions}</p>}
-                </article>)}</div> : <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{visit.treatment || "—"}</p>}
+                </article>)}</div> : treatmentNotes ? <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{treatmentNotes}</p> : !humanMedications.length ? <p className="mt-3">—</p> : null}
+                <HumanMedicationList entries={humanMedications} ar />
                 {vaccinations.length > 0 && <p className="mt-5 text-sm leading-6"><b>Vaccination / التطعيمات:</b> {vaccinations.map((item) => item.vaccine_name).filter(Boolean).join("، ")}</p>}
               </section>
               <footer className="mt-10 flex justify-between gap-8 border-t border-slate-200 pt-5 text-xs text-slate-600"><span>Veterinarian: {clinic?.doctor_name || "VETRA Veterinarian"}</span><span>{clinic?.display_name || clinic?.clinic_name || "VETRA Veterinary Clinic"}</span></footer>
@@ -714,11 +735,13 @@ export default function PrescriptionPage() {
               </Section>
             )}
 
-            {medicationRows.length === 0 && visit.treatment && (
+            {medicationRows.length === 0 && treatmentNotes && (
               <Section title="Treatment / العلاج">
-                <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{visit.treatment}</p>
+                <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{treatmentNotes}</p>
               </Section>
             )}
+
+            <HumanMedicationList entries={humanMedications} ar />
 
             {vaccinations.length > 0 && (
               <Section title="Vaccination / التطعيمات">
