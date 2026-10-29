@@ -8,6 +8,8 @@ import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
 import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
 import { loadClinicProfile } from "@/lib/clinic-profile";
 import { HumanMedicationList, type HumanMedicationEntry } from "@/components/VisitHumanMedications";
+import ClinicMedicationList from "@/components/ClinicMedicationList";
+import { clinicDrawerMedicationEntries, type ClinicMedicationEntry } from "@/lib/clinic-drawer-prescriptions";
 import { humanPrescriptionDetails, humanPrescriptionFromRecord } from "@/lib/human-prescriptions";
 import {
   buildPrescriptionPdfBlob,
@@ -167,6 +169,7 @@ export default function PrescriptionPage() {
   const [medications, setMedications] = useState<Record<string, Medication>>({});
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
   const [humanMedications, setHumanMedications] = useState<HumanMedicationEntry[]>([]);
+  const [clinicMedications, setClinicMedications] = useState<ClinicMedicationEntry[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -266,6 +269,7 @@ export default function PrescriptionPage() {
     clinic?.doctor_name,
     visitMedications,
     humanMedications,
+    clinicMedications,
     vaccinations,
     medications,
   ]);
@@ -350,6 +354,7 @@ export default function PrescriptionPage() {
         const prescription = humanPrescriptionFromRecord(row);
         return prescription ? [{ id: String(row.id), name: String(row.medication_name), prescription }] : [];
       }));
+      setClinicMedications(clinicDrawerMedicationEntries(prescriptionData || []));
     } catch (loadError) {
       console.error("LOAD PRESCRIPTION ERROR:", loadError);
       setError(
@@ -418,6 +423,7 @@ export default function PrescriptionPage() {
       visit.diagnosis ? `Diagnosis: ${visit.diagnosis}` : "",
       medicationText ? `Treatment:\n${medicationText}` : treatmentNotes ? `Treatment:\n${treatmentNotes}` : "",
       humanMedications.length ? `الأدوية البشرية / Human medications:\n${humanMedications.map((entry) => `- ${entry.name}: ${humanPrescriptionDetails(entry.prescription, true)}`).join("\n")}` : "",
+      clinicMedications.length ? `أدوية العيادة / Clinic medications:\n${clinicMedications.map((entry) => `- ${entry.name}: الكمية المصروفة ${entry.quantity}${entry.unit ? ` ${entry.unit}` : ""}`).join("\n")}` : "",
       visit.examination ? `Examination:\n${visit.examination}` : "",
       visit.notes ? `Notes:\n${visit.notes}` : "",
       visit.weight != null || visit.temperature != null || visit.heart_rate != null || visit.respiratory_rate != null
@@ -608,8 +614,9 @@ export default function PrescriptionPage() {
                   <h3 className="font-bold">{index + 1}. {medication?.name || "Medication"}</h3>
                   <p>{[row.calculated_dose != null ? `${formatNumber(row.calculated_dose)} ${row.calculated_dose_unit || ""}` : "", row.calculated_volume != null ? `${formatNumber(row.calculated_volume)} ${row.volume_unit || "mL"}` : "", row.route, row.frequency, row.duration_days != null ? `${row.duration_days} days` : ""].filter(Boolean).join(" · ")}</p>
                   {row.instructions && <p className="whitespace-pre-wrap text-slate-600">{row.instructions}</p>}
-                </article>)}</div> : treatmentNotes ? <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{treatmentNotes}</p> : !humanMedications.length ? <p className="mt-3">—</p> : null}
+                </article>)}</div> : treatmentNotes ? <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{treatmentNotes}</p> : !humanMedications.length && !clinicMedications.length ? <p className="mt-3">—</p> : null}
                 <HumanMedicationList entries={humanMedications} ar />
+                <ClinicMedicationList entries={clinicMedications} ar />
                 {vaccinations.length > 0 && <p className="mt-5 text-sm leading-6"><b>Vaccination / التطعيمات:</b> {vaccinations.map((item) => item.vaccine_name).filter(Boolean).join("، ")}</p>}
               </section>
               <footer className="mt-10 flex justify-between gap-8 border-t border-slate-200 pt-5 text-xs text-slate-600"><span>Veterinarian: {clinic?.doctor_name || "VETRA Veterinarian"}</span><span>{clinic?.display_name || clinic?.clinic_name || "VETRA Veterinary Clinic"}</span></footer>
@@ -742,6 +749,7 @@ export default function PrescriptionPage() {
             )}
 
             <HumanMedicationList entries={humanMedications} ar />
+            <ClinicMedicationList entries={clinicMedications} ar />
 
             {vaccinations.length > 0 && (
               <Section title="Vaccination / التطعيمات">

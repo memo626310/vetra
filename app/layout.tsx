@@ -4,6 +4,7 @@ import AuthGuard from "@/components/AuthGuard";
 import ClinicMobileNavigation from "@/components/ClinicMobileNavigation";
 import PwaInstallProvider from "@/components/PwaInstallProvider";
 import ThemeBridge from "@/components/ThemeBridge";
+import { StaffPermissionsProvider } from "@/lib/use-staff-permissions";
 
 export const metadata: Metadata = {
   title: "VETRA",
@@ -20,8 +21,10 @@ export default function RootLayout({
       <body>
         <ThemeBridge />
         <PwaInstallProvider>
-          <AuthGuard>{children}</AuthGuard>
-          <ClinicMobileNavigation />
+          <StaffPermissionsProvider>
+            <AuthGuard>{children}</AuthGuard>
+            <ClinicMobileNavigation />
+          </StaffPermissionsProvider>
         </PwaInstallProvider>
       </body>
     </html>

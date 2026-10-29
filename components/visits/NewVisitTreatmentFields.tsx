@@ -1,11 +1,12 @@
 import { useState } from "react";
 import HumanPrescriptionEditor from "./HumanPrescriptionEditor";
+import ClinicMedicationList from "@/components/ClinicMedicationList";
+import type { DrawerMedication } from "@/lib/clinic-drawer-prescriptions";
 import type { FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
 import type { ExternalMedicationDraft, Language, Medication, MedicationDraft, VaccinationDraft, VisitTranslations } from "./new-visit-types";
 import { getVaccinationStageOptions, calculateNextVaccinationDose } from "./new-visit-utils";
 type VaccineStockProduct = { id: string; name: string; quantity: number; unit: string | null; retail_price: number };
 type ClinicStockProduct = VaccineStockProduct & { active_ingredient: string | null; barcode?: string | null };
-type DrawerMedication = { id: string; product_id: string; quantity: number };
 
 type Props = {
   clinicId: string;
@@ -32,6 +33,8 @@ type Props = {
   clinicStockProducts: ClinicStockProduct[];
   drawerMedications: DrawerMedication[];
   setDrawerMedications: (value: DrawerMedication[] | ((current: DrawerMedication[]) => DrawerMedication[])) => void;
+  showDrawerMedicationsOnPrescription: boolean;
+  setShowDrawerMedicationsOnPrescription: (value: boolean) => void;
   addVaccination: () => void;
   updateVaccination: (id: string, patch: Partial<VaccinationDraft>) => void;
   removeVaccination: (id: string) => void;
@@ -57,6 +60,7 @@ export default function NewVisitTreatmentFields({
   vaccineStockProducts, vaccineProductMappings,
   clinicStockProducts,
   drawerMedications, setDrawerMedications,
+  showDrawerMedicationsOnPrescription, setShowDrawerMedicationsOnPrescription,
   resetVaccinationNextDoseToAutomatic, visitNotes, setVisitNotes, followUp, setFollowUp,
   followUpDetails, setFollowUpDetails, canViewVaccination = false, canAddVaccination = false, canEditVaccination = false, canDeleteVaccination = false, vaccinationIsSaved = () => true,
 }: Props) {
@@ -75,6 +79,11 @@ export default function NewVisitTreatmentFields({
                   </summary>
                   <div className="space-y-4 px-3 pb-4 sm:px-4">
                   <HumanPrescriptionEditor clinicId={clinicId} language={language} darkMode={darkMode} drafts={externalMedicationDrafts} onAdd={onAddManualExternalMedication} onUpdate={onUpdateExternalMedication} onSave={onSaveExternalMedication} onRemove={onRemoveManualExternalMedication} />
+                   {showDrawerMedicationsOnPrescription && <ClinicMedicationList entries={drawerMedications.flatMap((item) => {
+                     const product = clinicStockProducts.find((candidate) => candidate.id === item.product_id);
+                     const name = product?.name || item.prescriptionName;
+                     return name ? [{ id: item.id, name, quantity: item.quantity, unit: product?.unit || item.prescriptionUnit || "" }] : [];
+                   })} ar={language === "ar"} darkMode={darkMode} />}
                     <div className="mt-3 border-t pt-3" style={{ borderColor: darkMode ? "#334155" : "#e2e8f0" }}>
                       <button
                         type="button"
@@ -106,6 +115,10 @@ export default function NewVisitTreatmentFields({
                 <div className="lg:col-span-2">
                   <section className={`mb-4 rounded-xl border p-3 ${darkMode ? "border-cyan-900/60 bg-slate-950/60" : "border-cyan-200 bg-cyan-50/40"}`}>
                     <div className="mb-2 text-sm font-bold">{language === "ar" ? "درج الأدوية" : "Medication drawer"}</div>
+                    <label className={`mb-3 flex cursor-pointer items-start gap-2 text-sm ${darkMode ? "text-slate-200" : "text-slate-700"}`}>
+                      <input type="checkbox" checked={showDrawerMedicationsOnPrescription} onChange={(event) => setShowDrawerMedicationsOnPrescription(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-600" />
+                      <span>{language === "ar" ? "إظهار أدوية العيادة في الروشتة تحت الأدوية البشرية" : "Show clinic medications in the prescription below human medications"}</span>
+                    </label>
                     <input value={drawerSearch} onChange={(event) => setDrawerSearch(event.target.value)} placeholder={language === "ar" ? "ابحث بالاسم أو المادة الفعالة أو الباركود" : "Search name, active ingredient, or barcode"} className={`mb-2 w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-200 bg-white"}`} />
                     <div className="flex gap-2"><select value="" onChange={(event) => {
                       const product = clinicStockProducts.find((item) => item.id === event.target.value);

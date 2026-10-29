@@ -29,6 +29,7 @@ import NewVisitClinicalFields from "@/components/visits/NewVisitClinicalFields";
 import NewVisitTreatmentFields from "@/components/visits/NewVisitTreatmentFields";
 import NewVisitVetTools from "@/components/visits/NewVisitVetTools";
 import { humanPrescriptionDetails, humanPrescriptionFromDraft, isHumanMedication, parseHumanPrescription, serializeHumanPrescription, validHumanSchedule } from "@/lib/human-prescriptions";
+import { clinicDrawerPrescriptionRows, isClinicDrawerPrescription, parseClinicDrawerPrescription, type DrawerMedication } from "@/lib/clinic-drawer-prescriptions";
 import NewVisitEditorSection from "@/components/visits/NewVisitEditorSection";
 import NewVisitHistory from "@/components/visits/NewVisitHistory";
 import NewVisitDetailsModal from "@/components/visits/NewVisitDetailsModal";
@@ -41,7 +42,6 @@ type MedicationBillLine = { id: string; name: string };
 type VisitAttachmentDraft = { id: string; file: File; category: "analysis" | "xray" };
 type ExistingVisitAttachment = { id: string; file_name: string; storage_path: string; category: "analysis" | "xray"; url: string };
 type VaccineStockProduct = { id: string; name: string; active_ingredient: string | null; quantity: number; unit: string | null; retail_price: number; barcode?: string | null; category_id?: string | null };
-type DrawerMedication = { id: string; product_id: string; quantity: number };
 
 const NEW_VISIT_DRAFT_MAX_AGE_MS = 5 * 60 * 1000;
 
@@ -128,6 +128,7 @@ export default function NewVisitPage() {
   const [clinicStockProducts, setClinicStockProducts] = useState<VaccineStockProduct[]>([]);
   const [vaccineProductMappings, setVaccineProductMappings] = useState<Record<string, string[]>>({});
   const [drawerMedications, setDrawerMedications] = useState<DrawerMedication[]>([]);
+  const [showDrawerMedicationsOnPrescription, setShowDrawerMedicationsOnPrescription] = useState(false);
   const [medicalRecordDraft, setMedicalRecordDraft] = useState<MedicalRecordDraft>(emptyMedicalRecordDraft);
   const [originalMedicalRecords, setOriginalMedicalRecords] = useState<Array<{ id: string; record_type: string; title: string; status: string | null }>>([]);
   const [draftKey, setDraftKey] = useState<string | null>(null);
@@ -153,6 +154,7 @@ export default function NewVisitPage() {
           medicationSearch: string; selectedMedicationId: string; medicationDrafts: MedicationDraft[];
           formularyDrafts: FormularyVisitDraft[]; externalMedicationDrafts: ExternalMedicationDraft[];
           vaccinations: VaccinationDraft[]; drawerMedications: DrawerMedication[]; medicalRecordDraft: MedicalRecordDraft;
+          showDrawerMedicationsOnPrescription?: boolean;
         }>(key, NEW_VISIT_DRAFT_MAX_AGE_MS);
         // Remove expired/orphaned files before autosave can create a fresh draft.
         let savedAttachments: VisitAttachmentDraft[] | null = null;
@@ -180,6 +182,7 @@ export default function NewVisitPage() {
           setMedicationDrafts(draft.medicationDrafts || []); setFormularyDrafts(draft.formularyDrafts || []);
           setExternalMedicationDrafts(draft.externalMedicationDrafts || []); setVaccinations(draft.vaccinations || []);
           setDrawerMedications(draft.drawerMedications || []);
+          setShowDrawerMedicationsOnPrescription(Boolean(draft.showDrawerMedicationsOnPrescription));
           if (draft.medicalRecordDraft) setMedicalRecordDraft(draft.medicalRecordDraft);
         }
         if (savedAttachments) setAttachments(savedAttachments);
@@ -195,13 +198,13 @@ export default function NewVisitPage() {
       medicationChargeQuantities, symptoms, visitServices, visitDate, reason, examStatus, examination,
       followUp, followUpDetails, diagnosis, treatment, visitNotes, weight, temperature, heartRate,
       respiratoryRate, medicationSearch, selectedMedicationId, medicationDrafts, formularyDrafts,
-      externalMedicationDrafts, vaccinations, drawerMedications, medicalRecordDraft,
+      externalMedicationDrafts, vaccinations, drawerMedications, showDrawerMedicationsOnPrescription, medicalRecordDraft,
     }), [selectedClientId, selectedPetId, clientSearch, petSearch,
     started, visitSource, appointmentId, performingDoctor, groomingType, consultationFee, followUpFee,
     injectionFee, medicationChargePrices, medicationChargeQuantities, symptoms, visitServices, visitDate,
     reason, examStatus, examination, followUp, followUpDetails, diagnosis, treatment, visitNotes, weight,
     temperature, heartRate, respiratoryRate, medicationSearch, selectedMedicationId, medicationDrafts,
-    formularyDrafts, externalMedicationDrafts, vaccinations, drawerMedications, medicalRecordDraft]);
+    formularyDrafts, externalMedicationDrafts, vaccinations, drawerMedications, showDrawerMedicationsOnPrescription, medicalRecordDraft]);
 
   useEffect(() => {
     if (!draftRestored || !draftKey || editVisitId) return;
@@ -609,7 +612,16 @@ export default function NewVisitPage() {
         const [appliedDose = "", frequency = "", route = ""] = String(row.prescription || "").split(" · ");
         return { id: row.id, product_id: row.product_id || null, drugId: 0, drugName: row.medication_name || "", activeIngredient: row.active_ingredient || "", species: pet.species || "", route, doseUnit: "", doseBasis: null, doseExpression: appliedDose, doseText: appliedDose, sourcePage: 0, sourceMin: 0, sourceMax: 0, calculatedMin: null, calculatedMax: null, appliedDose, adminDoseUnit: "", calculatedVolumeMin: null, calculatedVolumeMax: null, concentrationMgPerMl: null, clinicConcentrationMgPerMl: null, frequency, autoCalculated: false };
       }));
-      setExternalMedicationDrafts(prescriptionRows.filter((row) => row.source !== "bsava").map((row) => {
+      const drawerPrescriptionRows = prescriptionRows.flatMap((row) => {
+        const prescription = parseClinicDrawerPrescription(row.prescription);
+        return prescription ? [{ row, prescription }] : [];
+      });
+      setDrawerMedications(drawerPrescriptionRows.map(({ row, prescription }) => ({
+        id: row.id, product_id: prescription.productId, quantity: prescription.quantity,
+        prescriptionName: row.medication_name, prescriptionUnit: prescription.unit,
+      })));
+      setShowDrawerMedicationsOnPrescription(drawerPrescriptionRows.some(({ prescription }) => prescription.showOnPrescription));
+      setExternalMedicationDrafts(prescriptionRows.filter((row) => row.source !== "bsava" && !isClinicDrawerPrescription(row)).map((row) => {
         const human = parseHumanPrescription(row.prescription);
         if (human) return { id: row.id, category: "human" as const, product_id: null, productName: row.medication_name || "", activeIngredient: row.active_ingredient || null, manufacturer: null, price: null, ...human, frequency: human.intervalHours ? `Every ${human.intervalHours} hours` : "", duration: human.durationDays ? `For ${human.durationDays} days` : "", weightKg: null, source: row.source === "drug_eye" ? "DrugEye" as const : "manual" as const, bsavaDrugName: null };
         const [doseText = "", route = "", frequency = "", duration = "", instructions = ""] = String(row.prescription || "").split(" · ");
@@ -1226,6 +1238,7 @@ export default function NewVisitPage() {
         }
 
         const prescriptionRows = [
+          ...clinicDrawerPrescriptionRows(drawerMedications, clinicStockProducts, clinicContext.clinic_id, visit.id, showDrawerMedicationsOnPrescription),
           ...formularyDrafts.map((draft) => ({
             ...(editVisitId ? { id: draft.id } : {}),
             clinic_id: clinicContext.clinic_id,
@@ -1449,6 +1462,7 @@ export default function NewVisitPage() {
       setFormularyDrafts([]);
       setVaccinations([]);
       setDrawerMedications([]);
+      setShowDrawerMedicationsOnPrescription(false);
       setMedicalRecordDraft(emptyMedicalRecordDraft);
 
       clearClinicCache(clinicContext.clinic_id);
@@ -1813,6 +1827,8 @@ export default function NewVisitPage() {
                 clinicStockProducts={clinicStockProducts}
                 drawerMedications={drawerMedications}
                 setDrawerMedications={setDrawerMedications}
+                showDrawerMedicationsOnPrescription={showDrawerMedicationsOnPrescription}
+                setShowDrawerMedicationsOnPrescription={setShowDrawerMedicationsOnPrescription}
                 addVaccination={addVaccination}
                 updateVaccination={updateVaccination}
                 removeVaccination={removeVaccination}

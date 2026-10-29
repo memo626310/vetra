@@ -9,6 +9,7 @@ import { writeVetraThemeMode } from "@/lib/theme";
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
 import VisitHumanMedications from "@/components/VisitHumanMedications";
 import { isHumanMedication } from "@/lib/human-prescriptions";
+import { isClinicDrawerPrescription } from "@/lib/clinic-drawer-prescriptions";
 import { clearFormDraft, getFormDraftStorageKey, readFormDraft, writeFormDraft } from "@/lib/form-drafts";
 
 type Client = {
@@ -423,7 +424,7 @@ export default function NewInvoicePage() {
           return [];
         });
         const prescriptionLines: InvoiceLine[] = (visitPrescriptionRows || []).flatMap((row) => {
-          if (isHumanMedication(row)) return [];
+          if (isHumanMedication(row) || isClinicDrawerPrescription(row)) return [];
           const product = products.find((item) => item.id === row.product_id);
           if (!product) return [];
           return [{ key: crypto.randomUUID(), item_type: "product", product_id: product.id, service_name: "", description: `${product.name}${row.prescription ? ` — ${row.prescription}` : ""}`, quantity: 1, unit_price: Number(product.retail_price) || 0, discount: 0, available_quantity: Number(product.quantity), autoMedication: true }];

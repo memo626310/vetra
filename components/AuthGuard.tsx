@@ -37,7 +37,7 @@ function AuthGuardContent({
   const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const [checkedPath, setCheckedPath] = useState("");
   const [checkError, setCheckError] = useState(false);
-  const verifiedState = useRef<{ userId: string; verifiedAt: number; mustChangePassword: boolean } | null>(null);
+  const verifiedState = useRef<{ userId: string; accessToken: string; verifiedAt: number; mustChangePassword: boolean } | null>(null);
 
   useEffect(() => {
     if (isPublicPath(pathname)) {
@@ -51,6 +51,8 @@ function AuthGuardContent({
         data: { session },
         error,
       } = await vetraCore.auth.getSession();
+
+      if (!mounted) return;
 
       if (error) {
         console.error(
@@ -67,7 +69,7 @@ function AuthGuardContent({
 
       const cached = verifiedState.current;
       // Keep route changes fast while still re-checking staff security periodically.
-      if (cached?.userId === session.user.id && Date.now() - cached.verifiedAt < 5 * 60_000) {
+      if (cached?.userId === session.user.id && cached.accessToken === session.access_token && Date.now() - cached.verifiedAt < 5 * 60_000) {
         if (cached.mustChangePassword && pathname !== "/change-password") {
           router.replace("/change-password");
           return;
@@ -88,6 +90,7 @@ function AuthGuardContent({
         cache: "no-store",
       });
       const staffState = await staffStateResponse.json().catch(() => null) as { mustChangePassword?: boolean } | null;
+      if (!mounted) return;
       if (!staffStateResponse.ok || !staffState) {
         verifiedState.current = null;
         await Promise.all([
@@ -98,17 +101,17 @@ function AuthGuardContent({
         return;
       }
       if (staffState.mustChangePassword && pathname !== "/change-password") {
-        verifiedState.current = { userId: session.user.id, verifiedAt: Date.now(), mustChangePassword: true };
+        verifiedState.current = { userId: session.user.id, accessToken: session.access_token, verifiedAt: Date.now(), mustChangePassword: true };
         router.replace("/change-password");
         return;
       }
       if (!staffState.mustChangePassword && pathname === "/change-password") {
-        verifiedState.current = { userId: session.user.id, verifiedAt: Date.now(), mustChangePassword: false };
+        verifiedState.current = { userId: session.user.id, accessToken: session.access_token, verifiedAt: Date.now(), mustChangePassword: false };
         router.replace("/dashboard");
         return;
       }
 
-      verifiedState.current = { userId: session.user.id, verifiedAt: Date.now(), mustChangePassword: Boolean(staffState.mustChangePassword) };
+      verifiedState.current = { userId: session.user.id, accessToken: session.access_token, verifiedAt: Date.now(), mustChangePassword: Boolean(staffState.mustChangePassword) };
       if (mounted) {
         setCheckError(false);
         setCheckedPath(pathname);
@@ -120,11 +123,17 @@ function AuthGuardContent({
     const {
       data: { subscription },
     } = vetraCore.auth.onAuthStateChange(
-      (_event, session) => {
-        // A staff member can sign out after changing a temporary password and
-        // sign back in as the same user. Never reuse the previous
-        // mustChangePassword decision across an auth-session transition.
-        verifiedState.current = null;
+      (event, session) => {
+        const cached = verifiedState.current;
+        if (event === "TOKEN_REFRESHED" && cached && cached.userId === session?.user.id && session) {
+          // A refreshed token belongs to the same verified login.
+          cached.accessToken = session.access_token;
+        } else if (!session || event === "USER_UPDATED" || event === "PASSWORD_RECOVERY"
+          || (cached && (cached.userId !== session.user.id || cached.accessToken !== session.access_token))) {
+          // Real sign-out/sign-in and password changes invalidate security.
+          // Repeated SIGNED_IN/INITIAL_SESSION on tab focus do not.
+          verifiedState.current = null;
+        }
         if (!session && !isPublicPath(pathname)) {
           router.replace("/login");
           return;
