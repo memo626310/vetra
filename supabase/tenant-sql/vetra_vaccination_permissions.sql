@@ -1,5 +1,5 @@
 -- Apply to each clinic tenant database after vetra_staff_permission_rls.sql.
--- Adds action guards to existing tenant isolation; does not replace it.
+-- Adds read/write action guards to existing tenant isolation; does not replace it.
 begin;
 do $$
 declare
@@ -12,19 +12,21 @@ begin
     if to_regclass('public.' || t) is null then
       raise exception 'Required vaccination table missing: %', t;
     end if;
-    foreach a in array array['INSERT', 'UPDATE', 'DELETE'] loop
+    foreach a in array array['SELECT', 'INSERT', 'UPDATE', 'DELETE'] loop
       if not exists (
         select 1 from pg_policies
         where schemaname = 'public' and tablename = t
-          and permissive = 'PERMISSIVE' and cmd in (a, 'ALL')
+          and permissive and cmd in (a, 'ALL')
       ) then
         raise exception 'Missing tenant policy for % on %', a, t;
       end if;
-      permission_action := case a when 'INSERT' then 'create' when 'UPDATE' then 'edit' else 'delete' end;
+      permission_action := case a when 'SELECT' then 'view' when 'INSERT' then 'create' when 'UPDATE' then 'edit' else 'delete' end;
       policy_name := 'vetra_vaccination_' || lower(a) || '_guard';
       execute format('alter table public.%I enable row level security', t);
       execute format('drop policy if exists %I on public.%I', policy_name, t);
-      if a = 'INSERT' then
+      if a = 'SELECT' then
+        execute format('create policy %I on public.%I as restrictive for select to authenticated using (clinic_id = public.vetra_current_clinic_id() and public.vetra_has_clinic_staff_permission(''vaccinations'', ''view''))', policy_name, t);
+      elsif a = 'INSERT' then
         execute format('create policy %I on public.%I as restrictive for insert to authenticated with check (clinic_id = public.vetra_current_clinic_id() and public.vetra_has_clinic_staff_permission(''vaccinations'', %L))', policy_name, t, permission_action);
       elsif a = 'UPDATE' then
         execute format('create policy %I on public.%I as restrictive for update to authenticated using (clinic_id = public.vetra_current_clinic_id() and public.vetra_has_clinic_staff_permission(''vaccinations'', %L)) with check (clinic_id = public.vetra_current_clinic_id() and public.vetra_has_clinic_staff_permission(''vaccinations'', %L))', policy_name, t, permission_action, permission_action);

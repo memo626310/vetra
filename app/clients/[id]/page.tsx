@@ -71,7 +71,7 @@ export default function ClientPage() {
   const [message, setMessage] = useState("");
 
   const [petName, setPetName] = useState("");
-  const [species, setSpecies] = useState("Cat");
+  const [species, setSpecies] = useState("");
   const [breed, setBreed] = useState("");
   const [gender, setGender] = useState("");
   const [birthDate, setBirthDate] = useState("");
@@ -257,80 +257,26 @@ export default function ClientPage() {
 
     try {
       const db = await getClinicDb();
-      const currentCode = String(client.client_code || "").trim();
-      if (!client.clinic_id) throw new Error("تعذر تحديد العيادة المرتبط بها العميل.");
+      const { data, error: generationError } = await db.rpc(
+        "vetra_generate_client_code",
+        { p_client_id: client.id },
+      );
 
-      const { data: clinicClients, error: clinicClientsError } = await db
-        .from("clients")
-        .select("client_code")
-        .eq("clinic_id", client.clinic_id);
-
-      if (clinicClientsError) throw clinicClientsError;
-
-      const numericCodes = (clinicClients || [])
-        .map((row) => String(row.client_code || "").trim())
-        .filter((code) => /^\d{6}$/.test(code));
-      const clinicPrefixes = new Set(numericCodes.map((code) => code.slice(0, 2)));
-      const clinicPrefix = clinicPrefixes.size === 1 ? [...clinicPrefixes][0] : null;
-
-      let lastError: Error | null = null;
-      for (let attempt = 0; attempt < 40; attempt += 1) {
-        const random = new Uint32Array(1);
-        window.crypto.getRandomValues(random);
-        const suffix = String(random[0] % 10000).padStart(4, "0");
-        const candidate = clinicPrefix
-          ? clinicPrefix + suffix
-          : String(100000 + (random[0] % 900000));
-
-        if (candidate === currentCode) continue;
-
-        // Check globally too, in case the database has a global unique index.
-        const { data: occupied, error: lookupError } = await db
-          .from("clients")
-          .select("id")
-          .eq("client_code", candidate)
-          .limit(1)
-          .maybeSingle();
-
-        if (lookupError) throw lookupError;
-        if (occupied) continue;
-
-        const { data: updated, error: updateError } = await db
-          .from("clients")
-          .update({ client_code: candidate })
-          .eq("id", client.id)
-          .eq("clinic_id", client.clinic_id)
-          .select("id, client_code")
-          .single();
-
-        if (updateError) {
-          const detail = (updateError.message || "").toLowerCase();
-          if (detail.includes("duplicate") || detail.includes("unique")) {
-            lastError = updateError;
-            continue;
-          }
-          throw updateError;
+      if (generationError) {
+        if (generationError.code === "PGRST202" || generationError.code === "42883") {
+          throw new Error("ميزة توليد Client ID غير مضافة إلى قاعدة بيانات العيادة. شغّل ملف vetra_client_code_generation.sql أولًا.");
         }
-
-        if (
-          !updated?.client_code ||
-          !/^\d{6}$/.test(updated.client_code) ||
-          (clinicPrefix && !updated.client_code.startsWith(clinicPrefix))
-        ) {
-          throw new Error("لم يتم تأكيد Client ID الجديد بالصيغة الصحيحة.");
-        }
-
-        setClient((current) => current ? { ...current, client_code: updated.client_code } : current);
-        clearClinicCache(clinicId);
-        setMessage(
-          clinicPrefix
-            ? "تم تغيير Client ID بنجاح مع الحفاظ على كود العيادة: " + updated.client_code
-            : "تم تغيير Client ID بنجاح. رقم الدخول الجديد: " + updated.client_code
-        );
-        return;
+        throw generationError;
       }
 
-      throw lastError || new Error("لم يتم العثور على رقم دخول متاح. لم يتم تغيير الرقم.");
+      const generatedCode = Array.isArray(data) ? data[0] : data;
+      if (typeof generatedCode !== "string" || !/^\d{6}$/.test(generatedCode)) {
+        throw new Error("لم يتم تأكيد Client ID الجديد بالصيغة الصحيحة.");
+      }
+
+      setClient((current) => current ? { ...current, client_code: generatedCode } : current);
+      clearClinicCache(clinicId);
+      setMessage("تم تغيير Client ID بنجاح مع الحفاظ على كود العيادة: " + generatedCode);
     } catch (err) {
       console.error("GENERATE CLIENT CODE ERROR:", err);
       setError(err instanceof Error ? err.message : "تعذر تغيير Client ID.");
@@ -416,12 +362,12 @@ export default function ClientPage() {
         .insert({
           client_id: client.id,
           name: petName.trim(),
-          species,
+          species: species || "Other",
           breed: breed.trim() || null,
           gender: gender || null,
           birth_date: birthDate || null,
           color: color.trim() || null,
-          microchip: microchip.trim() || null,
+          ...(microchip.trim() ? { microchip: microchip.trim() } : {}),
           notes: petNotes.trim() || null,
         })
         .select("*")
@@ -444,7 +390,7 @@ export default function ClientPage() {
       }
 
       setPetName("");
-      setSpecies("Cat");
+      setSpecies("");
       setBreed("");
       setGender("");
       setBirthDate("");
@@ -817,7 +763,7 @@ export default function ClientPage() {
 
             <div>
               <label className="mb-2 block text-sm font-bold">
-                النوع *
+                النوع
               </label>
 
               <select
@@ -827,6 +773,9 @@ export default function ClientPage() {
                 }
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 outline-none focus:border-blue-500 focus:bg-white"
               >
+                <option value="">
+                  اختر النوع (اختياري)
+                </option>
                 <option value="Cat">
                   قط
                 </option>

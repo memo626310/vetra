@@ -22,6 +22,10 @@ function isPublicPath(pathname: string) {
   );
 }
 
+function isPlatformAdminPath(pathname: string) {
+  return pathname === "/core-admin" || pathname.startsWith("/core-admin/");
+}
+
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<main role="status" className="p-6">Loading VETRA...</main>}><AuthGuardContent>{children}</AuthGuardContent></Suspense>;
 }
@@ -64,6 +68,18 @@ function AuthGuardContent({
       if (!session) {
         verifiedState.current = null;
         router.replace("/login");
+        return;
+      }
+
+      // The central platform console is authorized by its own server-side
+      // platform-admin check. It must remain reachable for platform admins
+      // who do not belong to a tenant clinic.
+      if (isPlatformAdminPath(pathname)) {
+        verifiedState.current = { userId: session.user.id, accessToken: session.access_token, verifiedAt: Date.now(), mustChangePassword: false };
+        if (mounted) {
+          setCheckError(false);
+          setCheckedPath(pathname);
+        }
         return;
       }
 

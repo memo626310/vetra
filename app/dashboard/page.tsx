@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
-import { getClinicDb } from "@/lib/clinic-db";
+import { getClinicContext, getClinicDb, resetClinicDbConnection } from "@/lib/clinic-db";
 import PushNotificationsButton from "@/components/PushNotificationsButton";
 import ReceptionCheckoutNotice from "@/components/ReceptionCheckoutNotice";
 import { writeVetraTheme } from "@/lib/theme";
@@ -340,27 +340,18 @@ export default function Home() {
     async function loadClinicContext() {
       setClinicLoading(true);
 
-      const { data, error } = await vetraCore.rpc(
-        "get_my_clinic_context"
-      );
-
-      if (error) {
-        console.error(
-          "VETRA CORE CONTEXT ERROR:",
-          error
-        );
-
+      let context: ClinicContext | null = null;
+      try {
+        context = await getClinicContext();
+      } catch (error) {
+        console.error("VETRA CORE CONTEXT ERROR:", error);
         if (mounted) {
           setClinicContext(null);
           setClinicLoading(false);
+          router.replace("/clinic-setup");
         }
-
         return;
       }
-
-      const context = Array.isArray(data)
-        ? data[0] ?? null
-        : null;
 
       console.log(
         "ACTIVE VETRA CLINIC:",
@@ -458,6 +449,7 @@ export default function Home() {
           String(today.getMonth() + 1).padStart(2, "0"),
           String(today.getDate()).padStart(2, "0"),
         ].join("-");
+        const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
         const expiryLimit = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30);
         const expiryLimitKey = [
           expiryLimit.getFullYear(),
@@ -466,26 +458,43 @@ export default function Home() {
         ].join("-");
 
         const [appointmentsResult, vaccinesResult, productsResult] = await Promise.all([
-          can("appointments") ? db.from("appointments").select("id, status").eq("clinic_id", clinicId).eq("appointment_date", dateKey) : Promise.resolve({ data: [], error: null }),
-          can("vaccinations") ? db.from("vaccinations").select("next_dose_at").eq("clinic_id", clinicId).not("next_dose_at", "is", null) : Promise.resolve({ data: [], error: null }),
-          can("inventory") ? db.from("products").select("quantity, reorder_level, expiry_date").eq("clinic_id", clinicId).eq("is_active", true) : Promise.resolve({ data: [], error: null }),
+          can("appointments")
+            ? db.from("appointments")
+                .select("id", { count: "exact", head: true })
+                .eq("clinic_id", clinicId)
+                .eq("appointment_date", dateKey)
+                .neq("status", "cancelled")
+                .neq("status", "no_show")
+            : Promise.resolve({ data: [], count: 0, error: null }),
+          can("vaccinations")
+            ? db.from("vaccinations")
+                .select("id", { count: "exact", head: true })
+                .eq("clinic_id", clinicId)
+                .gte("next_dose_at", new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString())
+                .lt("next_dose_at", tomorrow.toISOString())
+            : Promise.resolve({ data: [], count: 0, error: null }),
+          can("inventory")
+            ? db.rpc("get_dashboard_inventory_stats", {
+                p_today: dateKey,
+                p_expiry_until: expiryLimitKey,
+              }).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
         ]);
 
         if (appointmentsResult.error) throw appointmentsResult.error;
         if (vaccinesResult.error) throw vaccinesResult.error;
         if (productsResult.error) throw productsResult.error;
 
-        const vaccinationsToday = (vaccinesResult.data || []).filter((item) => {
-          const value = String(item.next_dose_at || "");
-          return value.slice(0, 10) === dateKey;
-        }).length;
-        const lowStock = (productsResult.data || []).filter((item) => Number(item.quantity) > 0 && Number(item.quantity) <= Number(item.reorder_level)).length;
-        const outOfStock = (productsResult.data || []).filter((item) => Number(item.quantity) <= 0).length;
-        const nearExpiry = (productsResult.data || []).filter((item) => {
-          const expiryDate = String(item.expiry_date || "").slice(0, 10);
-          return Boolean(expiryDate) && expiryDate >= dateKey && expiryDate <= expiryLimitKey;
-        }).length;
-        const appointmentsToday = (appointmentsResult.data || []).filter((item) => !["cancelled", "no_show"].includes(String(item.status))).length;
+        const inventoryStats = productsResult.data as {
+          low_stock?: number | string | null;
+          out_of_stock?: number | string | null;
+          near_expiry?: number | string | null;
+        } | null;
+        const vaccinationsToday = Number(vaccinesResult.count ?? 0);
+        const lowStock = Number(inventoryStats?.low_stock ?? 0);
+        const outOfStock = Number(inventoryStats?.out_of_stock ?? 0);
+        const nearExpiry = Number(inventoryStats?.near_expiry ?? 0);
+        const appointmentsToday = Number(appointmentsResult.count ?? 0);
 
         if (mounted) setTodayStats([appointmentsToday, vaccinationsToday, lowStock, outOfStock, nearExpiry]);
       } catch (error) {
@@ -542,7 +551,7 @@ export default function Home() {
       dayNumber % t.encouragement.length;
 
     return t.encouragement[index];
-  }, [language, t.encouragement]);
+  }, [t.encouragement]);
 
   const formattedDate = new Date().toLocaleDateString(
     language === "ar" ? "ar-EG" : "en-US",
@@ -568,12 +577,15 @@ export default function Home() {
   const handleLogout = async () => {
     setLoggingOut(true);
 
-    await Promise.all([
-      vetraCore.auth.signOut(),
-      supabase.auth.signOut(),
-    ]);
-
-    router.replace("/login");
+    try {
+      await Promise.all([
+        vetraCore.auth.signOut(),
+        supabase.auth.signOut(),
+      ]);
+    } finally {
+      resetClinicDbConnection();
+      router.replace("/login");
+    }
   };
 
   const refreshCache = () => {

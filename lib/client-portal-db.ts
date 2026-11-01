@@ -1,5 +1,12 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { vetraCore } from "@/lib/vetra-core";
+
+// Owner credentials are verified by the tenant. Do not attach a clinic Auth
+// session to this public Core RPC when both portals share the same browser.
+const ownerCore = createClient(
+  process.env.NEXT_PUBLIC_VETRA_CORE_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_VETRA_CORE_SUPABASE_PUBLISHABLE_KEY!,
+  { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+);
 
 type PetOwnerAccess = {
   access_token: string;
@@ -15,7 +22,7 @@ async function issuePetOwnerAccess(
   const normalizedCode = clientCode.trim().replace(/\s+/g, "");
   const normalizedPhone = phone.trim().replace(/\s+/g, "");
 
-  const { data, error } = await vetraCore.rpc(
+  const { data, error } = await ownerCore.rpc(
     "issue_pet_owner_access_token",
     {
       p_client_code: normalizedCode,
@@ -40,7 +47,12 @@ async function issuePetOwnerAccess(
     throw new Error("Invalid Pet Owner access response.");
   }
 
-  return row;
+  const token = row.access_token.replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) {
+    throw new Error("Invalid Pet Owner access token format.");
+  }
+
+  return { ...row, access_token: token };
 }
 
 export async function getClientPortalDb(

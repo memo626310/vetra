@@ -26,11 +26,15 @@ create policy vetra_visit_attachments_select on public.visit_attachments
 drop policy if exists vetra_visit_attachments_insert on public.visit_attachments;
 create policy vetra_visit_attachments_insert on public.visit_attachments
   for insert to authenticated with check (clinic_id = public.vetra_current_clinic_id());
+drop policy if exists vetra_visit_attachments_update on public.visit_attachments;
+create policy vetra_visit_attachments_update on public.visit_attachments
+  for update to authenticated using (clinic_id = public.vetra_current_clinic_id())
+  with check (clinic_id = public.vetra_current_clinic_id());
 drop policy if exists vetra_visit_attachments_delete on public.visit_attachments;
 create policy vetra_visit_attachments_delete on public.visit_attachments
   for delete to authenticated using (clinic_id = public.vetra_current_clinic_id());
 
-grant select, insert, delete on public.visit_attachments to authenticated;
+grant select, insert, update, delete on public.visit_attachments to authenticated;
 revoke all on public.visit_attachments from anon, public;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

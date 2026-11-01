@@ -148,7 +148,7 @@ export default function ClientsPage() {
 
     const db = await getClinicDb();
 
-    const { data, error } = await db
+    const { data, error, status, statusText } = await db
       .from("clients")
       .select("*")
       .order("created_at", {
@@ -156,10 +156,17 @@ export default function ClientsPage() {
       });
 
     if (error) {
-      console.error(
-        "CLIENTS LOAD ERROR:",
-        error
-      );
+      console.error("CLIENTS LOAD ERROR:", {
+        clinicId: context.clinic_id,
+        projectRef: context.project_ref,
+        status,
+        statusText,
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
 
       setErrorMessage(
         "تعذر تحميل العملاء: " +

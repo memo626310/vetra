@@ -746,6 +746,34 @@ function dateText(
   ).format(new Date(value));
 }
 
+type SupabaseErrorLike = {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+};
+
+function formatSupabaseError(value: unknown, fallback: string) {
+  const error = value as SupabaseErrorLike | null;
+  const message = value instanceof Error
+    ? value.message
+    : typeof error?.message === "string"
+      ? error.message
+      : "";
+  const metadata = [error?.code, error?.details, error?.hint].filter(
+    (part): part is string => Boolean(part)
+  );
+
+  return [message || fallback, ...metadata].join(" · ");
+}
+
+function isMissingSchemaField(value: unknown) {
+  const error = value as SupabaseErrorLike | null;
+  return error?.code === "42703"
+    || error?.code === "PGRST204"
+    || /column .* does not exist|schema cache/i.test(error?.message || "");
+}
+
 export default function ClinicVaccinationsPage() {
   const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const router = useRouter();
@@ -899,44 +927,37 @@ export default function ClinicVaccinationsPage() {
       const db = await getClinicDb();
       const clinicProfile = await loadClinicProfile(db, context.clinic_id);
 
-      const [petsResult, vaccinesResult] = await Promise.all([
-        db
+      const petsQueryResult = await db
+        .from("pets")
+        .select("id,client_id,name,species,breed,birth_date,is_deceased")
+        .eq("clinic_id", context.clinic_id)
+        .eq("is_deceased", false)
+        .order("name", { ascending: true });
+      let petsData = petsQueryResult.data;
+      let petsError = petsQueryResult.error;
+
+      // Older tenant databases may not have the soft-delete column yet.
+      // Keep the vaccination tracker usable while the schema patch is applied.
+      if (petsError && isMissingSchemaField(petsError)) {
+        const legacyPetsResult = await db
           .from("pets")
-          .select(`
-            id,
-            client_id,
-            name,
-            species,
-            breed,
-            birth_date,
-            is_deceased
-          `)
+          .select("id,client_id,name,species,breed,birth_date")
           .eq("clinic_id", context.clinic_id)
-          .eq("is_deceased", false)
-          .order("name", { ascending: true }),
+          .order("name", { ascending: true });
+        petsData = (legacyPetsResult.data || []).map((pet) => ({ ...pet, is_deceased: false }));
+        petsError = legacyPetsResult.error;
+      }
 
-        db
-          .from("vaccinations")
-          .select(`
-            id,
-            pet_id,
-            client_id,
-            visit_id,
-            vaccine_name,
-            vaccine_type,
-            administered_at,
-            next_dose_at,
-            dose,
-            route,
-            batch_number,
-            manufacturer,
-            notes
-          `)
-          .eq("clinic_id", context.clinic_id)
-          .order("administered_at", { ascending: false }),
-      ]);
+      // These are the columns needed to calculate due dates. Optional
+      // metadata is filled with null below so an older vaccination table does
+      // not make the whole page fail because one extra column is missing.
+      const vaccinesResult = await db
+        .from("vaccinations")
+        .select("id,pet_id,client_id,visit_id,vaccine_name,vaccine_type,administered_at,next_dose_at")
+        .eq("clinic_id", context.clinic_id)
+        .order("administered_at", { ascending: false });
 
-      if (petsResult.error) throw petsResult.error;
+      if (petsError) throw petsError;
       if (vaccinesResult.error) throw vaccinesResult.error;
 
       const [productsResult, mappingsResult] = await Promise.all([
@@ -949,11 +970,20 @@ export default function ClinicVaccinationsPage() {
           .select("protocol_key,product_id")
           .eq("clinic_id", context.clinic_id),
       ]);
-      if (productsResult.error) throw productsResult.error;
-      setStockProducts((productsResult.data || []) as StockProduct[]);
+      // Product mapping is an optional inventory enhancement. It must never
+      // prevent the core vaccination history and due-date tracker from loading.
+      if (productsResult.error) {
+        console.error("LOAD VACCINE PRODUCTS ERROR:", productsResult.error);
+        setStockProducts([]);
+        setMappingMessage(lang === "ar"
+          ? "بيانات المخزون غير مفعّلة حاليًا؛ متابعة التطعيمات تعمل بشكل طبيعي."
+          : "Inventory data is not enabled yet; vaccination tracking still works.");
+      } else {
+        setStockProducts((productsResult.data || []) as StockProduct[]);
+      }
       if (mappingsResult.error) {
         console.error("LOAD VACCINE PRODUCT MAPPINGS ERROR:", mappingsResult.error);
-        setMappingMessage(lang === "ar"
+        if (!productsResult.error) setMappingMessage(lang === "ar"
           ? "فعّل ربط التطعيمات بقاعدة البيانات لتتمكن من حفظ المنتجات المرتبطة."
           : "Apply the vaccination product mapping database update to save linked products.");
       } else {
@@ -966,7 +996,7 @@ export default function ClinicVaccinationsPage() {
       }
       setClinicName(clinicProfile?.display_name || context.clinic_name || "VETRA");
 
-      const rawPets = (petsResult.data || []) as Array<Omit<Pet, "client">>;
+      const rawPets = (petsData || []) as Array<Omit<Pet, "client">>;
       const clientIds = Array.from(
         new Set(rawPets.map((pet) => pet.client_id).filter(Boolean))
       ) as string[];
@@ -993,18 +1023,21 @@ export default function ClinicVaccinationsPage() {
       })) as Pet[];
 
       setPets(petsWithClients);
-      setVaccines((vaccinesResult.data || []) as Vaccine[]);
+      setVaccines((vaccinesResult.data || []).map((vaccine) => ({
+        ...vaccine,
+        dose: null,
+        route: null,
+        batch_number: null,
+        manufacturer: null,
+        notes: null,
+      })) as Vaccine[]);
     } catch (e) {
       console.error(
         "CLINIC VACCINATIONS LOAD ERROR:",
         e
       );
 
-      setError(
-        e instanceof Error
-          ? e.message
-          : T[lang].loadError
-      );
+      setError(formatSupabaseError(e, T[lang].loadError));
     } finally {
       setLoading(false);
     }

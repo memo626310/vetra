@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
+import { resetClinicDbConnection } from "@/lib/clinic-db";
 import { readVetraTheme, VETRA_THEME_EVENT } from "@/lib/theme";
 import { permissionForPath } from "@/lib/staff-permissions";
 import { useStaffPermissions } from "@/lib/use-staff-permissions";
@@ -72,6 +73,7 @@ export default function ClinicMobileNavigation() {
     try {
       await Promise.all([vetraCore.auth.signOut(), supabase.auth.signOut()]);
     } finally {
+      resetClinicDbConnection();
       router.replace("/login");
       router.refresh();
     }

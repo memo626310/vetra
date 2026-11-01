@@ -16,7 +16,7 @@ begin
       if not exists (
         select 1 from pg_policies
         where schemaname = 'public' and tablename = t
-          and permissive = 'PERMISSIVE' and cmd in (a, 'ALL')
+          and permissive and cmd in (a, 'ALL')
       ) then
         raise exception 'Missing tenant policy for % on %', a, t;
       end if;

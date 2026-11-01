@@ -1013,179 +1013,15 @@ export default function PetPage() {
 
     try {
       const db = await getClinicDb();
-
-      // =========================
-      // GET VISITS
-      // =========================
-
-      const {
-        data: visitRows,
-        error: visitsLoadError,
-      } = await db
-        .from("visits")
-        .select("id")
-        .eq("pet_id", pet.id);
-
-      if (visitsLoadError) {
-        throw visitsLoadError;
-      }
-
-      const visitIds = (visitRows || [])
-        .map((row) => row.id)
-        .filter(Boolean);
-
-      // =========================
-      // GET INVOICES
-      // =========================
-
-      const invoiceIdSet = new Set<string>();
-
-      const {
-        data: petInvoices,
-        error: petInvoicesError,
-      } = await db
-        .from("invoices")
-        .select("id")
-        .eq("pet_id", pet.id);
-
-      if (petInvoicesError) {
-        throw petInvoicesError;
-      }
-
-      for (const invoice of petInvoices || []) {
-        if (invoice.id) {
-          invoiceIdSet.add(invoice.id);
-        }
-      }
-
-      if (visitIds.length > 0) {
-        const {
-          data: visitInvoices,
-          error: visitInvoicesError,
-        } = await db
-          .from("invoices")
-          .select("id")
-          .in("visit_id", visitIds);
-
-        if (visitInvoicesError) {
-          throw visitInvoicesError;
-        }
-
-        for (const invoice of visitInvoices || []) {
-          if (invoice.id) {
-            invoiceIdSet.add(invoice.id);
-          }
-        }
-      }
-
-      const invoiceIds = [...invoiceIdSet];
-
-      // =========================
-      // DELETE INVOICE ITEMS
-      // =========================
-
-      if (invoiceIds.length > 0) {
-        const {
-          error: invoiceItemsDeleteError,
-        } = await db
-          .from("invoice_items")
-          .delete()
-          .in("invoice_id", invoiceIds);
-
-        if (invoiceItemsDeleteError) {
-          throw invoiceItemsDeleteError;
-        }
-
-        // =========================
-        // DELETE INVOICES
-        // =========================
-
-        const {
-          error: invoicesDeleteError,
-        } = await db
-          .from("invoices")
-          .delete()
-          .in("id", invoiceIds);
-
-        if (invoicesDeleteError) {
-          throw invoicesDeleteError;
-        }
-      }
-
-      // =========================
-      // DELETE VISIT MEDICATIONS
-      // =========================
-
-      if (visitIds.length > 0) {
-        const {
-          error: visitMedicationsDeleteError,
-        } = await db
-          .from("visit_medications")
-          .delete()
-          .in("visit_id", visitIds);
-
-        if (visitMedicationsDeleteError) {
-          throw visitMedicationsDeleteError;
-        }
-
-        // =========================
-        // DELETE VACCINES BY VISIT
-        // =========================
-
-        const {
-          error: vaccinationsByVisitDeleteError,
-        } = await db
-          .from("vaccinations")
-          .delete()
-          .in("visit_id", visitIds);
-
-        if (vaccinationsByVisitDeleteError) {
-          throw vaccinationsByVisitDeleteError;
-        }
-      }
-
-      // =========================
-      // DELETE VACCINES BY PET
-      // =========================
-
-      const {
-        error: vaccinationsByPetDeleteError,
-      } = await db
-        .from("vaccinations")
-        .delete()
-        .eq("pet_id", pet.id);
-
-      if (vaccinationsByPetDeleteError) {
-        throw vaccinationsByPetDeleteError;
-      }
-
-      // =========================
-      // DELETE VISITS
-      // =========================
-
-      if (visitIds.length > 0) {
-        const {
-          error: visitsDeleteError,
-        } = await db
-          .from("visits")
-          .delete()
-          .in("id", visitIds);
-
-        if (visitsDeleteError) {
-          throw visitsDeleteError;
-        }
-      }
-
-      // =========================
-      // DELETE PET
-      // =========================
-
-      const { error: deleteError } = await db
-        .from("pets")
-        .delete()
-        .eq("id", pet.id);
+      const { error: deleteError } = await db.rpc(
+        "vetra_delete_pet_cascade",
+        { p_pet_id: pet.id },
+      );
 
       if (deleteError) {
+        if (deleteError.code === "PGRST202" || deleteError.code === "42883") {
+          throw new Error("ميزة حذف الحيوان غير مضافة إلى قاعدة بيانات العيادة. شغّل ملف vetra_delete_pet_cascade.sql أولًا.");
+        }
         throw deleteError;
       }
 
@@ -1197,11 +1033,16 @@ export default function PetPage() {
         err
       );
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : "حصل خطأ أثناء حذف الحيوان وبياناته المرتبطة."
-      );
+      const detail = err && typeof err === "object" && "message" in err
+        ? (() => {
+            const value = err as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown };
+            return [value.message, value.code ? `(${String(value.code)})` : "", value.details, value.hint]
+              .filter(Boolean)
+              .map(String)
+              .join(" — ");
+          })()
+        : err instanceof Error ? err.message : "";
+      setError(detail || "حصل خطأ أثناء حذف الحيوان وبياناته المرتبطة.");
     } finally {
       setDeletingPet(false);
     }

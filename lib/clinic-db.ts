@@ -30,13 +30,25 @@ let clinicDbPromise: Promise<SupabaseClient> | null = null;
 let clinicTokenPromise: Promise<CachedClinicToken> | null = null;
 let clinicContextPromise: Promise<ClinicContext> | null = null;
 let clinicContextCachedAt = 0;
+let clinicContextUserId: string | null = null;
+let clinicDbContextKey: string | null = null;
 const CLINIC_CONTEXT_TTL = 60_000;
 
 export async function getClinicContext(): Promise<ClinicContext> {
+  const { data: { session } } = await vetraCore.auth.getSession();
+  const currentUserId = session?.user.id ?? null;
+
+  // Never reuse a Core context or tenant client after the authenticated user
+  // changes in the same SPA session.
+  if (clinicContextPromise && clinicContextUserId !== currentUserId) {
+    resetClinicDbConnection();
+  }
+
   if (clinicContextPromise && Date.now() - clinicContextCachedAt < CLINIC_CONTEXT_TTL) {
     return clinicContextPromise;
   }
 
+  clinicContextUserId = currentUserId;
   clinicContextPromise = loadClinicContext();
   clinicContextCachedAt = Date.now();
   try {
@@ -156,9 +168,17 @@ async function getClinicAccessToken(): Promise<string> {
 }
 
 export async function getClinicDb(): Promise<SupabaseClient> {
+  const context = await getClinicContext();
+  const contextKey = `${context.doctor_id}:${context.clinic_id}`;
+
+  if (clinicDbPromise && clinicDbContextKey !== contextKey) {
+    clinicDbPromise = null;
+    clinicTokenPromise = null;
+  }
+
   if (!clinicDbPromise) {
     clinicDbPromise = (async () => {
-      const context = await getClinicContext();
+      clinicDbContextKey = contextKey;
 
       if (!context.database_url || !context.database_publishable_key) {
         throw new Error("Clinic database is not configured yet.");
@@ -205,4 +225,6 @@ export function resetClinicDbConnection() {
   clinicTokenPromise = null;
   clinicContextPromise = null;
   clinicContextCachedAt = 0;
+  clinicContextUserId = null;
+  clinicDbContextKey = null;
 }

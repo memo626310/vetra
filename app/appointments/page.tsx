@@ -348,7 +348,7 @@ export default function AppointmentsPage() {
   const [newClientName, setNewClientName] = useState("");
   const [newClientPhone, setNewClientPhone] = useState("");
   const [newPetName, setNewPetName] = useState("");
-  const [newPetSpecies, setNewPetSpecies] = useState("Cat");
+  const [newPetSpecies, setNewPetSpecies] = useState("");
   const [newPetBreed, setNewPetBreed] = useState("");
   const [newPetGender, setNewPetGender] = useState("");
   const [newPetBirthDate, setNewPetBirthDate] = useState("");
@@ -823,7 +823,7 @@ export default function AppointmentsPage() {
         .insert({
           client_id: clientId,
           name: newPetName.trim(),
-          species: newPetSpecies,
+          species: newPetSpecies || "Other",
           breed: newPetBreed.trim() || null,
           gender: newPetGender || null,
           birth_date: newPetBirthDate || null,
@@ -878,7 +878,7 @@ export default function AppointmentsPage() {
         .insert({
           client_id: client.id,
           name: newPetName.trim(),
-          species: newPetSpecies,
+          species: newPetSpecies || "Other",
           breed: newPetBreed.trim() || null,
           gender: newPetGender || null,
           birth_date: newPetBirthDate || null,
@@ -1386,6 +1386,7 @@ export default function AppointmentsPage() {
                         <div>
                           <label className="mb-2 block text-sm font-bold">{t.species}</label>
                           <select value={newPetSpecies} onChange={(e) => setNewPetSpecies(e.target.value)} className={`w-full rounded-2xl border px-4 py-3 ${darkMode ? "border-white/10 bg-[#0F1115]" : "border-slate-200 bg-slate-50"}`}>
+                            <option value="">{language === "ar" ? "غير محدد (اختياري)" : "Not specified (optional)"}</option>
                             <option value="Cat">{t.cat}</option>
                             <option value="Dog">{t.dog}</option>
                             <option value="Other">{t.other}</option>
@@ -1454,6 +1455,7 @@ export default function AppointmentsPage() {
                     <div>
                       <label className="mb-2 block text-sm font-bold">{t.species}</label>
                       <select value={newPetSpecies} onChange={(e) => setNewPetSpecies(e.target.value)} className={`w-full rounded-2xl border px-4 py-3 ${darkMode ? "border-white/10 bg-[#0F1115]" : "border-slate-200 bg-slate-50"}`}>
+                        <option value="">{language === "ar" ? "غير محدد (اختياري)" : "Not specified (optional)"}</option>
                         <option value="Cat">{t.cat}</option>
                         <option value="Dog">{t.dog}</option>
                         <option value="Other">{t.other}</option>

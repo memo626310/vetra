@@ -452,6 +452,7 @@ export default function NewVisitPage() {
           )
         `)
         .eq("id", petId)
+        .eq("clinic_id", (await getClinicContext()).clinic_id)
         .single();
 
       if (error || !data) {
@@ -489,11 +490,12 @@ export default function NewVisitPage() {
     setMessage("");
     try {
       const db = await getClinicDb();
-      const { data: visit, error: visitError } = await db.from("visits").select("*").eq("id", visitId).single();
+      const clinicContext = await getClinicContext();
+      const { data: visit, error: visitError } = await db.from("visits").select("*").eq("id", visitId).eq("clinic_id", clinicContext.clinic_id).single();
       if (visitError || !visit) throw visitError || new Error(t.loadError);
 
       const [petResult, medicationResult, prescriptionResult, vaccineResult, recordResult, attachmentResult] = await Promise.all([
-        db.from("pets").select("*, client:clients (id, name, phone, email)").eq("id", visit.pet_id).single(),
+        db.from("pets").select("*, client:clients (id, name, phone, email)").eq("id", visit.pet_id).eq("client_id", visit.client_id).eq("clinic_id", clinicContext.clinic_id).single(),
         db.from("visit_medications").select("*").eq("visit_id", visitId),
         db.from("visit_prescriptions").select("*").eq("visit_id", visitId),
         db.from("vaccinations").select("*").eq("visit_id", visitId).order("administered_at", { ascending: true }),
@@ -514,7 +516,6 @@ export default function NewVisitPage() {
       const vaccineRows = vaccineResult.data || [];
       const medicalRows = recordResult.data || [];
       const attachmentRows = attachmentResult.data || [];
-      const clinicContext = await getClinicContext();
       setClinicId(clinicContext.clinic_id || "");
       setPetDetails(pet as PetDetails);
       setSelectedPetId(visit.pet_id);
@@ -721,6 +722,7 @@ export default function NewVisitPage() {
 
     try {
       const db = await getClinicDb();
+      const clinicContext = await getClinicContext();
 
       const {
         data: selectedPet,
@@ -729,6 +731,8 @@ export default function NewVisitPage() {
         .from("pets")
         .select("*")
         .eq("id", selectedPetId)
+        .eq("client_id", selectedClientId)
+        .eq("clinic_id", clinicContext.clinic_id)
         .single();
 
       if (selectedPetError || !selectedPet) {
@@ -755,6 +759,8 @@ export default function NewVisitPage() {
           )
         `)
         .eq("id", selectedPetId)
+        .eq("client_id", selectedClientId)
+        .eq("clinic_id", clinicContext.clinic_id)
         .single();
 
       if (error || !data) {
@@ -815,7 +821,7 @@ export default function NewVisitPage() {
           dose_type, dose_value, dose_min, dose_max, dose_unit, route, frequency,
           duration_days, instructions
         `)
-        .eq("active", true)
+        .or(`clinic_id.is.null,clinic_id.eq.${context.clinic_id}`)
         .order("name");
       if (error) throw error;
       const nextMedications = (data || []) as Medication[];
@@ -1066,6 +1072,8 @@ export default function NewVisitPage() {
         .from("pets")
         .select("is_deceased, client_id")
         .eq("id", selectedPetId)
+        .eq("client_id", selectedClientId)
+        .eq("clinic_id", clinicContext.clinic_id)
         .single();
 
       if (currentPetError || !currentPet) throw currentPetError || new Error(t.loadError);
@@ -1395,7 +1403,7 @@ export default function NewVisitPage() {
             status: "completed",
             completed_at: completedAt,
             updated_at: completedAt,
-          }).eq("id", appointmentId).eq("client_id", selectedClientId).eq("pet_id", selectedPetId).select("id").maybeSingle();
+          }).eq("id", appointmentId).eq("clinic_id", clinicContext.clinic_id).eq("client_id", selectedClientId).eq("pet_id", selectedPetId).select("id").maybeSingle();
           if (appointmentError) throw appointmentError;
           if (!completedAppointment) throw new Error(language === "ar" ? "لم يتم العثور على الموعد المرتبط بهذه الزيارة." : "The appointment linked to this visit could not be found.");
         }
