@@ -382,18 +382,21 @@ export default function Home() {
       let displayContext = context;
       try {
         const db = await getClinicDb();
-        const [{ data: clinicProfile }, { data: staffMember }] = await Promise.all([
+        const { data: userResult } = await vetraCore.auth.getUser();
+        const accountEmail = userResult.user?.email?.trim().toLowerCase() || "";
+        const [{ data: clinicProfile }, { data: staffRows }] = await Promise.all([
           db.from("clinic_profile_settings")
             .select("doctor_name")
             .eq("clinic_id", context.clinic_id)
             .maybeSingle(),
           db.from("clinic_staff")
-            .select("full_name")
-            .eq("clinic_id", context.clinic_id)
-            .eq("auth_user_id", context.doctor_id)
-            .maybeSingle(),
+            .select("full_name,email,staff_type")
+            .eq("clinic_id", context.clinic_id),
         ]);
 
+        const staffMember = (staffRows || []).find((row) =>
+          accountEmail && typeof row.email === "string" && row.email.trim().toLowerCase() === accountEmail
+        ) || (staffRows || []).find((row) => row.staff_type === "doctor") || (staffRows || [])[0];
         const staffName = typeof staffMember?.full_name === "string"
           ? staffMember.full_name.trim()
           : "";
