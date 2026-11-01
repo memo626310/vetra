@@ -246,6 +246,16 @@ export default function ClientPage() {
     let clinicPrefix = /^(\d{2})\d{4}$/.exec(currentClient.client_code || "")?.[1] || "";
 
     if (!clinicPrefix) {
+      const context = await getClinicContext() as Awaited<ReturnType<typeof getClinicContext>> & {
+        clinic_number?: number | string | null;
+      };
+      const clinicNumber = Number(context.clinic_number);
+      if (Number.isInteger(clinicNumber) && clinicNumber >= 1 && clinicNumber <= 99) {
+        clinicPrefix = String(clinicNumber).padStart(2, "0");
+      }
+    }
+
+    if (!clinicPrefix) {
       const { data, error } = await db
         .from("clients")
         .select("client_code")

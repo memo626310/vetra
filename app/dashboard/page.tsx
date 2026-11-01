@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicContext, getClinicDb, resetClinicDbConnection } from "@/lib/clinic-db";
+import { loadClinicProfile } from "@/lib/clinic-profile";
 import PushNotificationsButton from "@/components/PushNotificationsButton";
 import ReceptionCheckoutNotice from "@/components/ReceptionCheckoutNotice";
 import { writeVetraTheme } from "@/lib/theme";
@@ -384,11 +385,8 @@ export default function Home() {
         const db = await getClinicDb();
         const { data: userResult } = await vetraCore.auth.getUser();
         const accountEmail = userResult.user?.email?.trim().toLowerCase() || "";
-        const [{ data: clinicProfile }, { data: staffRows }] = await Promise.all([
-          db.from("clinic_profile_settings")
-            .select("doctor_name")
-            .eq("clinic_id", context.clinic_id)
-            .maybeSingle(),
+        const [clinicProfile, { data: staffRows }] = await Promise.all([
+          loadClinicProfile(db, context.clinic_id),
           db.from("clinic_staff")
             .select("full_name,email,staff_type")
             .eq("clinic_id", context.clinic_id),
@@ -404,10 +402,10 @@ export default function Home() {
           ? clinicProfile.doctor_name.trim()
           : "";
 
-        if (staffName) {
-          displayContext = { ...context, doctor_name: staffName };
-        } else if (["owner", "admin"].includes(String(context.role || "").toLowerCase()) && profileName) {
+        if (profileName) {
           displayContext = { ...context, doctor_name: profileName };
+        } else if (staffName) {
+          displayContext = { ...context, doctor_name: staffName };
         }
       } catch {
         // Fall back to the account identity below if optional clinic profile data is unavailable.
