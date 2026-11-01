@@ -34,7 +34,7 @@ begin
       select 1 from pg_policies p
       where p.schemaname = 'public'
         and p.tablename = v_required.table_name
-        and p.permissive
+        and p.permissive = 'PERMISSIVE'
         and (p.cmd = v_required.command_name or p.cmd = 'ALL')
     ) then
       raise exception 'Missing existing permissive tenant policy for %.%. No permission policies were applied.', v_required.command_name, v_required.table_name;

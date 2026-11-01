@@ -4,6 +4,15 @@
 --   last four digits = a unique random client suffix within that clinic
 begin;
 
+create extension if not exists pgcrypto;
+
+alter table public.clients
+  add column if not exists updated_at timestamptz not null default now();
+
+create unique index if not exists clients_client_code_unique
+  on public.clients (clinic_id, client_code)
+  where client_code is not null;
+
 create or replace function public.vetra_generate_client_code(p_client_id uuid)
 returns text
 language plpgsql
@@ -109,4 +118,5 @@ $$;
 
 revoke all on function public.vetra_generate_client_code(uuid) from public, anon;
 grant execute on function public.vetra_generate_client_code(uuid) to authenticated;
+notify pgrst, 'reload schema';
 commit;

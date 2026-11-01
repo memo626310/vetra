@@ -26,8 +26,22 @@ type Visit = {
 type Pet = { id: string; name: string; client_id: string | null };
 type Client = { id: string; name: string; client_code: string | null; phone: string | null };
 type Vaccination = { id: string; visit_id: string; vaccine_name: string | null; administered_at: string | null; next_dose_at: string | null };
-const COLUMNS = "id,client_id,pet_id,visit_date,reason,examination,diagnosis,treatment,weight,temperature,heart_rate,respiratory_rate,notes";
+// Keep the history screen compatible with older tenant databases. The vital
+// sign columns are optional enhancements and are displayed when present.
+const COLUMNS = "id,client_id,pet_id,visit_date,reason,examination,diagnosis,treatment,notes";
 type VisitInvoice = { id: string; visit_id: string; status: string };
+
+type SupabaseErrorLike = { message?: string; code?: string; details?: string; hint?: string };
+
+function formatSupabaseError(value: unknown, fallback: string) {
+  const error = value as SupabaseErrorLike | null;
+  const message = value instanceof Error
+    ? value.message
+    : typeof error?.message === "string" ? error.message : "";
+  return [message || fallback, error?.code, error?.details, error?.hint]
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
+}
 
 type VisitsCache = {
   visits: Visit[];
@@ -80,7 +94,13 @@ export default function VisitHistoryDashboardPage() {
       const db = await getClinicDb();
       const { data, error: visitsError } = await db.from("visits").select(COLUMNS).order("visit_date", { ascending: false }).limit(500);
       if (visitsError) throw visitsError;
-      const loaded = (data || []) as Visit[];
+      const loaded = (data || []).map((visit) => ({
+        ...visit,
+        weight: null,
+        temperature: null,
+        heart_rate: null,
+        respiratory_rate: null,
+      })) as Visit[];
       const visitIds = loaded.map((visit) => visit.id);
       let invoices: VisitInvoice[] = [];
       if (visitIds.length) {
@@ -133,7 +153,7 @@ export default function VisitHistoryDashboardPage() {
       writeClinicCache(context.clinic_id, "visit-history", { visits: loaded, petsById: nextPetsById, clientsById: nextClientsById, vaccinationsByVisit: nextVaccinations, invoicesByVisit: nextInvoicesByVisit } satisfies VisitsCache);
     } catch (err) {
       console.error("DASHBOARD VISITS LOAD ERROR:", err);
-      setError(err instanceof Error ? err.message : "تعذر تحميل سجل الزيارات.");
+      setError(formatSupabaseError(err, "تعذر تحميل سجل الزيارات."));
     } finally {
       setLoading(false);
     }

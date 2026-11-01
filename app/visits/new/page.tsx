@@ -86,6 +86,7 @@ export default function NewVisitPage() {
   const [availableDoctors, setAvailableDoctors] = useState<AvailableDoctor[]>([]);
   const [groomingType, setGroomingType] = useState("");
   const [consultationFee, setConsultationFee] = useState(0);
+  const [autoAddConsultationFee, setAutoAddConsultationFee] = useState(false);
   const [followUpFee, setFollowUpFee] = useState(0);
   const [injectionFee, setInjectionFee] = useState(0);
   const [medicationChargePrices, setMedicationChargePrices] = useState<Record<string, number>>({});
@@ -145,7 +146,7 @@ export default function NewVisitPage() {
         const draft = readFormDraft<{
           selectedClientId: string; selectedPetId: string; clientSearch: string; petSearch: string;
           started: boolean; visitSource: "appointment" | "new_visit"; appointmentId: string;
-          performingDoctor: string; groomingType: string; consultationFee: number; followUpFee: number;
+          performingDoctor: string; groomingType: string; consultationFee: number; autoAddConsultationFee?: boolean; followUpFee: number;
           injectionFee: number; medicationChargePrices: Record<string, number>;
           medicationChargeQuantities: Record<string, number>; symptoms: SymptomDraft[];
           visitServices: VisitServiceDraft[]; visitDate: string; reason: string; examStatus: "normal" | "abnormal" | "";
@@ -170,7 +171,7 @@ export default function NewVisitPage() {
           setVisitSource(draft.visitSource || (params.has("appointment") ? "appointment" : "new_visit"));
           setAppointmentId(draft.appointmentId || params.get("appointment") || "");
           setPerformingDoctor(draft.performingDoctor || ""); setGroomingType(draft.groomingType || "");
-          setConsultationFee(Number(draft.consultationFee) || 0); setFollowUpFee(Number(draft.followUpFee) || 0);
+          setConsultationFee(Number(draft.consultationFee) || 0); setAutoAddConsultationFee(Boolean(draft.autoAddConsultationFee)); setFollowUpFee(Number(draft.followUpFee) || 0);
           setInjectionFee(Number(draft.injectionFee) || 0); setMedicationChargePrices(draft.medicationChargePrices || {});
           setMedicationChargeQuantities(draft.medicationChargeQuantities || {}); setSymptoms(draft.symptoms || []);
           setVisitServices(draft.visitServices || []); setVisitDate(draft.visitDate || ""); setReason(draft.reason || "examination");
@@ -194,13 +195,13 @@ export default function NewVisitPage() {
 
   const visitDraft = useMemo(() => ({
       selectedClientId, selectedPetId, clientSearch, petSearch, started, visitSource, appointmentId,
-      performingDoctor, groomingType, consultationFee, followUpFee, injectionFee, medicationChargePrices,
+      performingDoctor, groomingType, consultationFee, autoAddConsultationFee, followUpFee, injectionFee, medicationChargePrices,
       medicationChargeQuantities, symptoms, visitServices, visitDate, reason, examStatus, examination,
       followUp, followUpDetails, diagnosis, treatment, visitNotes, weight, temperature, heartRate,
       respiratoryRate, medicationSearch, selectedMedicationId, medicationDrafts, formularyDrafts,
       externalMedicationDrafts, vaccinations, drawerMedications, showDrawerMedicationsOnPrescription, medicalRecordDraft,
     }), [selectedClientId, selectedPetId, clientSearch, petSearch,
-    started, visitSource, appointmentId, performingDoctor, groomingType, consultationFee, followUpFee,
+    started, visitSource, appointmentId, performingDoctor, groomingType, consultationFee, autoAddConsultationFee, followUpFee,
     injectionFee, medicationChargePrices, medicationChargeQuantities, symptoms, visitServices, visitDate,
     reason, examStatus, examination, followUp, followUpDetails, diagnosis, treatment, visitNotes, weight,
     temperature, heartRate, respiratoryRate, medicationSearch, selectedMedicationId, medicationDrafts,
@@ -368,17 +369,19 @@ export default function NewVisitPage() {
       }
       if (categoriesResult.error) console.warn("LOAD PRODUCT CATEGORIES ERROR:", categoriesResult.error);
       const { data: billingSettings, error: billingSettingsError } = await db.from("billing_settings")
-        .select("consultation_fee, follow_up_fee, injection_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
+        .select("consultation_fee, follow_up_fee, injection_fee, auto_add_consultation_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
       if (billingSettingsError) {
         console.warn("LOAD INJECTION FEE SETTING ERROR; retrying legacy billing settings:", billingSettingsError);
         const { data: legacyBillingSettings, error: legacyBillingSettingsError } = await db.from("billing_settings")
           .select("consultation_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
         if (legacyBillingSettingsError) throw legacyBillingSettingsError;
         setConsultationFee(Number(legacyBillingSettings?.consultation_fee || 0));
+        setAutoAddConsultationFee(false);
         setFollowUpFee(0);
         setInjectionFee(0);
       } else {
         setConsultationFee(Number(billingSettings?.consultation_fee || 0));
+        setAutoAddConsultationFee(Boolean(billingSettings?.auto_add_consultation_fee));
         setFollowUpFee(Number(billingSettings?.follow_up_fee || 0));
         setInjectionFee(Number(billingSettings?.injection_fee || 0));
       }
@@ -1330,8 +1333,9 @@ export default function NewVisitPage() {
         if (createBill && !editVisitId) {
           const { data: { user } } = await vetraCore.auth.getUser();
           if (!user) throw new Error(language === "ar" ? "انتهت جلسة الدخول" : "Your session has expired");
+          const visitFee = reason === "followup" ? followUpFee : autoAddConsultationFee ? consultationFee : 0;
           const invoiceLines = [
-            ...((reason === "followup" ? followUpFee : consultationFee) > 0 ? [{ item_type: "service" as const, product_id: null, name: reason === "followup" ? "Follow-up" : "Consultation", quantity: 1, unit_price: reason === "followup" ? followUpFee : consultationFee }] : []),
+            ...(visitFee > 0 ? [{ item_type: "service" as const, product_id: null, name: reason === "followup" ? "Follow-up" : "Consultation", quantity: 1, unit_price: visitFee }] : []),
             ...visitServices.filter((line) => line.name.trim()).map((line) => ({ item_type: "service" as const, product_id: null, name: line.name.trim(), quantity: line.quantity, unit_price: line.price })),
             ...medicationBillLines.map((line) => ({
               item_type: "service" as const,
@@ -1535,7 +1539,7 @@ export default function NewVisitPage() {
     const product = vaccineStockProducts.find((item) => item.id === vaccination.product_id);
     return sum + (vaccination.vaccine_name.trim() && product ? Math.max(0, Number(product.retail_price) || 0) : 0);
   }, 0);
-  const baseVisitFee = reason === "followup" ? followUpFee : consultationFee;
+  const baseVisitFee = reason === "followup" ? followUpFee : autoAddConsultationFee ? consultationFee : 0;
   const visitBillTotal = baseVisitFee + visitServiceTotal + medicationChargeTotal + vaccinationChargeTotal;
 
   const pageClasses = darkMode

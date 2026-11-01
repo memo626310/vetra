@@ -264,7 +264,7 @@ export default function ClientPage() {
 
       if (generationError) {
         if (generationError.code === "PGRST202" || generationError.code === "42883") {
-          throw new Error("ميزة توليد Client ID غير مضافة إلى قاعدة بيانات العيادة. شغّل ملف vetra_client_code_generation.sql أولًا.");
+          throw new Error("ميزة توليد Client ID غير مضافة إلى قاعدة بيانات العيادة (Tenant). شغّل ملف vetra_client_code_generation.sql على قاعدة العيادة نفسها، وليس VETRA Core.");
         }
         throw generationError;
       }
