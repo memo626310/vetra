@@ -4088,7 +4088,6 @@ declare
   v_current_code text;
   v_candidate text;
   v_generated_code text;
-  v_random bytea;
   v_suffix integer;
   v_attempt integer;
 begin
@@ -4139,8 +4138,7 @@ begin
   end if;
 
   for v_attempt in 1..100 loop
-    v_random := gen_random_bytes(2);
-    v_suffix := mod(get_byte(v_random, 0) * 256 + get_byte(v_random, 1), 10000);
+    v_suffix := floor(random() * 10000)::integer;
     v_candidate := lpad(v_clinic_number::text, 2, '0') || lpad(v_suffix::text, 4, '0');
 
     if v_candidate = v_current_code then

@@ -171,8 +171,11 @@ export default function NewVisitPage() {
           setVisitSource(draft.visitSource || (params.has("appointment") ? "appointment" : "new_visit"));
           setAppointmentId(draft.appointmentId || params.get("appointment") || "");
           setPerformingDoctor(draft.performingDoctor || ""); setGroomingType(draft.groomingType || "");
-          setConsultationFee(Number(draft.consultationFee) || 0); setAutoAddConsultationFee(Boolean(draft.autoAddConsultationFee)); setFollowUpFee(Number(draft.followUpFee) || 0);
-          setInjectionFee(Number(draft.injectionFee) || 0); setMedicationChargePrices(draft.medicationChargePrices || {});
+          if (Number(draft.consultationFee) > 0) setConsultationFee(Number(draft.consultationFee));
+          if (draft.autoAddConsultationFee !== undefined) setAutoAddConsultationFee(Boolean(draft.autoAddConsultationFee));
+          if (Number(draft.followUpFee) > 0) setFollowUpFee(Number(draft.followUpFee));
+          if (Number(draft.injectionFee) > 0) setInjectionFee(Number(draft.injectionFee));
+          setMedicationChargePrices(draft.medicationChargePrices || {});
           setMedicationChargeQuantities(draft.medicationChargeQuantities || {}); setSymptoms(draft.symptoms || []);
           setVisitServices(draft.visitServices || []); setVisitDate(draft.visitDate || ""); setReason(draft.reason || "examination");
           setExamStatus(draft.examStatus || ""); setExamination(draft.examination || ""); setFollowUp(draft.followUp || "");
@@ -369,7 +372,7 @@ export default function NewVisitPage() {
       }
       if (categoriesResult.error) console.warn("LOAD PRODUCT CATEGORIES ERROR:", categoriesResult.error);
       const { data: billingSettings, error: billingSettingsError } = await db.from("billing_settings")
-        .select("consultation_fee, follow_up_fee, injection_fee, auto_add_consultation_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
+        .select("consultation_fee, follow_up_fee, injection_fee").eq("clinic_id", context.clinic_id).limit(1).maybeSingle();
       if (billingSettingsError) {
         console.warn("LOAD INJECTION FEE SETTING ERROR; retrying legacy billing settings:", billingSettingsError);
         const { data: legacyBillingSettings, error: legacyBillingSettingsError } = await db.from("billing_settings")
@@ -381,7 +384,7 @@ export default function NewVisitPage() {
         setInjectionFee(0);
       } else {
         setConsultationFee(Number(billingSettings?.consultation_fee || 0));
-        setAutoAddConsultationFee(Boolean(billingSettings?.auto_add_consultation_fee));
+        setAutoAddConsultationFee(true);
         setFollowUpFee(Number(billingSettings?.follow_up_fee || 0));
         setInjectionFee(Number(billingSettings?.injection_fee || 0));
       }

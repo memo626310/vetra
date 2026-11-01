@@ -318,7 +318,7 @@ export default function ClientPage() {
 
       if (generationError) {
         const missingRpc = generationError.code === "PGRST202"
-          || (generationError.code === "42883" && /vetra_generate_client_code/i.test(generationError.message || ""));
+          || (generationError.code === "42883" && /vetra_generate_client_code|gen_random_bytes/i.test(generationError.message || ""));
         if (missingRpc) {
           const fallbackCode = await generateClientCodeTenantFallback(db, client);
           setClient((current) => current ? { ...current, client_code: fallbackCode } : current);
