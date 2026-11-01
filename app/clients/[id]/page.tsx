@@ -239,6 +239,60 @@ export default function ClientPage() {
     setBirthDate(calculateBirthDate(normalizedYears, months ? normalizedMonths : ""));
   }
 
+  async function generateClientCodeTenantFallback(
+    db: Awaited<ReturnType<typeof getClinicDb>>,
+    currentClient: Client,
+  ) {
+    let clinicPrefix = /^(\d{2})\d{4}$/.exec(currentClient.client_code || "")?.[1] || "";
+
+    if (!clinicPrefix) {
+      const { data, error } = await db
+        .from("clients")
+        .select("client_code")
+        .eq("clinic_id", clinicId)
+        .not("client_code", "is", null)
+        .limit(250);
+      if (error) throw error;
+      clinicPrefix = (data || [])
+        .map((row) => String(row.client_code || ""))
+        .map((code) => /^(\d{2})\d{4}$/.exec(code)?.[1] || "")
+        .find(Boolean) || "";
+    }
+
+    if (!clinicPrefix) {
+      throw new Error("لا يمكن تحديد كود العيادة من Client IDs الحالية. شغّل ملف قاعدة البيانات أولًا.");
+    }
+
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const random = new Uint32Array(1);
+      window.crypto.getRandomValues(random);
+      const candidate = `${clinicPrefix}${String(random[0] % 10000).padStart(4, "0")}`;
+      if (candidate === currentClient.client_code) continue;
+
+      const existing = await db
+        .from("clients")
+        .select("id")
+        .eq("clinic_id", clinicId)
+        .eq("client_code", candidate)
+        .limit(1);
+      if (existing.error) throw existing.error;
+      if ((existing.data || []).length > 0) continue;
+
+      const updated = await db
+        .from("clients")
+        .update({ client_code: candidate })
+        .eq("id", currentClient.id)
+        .eq("clinic_id", clinicId)
+        .select("client_code")
+        .single();
+      if (!updated.error && updated.data?.client_code === candidate) return candidate;
+      if (updated.error?.code === "23505") continue;
+      if (updated.error) throw updated.error;
+    }
+
+    throw new Error("تعذر إيجاد Client ID فريد. حاول مرة أخرى.");
+  }
+
   async function generateNewClientCode() {
     if (!client || generatingClientCode) return;
     if (!permissionsLoaded || !can("patients", "edit")) {
@@ -263,10 +317,21 @@ export default function ClientPage() {
       );
 
       if (generationError) {
-        if (generationError.code === "PGRST202" || generationError.code === "42883") {
-          throw new Error("ميزة توليد Client ID غير مضافة إلى قاعدة بيانات العيادة (Tenant). شغّل ملف vetra_client_code_generation.sql على قاعدة العيادة نفسها، وليس VETRA Core.");
+        const missingRpc = generationError.code === "PGRST202"
+          || (generationError.code === "42883" && /vetra_generate_client_code/i.test(generationError.message || ""));
+        if (missingRpc) {
+          const fallbackCode = await generateClientCodeTenantFallback(db, client);
+          setClient((current) => current ? { ...current, client_code: fallbackCode } : current);
+          clearClinicCache(clinicId);
+          setMessage("تم تغيير Client ID بنجاح باستخدام كود العيادة الحالي: " + fallbackCode);
+          return;
         }
-        throw generationError;
+        throw new Error([
+          generationError.message,
+          generationError.code,
+          generationError.details,
+          generationError.hint,
+        ].filter(Boolean).join(" · "));
       }
 
       const generatedCode = Array.isArray(data) ? data[0] : data;

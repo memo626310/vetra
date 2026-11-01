@@ -1333,7 +1333,7 @@ export default function NewVisitPage() {
         if (createBill && !editVisitId) {
           const { data: { user } } = await vetraCore.auth.getUser();
           if (!user) throw new Error(language === "ar" ? "انتهت جلسة الدخول" : "Your session has expired");
-          const visitFee = reason === "followup" ? followUpFee : autoAddConsultationFee ? consultationFee : 0;
+          const visitFee = reason === "followup" ? followUpFee : consultationFee;
           const invoiceLines = [
             ...(visitFee > 0 ? [{ item_type: "service" as const, product_id: null, name: reason === "followup" ? "Follow-up" : "Consultation", quantity: 1, unit_price: visitFee }] : []),
             ...visitServices.filter((line) => line.name.trim()).map((line) => ({ item_type: "service" as const, product_id: null, name: line.name.trim(), quantity: line.quantity, unit_price: line.price })),
@@ -1539,7 +1539,7 @@ export default function NewVisitPage() {
     const product = vaccineStockProducts.find((item) => item.id === vaccination.product_id);
     return sum + (vaccination.vaccine_name.trim() && product ? Math.max(0, Number(product.retail_price) || 0) : 0);
   }, 0);
-  const baseVisitFee = reason === "followup" ? followUpFee : autoAddConsultationFee ? consultationFee : 0;
+  const baseVisitFee = reason === "followup" ? followUpFee : consultationFee;
   const visitBillTotal = baseVisitFee + visitServiceTotal + medicationChargeTotal + vaccinationChargeTotal;
 
   const pageClasses = darkMode
