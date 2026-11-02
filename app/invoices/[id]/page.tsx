@@ -126,6 +126,14 @@ function dateTime(value: string | null | undefined, language: "en" | "ar") {
   }).format(new Date(value));
 }
 
+function isMissingCancellationColumnError(error: unknown): boolean {
+  const message = error instanceof Error
+    ? error.message
+    : String((error as { message?: unknown } | null)?.message || error || "");
+  return /cancellation_reason|cancelled_at|cancelled_by|vetra_cancel_invoice/i.test(message)
+    && /schema cache|column .* does not exist|could not find|function .* does not exist/i.test(message);
+}
+
 export default function InvoiceDetailsPage() {
   const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const params = useParams();
@@ -633,82 +641,23 @@ export default function InvoiceDetailsPage() {
     setError("");
 
     try {
-      const {
-        data: { user },
-      } = await vetraCore.auth.getUser();
-
-      if (!user) throw new Error("Authentication required.");
-
-      const context = await getClinicContext();
       const db = await getClinicDb();
 
-      const { error: cancelError } = await db
-        .from("invoices")
-        .update({
-          status: "cancelled",
-          cancelled_at: new Date().toISOString(),
-          cancelled_by: user.id,
-          cancellation_reason: cancelReason.trim(),
-          updated_by: user.id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", invoice.id)
-        .eq("clinic_id", context.clinic_id)
-        .neq("status", "cancelled");
-
+      const { error: cancelError } = await db.rpc("vetra_cancel_invoice", {
+        p_invoice_id: invoice.id,
+        p_reason: cancelReason.trim(),
+      });
       if (cancelError) throw cancelError;
-
-      // Reverse inventory for issued product lines.
-      if (invoice.status !== "draft") {
-        const productItems = items.filter(
-          (item) => item.item_type === "product" && item.product_id
-        );
-
-        for (const item of productItems) {
-          const { data: product, error: productError } = await db
-            .from("products")
-            .select("quantity")
-            .eq("id", item.product_id)
-            .eq("clinic_id", context.clinic_id)
-            .single();
-
-          if (productError) throw productError;
-
-          const { error: productUpdateError } = await db
-            .from("products")
-            .update({
-              quantity: Number(product.quantity || 0) + Number(item.quantity || 0),
-            })
-            .eq("id", item.product_id)
-            .eq("clinic_id", context.clinic_id);
-
-          if (productUpdateError) throw productUpdateError;
-
-          const { error: movementError } = await db
-            .from("inventory_movements")
-            .insert({
-              clinic_id: context.clinic_id,
-              product_id: item.product_id,
-              movement_type: "cancelled_sale",
-              quantity: Number(item.quantity || 0),
-              reference_type: "invoice",
-              reference_id: invoice.id,
-              notes: `Cancelled invoice #${invoice.invoice_number}`,
-              created_by: user.id,
-            });
-
-          if (movementError) throw movementError;
-        }
-      }
 
       setShowCancel(false);
       setCancelReason("");
       await loadInvoice();
     } catch (err: any) {
-      setError(
-        err?.message ||
-          (isAr ? "تعذر إلغاء الفاتورة." : "Could not cancel invoice.")
-      );
+      setError(isMissingCancellationColumnError(err)
+        ? (isAr
+          ? "تعذر إلغاء الفاتورة لأن قاعدة البيانات تحتاج تحديث حقول إلغاء الفواتير. شغّل supabase/tenant-sql/vetra_invoice_cancellation.sql على قاعدة بيانات العيادة ثم أعد المحاولة."
+          : "Invoice cancellation fields are missing from the clinic database. Run supabase/tenant-sql/vetra_invoice_cancellation.sql on the clinic database, then try again.")
+        : (err?.message || (isAr ? "تعذر إلغاء الفاتورة." : "Could not cancel invoice.")));
     } finally {
       setActionLoading(false);
     }

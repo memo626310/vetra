@@ -126,7 +126,7 @@ export default function NewVisitVetTools({ clinicId, language, darkMode, petDeta
   }, [vetToolsSearch, vetToolsOpen]);
 
   return (
-                <VetToolsDrawer language={language} darkMode={darkMode} onOpenChange={handleVetToolsOpenChange}>{(activeTool) => <>
+                <VetToolsDrawer language={language} darkMode={darkMode} onOpenChange={handleVetToolsOpenChange}>{(activeTool, selectTool) => <>
                   {message && <p role="status" className={`rounded-xl border px-3 py-2 text-sm ${darkMode ? "border-white/10 text-slate-300" : "border-slate-200 text-slate-700"}`}>{message}</p>}
                   <p role="status" className="text-xs text-slate-500">{language === "ar" ? "الأدوية المضافة للزيارة:" : "Medications added to visit:"} {medicationDrafts.length + formularyDrafts.length + externalMedicationDrafts.length}</p>
                   <section hidden={activeTool !== "common"} aria-label="Common Conditions">
@@ -139,6 +139,10 @@ export default function NewVisitVetTools({ clinicId, language, darkMode, petDeta
                     medicationDrafts={medicationDrafts}
                     formularyDrafts={formularyDrafts}
                     onApply={applyCommonProtocol}
+                    onOpenMedicationSearch={(query) => {
+                      updateVetToolsSearch(query);
+                      selectTool("bsava");
+                    }}
                   />
                   </section>
                   <div hidden={activeTool === "common"}>

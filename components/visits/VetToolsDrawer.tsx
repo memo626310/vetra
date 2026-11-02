@@ -8,7 +8,7 @@ export type VetTool = "common" | "bsava" | "drugeye";
 type Props = {
   language: Language;
   darkMode: boolean;
-  children: (activeTool: VetTool) => ReactNode;
+  children: (activeTool: VetTool, selectTool: (tool: VetTool) => void) => ReactNode;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -126,7 +126,7 @@ export default function VetToolsDrawer({ language, darkMode, children, onOpenCha
           {tools.map((tool) => <button key={tool.id} type="button" aria-pressed={activeTool === tool.id} onClick={() => setActiveTool(tool.id)} className={`min-h-11 rounded-lg px-2 py-2 text-xs font-bold transition ${activeTool === tool.id ? "bg-cyan-600 text-white" : darkMode ? "text-slate-400 hover:bg-white/5" : "text-slate-600 hover:bg-slate-100"}`}>{tool.label}</button>)}
         </nav>
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:p-5">
-          {hasOpened && children(activeTool)}
+          {hasOpened && children(activeTool, setActiveTool)}
         </div>
       </div>
     </dialog>

@@ -22,6 +22,7 @@ type Props = {
   medicationDrafts: MedicationDraft[];
   formularyDrafts: FormularyVisitDraft[];
   onApply: (medicationIds: string[]) => void | Promise<void>;
+  onOpenMedicationSearch: (query: string) => void;
 };
 
 function normalizeSpecies(value: string): string {
@@ -61,6 +62,7 @@ export default function NewVisitCommonConditions({
   medicationDrafts,
   formularyDrafts,
   onApply,
+  onOpenMedicationSearch,
 }: Props) {
   const [protocols, setProtocols] = useState<ConditionProtocol[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -366,7 +368,7 @@ export default function NewVisitCommonConditions({
               placeholder={language === "ar" ? "ابحث بالاسم أو المادة الفعالة..." : "Search by medication or active ingredient..."}
               className={`${field} mb-2`}
             />
-            {availableMedications.length > 0 && (
+            {availableMedications.length > 0 ? (
               <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-slate-200/60 p-2">
                 {filteredAvailableMedications.map((medication) => (
                   <label key={medication.id} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-xs ${selectedMedicationIds.includes(medication.id) ? (darkMode ? "border-blue-500/50 bg-blue-500/10" : "border-blue-300 bg-blue-50") : `border-transparent ${darkMode ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}`}>
@@ -381,6 +383,10 @@ export default function NewVisitCommonConditions({
                 ))}
                 {filteredAvailableMedications.length === 0 && <p className="p-3 text-xs text-slate-500">{language === "ar" ? "لا توجد أدوية مطابقة للبحث." : "No medications match your search."}</p>}
               </div>
+            ) : (
+              <p className="rounded-lg border border-dashed border-slate-300/60 p-3 text-xs text-slate-500">
+                {language === "ar" ? "لا توجد أدوية متاحة لهذا الحيوان في مكتبة العيادة." : "No medications are available for this pet in the clinic library."}
+              </p>
             )}
             {formularyDrafts.length > 0 ? (
               <div className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-lg border border-emerald-500/20 p-2">
@@ -394,7 +400,16 @@ export default function NewVisitCommonConditions({
                 })}
               </div>
             ) : (
-              <p className="mt-2 rounded-lg border border-dashed border-emerald-500/30 p-3 text-xs text-slate-500">{language === "ar" ? "ابحثي عن الدواء في BSAVA أو DrugEye من خانة البحث أعلى الصفحة، ثم أضيفيه للكشف ليظهر هنا للاختيار." : "Search BSAVA or DrugEye above and add a matched veterinary drug to the visit; it will appear here."}</p>
+              <div className="mt-2 rounded-lg border border-dashed border-emerald-500/30 p-3 text-xs text-slate-500">
+                <p>{language === "ar" ? "ابحثي عن الدواء في BSAVA أو DrugEye، ثم أضيفيه للكشف ليظهر هنا للاختيار." : "Search BSAVA or DrugEye, then add the matched veterinary drug to the visit so it appears here."}</p>
+                <button
+                  type="button"
+                  onClick={() => onOpenMedicationSearch(medicationQuery.trim())}
+                  className="mt-2 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700"
+                >
+                  {language === "ar" ? "فتح بحث الأدوية" : "Open medication search"}
+                </button>
+              </div>
             )}
           </div>
           {error && <p className="mt-2 text-xs text-rose-500">{error}</p>}

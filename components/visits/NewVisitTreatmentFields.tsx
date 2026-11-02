@@ -69,7 +69,7 @@ export default function NewVisitTreatmentFields({
   const matchingDrawerProducts = clinicStockProducts.filter((product) => {
     const search = drawerSearch.trim().toLocaleLowerCase();
     return !search || product.name.toLocaleLowerCase().includes(search) || (product.active_ingredient || "").toLocaleLowerCase().includes(search) || (product.barcode || "").toLocaleLowerCase().includes(search);
-  }).slice(0, 20);
+  });
 
   return (<>
                 <details className={`group rounded-2xl border lg:col-span-2 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-white"}`}>
