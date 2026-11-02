@@ -4070,109 +4070,141 @@ commit;
 
 -- >>> SOURCE: supabase/tenant-sql/vetra_client_code_generation.sql
 
--- Generates the six-digit Client ID used by the client portal:
--- first two digits are the clinic number from the signed clinic JWT and the
--- last four digits are a unique random suffix within that clinic.
+-- Automatic Client ID generation for the clinic tenant database.
+-- Run this file on the clinic database, not on VETRA Core.
+-- New clients without client_code receive: clinic prefix (2 digits) + unique suffix (4 digits).
+
 begin;
 
-create or replace function public.vetra_generate_client_code(p_client_id uuid)
+create unique index if not exists clients_client_code_unique
+  on public.clients (clinic_id, client_code)
+  where client_code is not null and btrim(client_code) <> '';
+
+create or replace function public.vetra_allocate_client_code(p_clinic_id uuid, p_current_code text default null)
 returns text
 language plpgsql
 security definer
 set search_path = public, pg_catalog
+set row_security = off
 as $$
 declare
-  v_clinic_id uuid := public.vetra_current_clinic_id();
   v_claims jsonb;
   v_clinic_number integer;
-  v_current_code text;
   v_candidate text;
-  v_generated_code text;
   v_suffix integer;
   v_attempt integer;
 begin
-  if v_clinic_id is null then
-    raise exception 'An active clinic session is required';
-  end if;
+  if p_clinic_id is null then raise exception 'An active clinic is required'; end if;
 
-  if not public.vetra_has_clinic_staff_permission('patients', 'edit') then
-    raise exception 'Patient edit permission is required';
-  end if;
-
-  select c.client_code
-    into v_current_code
-  from public.clients c
-  where c.id = p_client_id
-    and c.clinic_id = v_clinic_id
-  for update;
-
-  if not found then
-    raise exception 'Client not found in the active clinic';
-  end if;
-
-  v_claims := coalesce(
-    nullif(current_setting('request.jwt.claims', true), '')::jsonb,
-    '{}'::jsonb
-  );
+  v_claims := coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb);
   if (v_claims ->> 'clinic_number') ~ '^[0-9]{1,2}$' then
     v_clinic_number := (v_claims ->> 'clinic_number')::integer;
   end if;
 
-  -- Keep existing six-digit clients working with older clinic tokens while
-  -- the signed clinic_number claim is rolled out everywhere.
-  if v_clinic_number is null and v_current_code ~ '^[0-9]{6}$' then
-    v_clinic_number := left(v_current_code, 2)::integer;
-  end if;
-
+  -- Compatibility for older clinic tokens: infer the prefix from existing IDs.
   if v_clinic_number is null then
     select min(left(c.client_code, 2)::integer)
       into v_clinic_number
-    from public.clients c
-    where c.clinic_id = v_clinic_id
-      and c.client_code ~ '^[0-9]{6}$'
-    having count(distinct left(c.client_code, 2)) = 1;
+      from public.clients c
+     where c.clinic_id = p_clinic_id
+       and c.client_code ~ '^[0-9]{6}$'
+     having count(distinct left(c.client_code, 2)) = 1;
   end if;
 
-  if v_clinic_number is null or v_clinic_number < 1 or v_clinic_number > 99 then
-    raise exception 'Clinic number is missing from the active clinic token';
+  -- Stable fallback for a newly provisioned tenant whose token lacks clinic_number.
+  if v_clinic_number is null then
+    v_clinic_number := mod(abs(hashtext(p_clinic_id::text)::bigint), 99)::integer + 1;
   end if;
+  if v_clinic_number < 1 or v_clinic_number > 99 then
+    raise exception 'Clinic number must be between 1 and 99';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(p_clinic_id::text), hashtext('vetra_client_code_allocation'));
 
   for v_attempt in 1..100 loop
     v_suffix := floor(random() * 10000)::integer;
     v_candidate := lpad(v_clinic_number::text, 2, '0') || lpad(v_suffix::text, 4, '0');
-
-    if v_candidate = v_current_code then
-      continue;
+    if v_candidate = p_current_code then continue; end if;
+    if not exists (
+      select 1 from public.clients c
+       where c.clinic_id = p_clinic_id and c.client_code = v_candidate
+    ) then
+      return v_candidate;
     end if;
-
-    begin
-      if exists (
-        select 1 from public.clients c
-        where c.clinic_id = v_clinic_id and c.client_code = v_candidate
-      ) then
-        continue;
-      end if;
-
-      update public.clients
-      set client_code = v_candidate, updated_at = now()
-      where id = p_client_id and clinic_id = v_clinic_id
-      returning client_code into v_generated_code;
-
-      if v_generated_code is not null then
-        return v_generated_code;
-      end if;
-    exception when unique_violation then
-      null;
-    end;
   end loop;
 
   raise exception 'Could not allocate a unique Client ID';
 end;
 $$;
 
+create or replace function public.vetra_assign_client_code()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_catalog
+set row_security = off
+as $$
+declare
+  v_clinic_id uuid := public.vetra_current_clinic_id();
+begin
+  if tg_op <> 'INSERT' then return new; end if;
+  if v_clinic_id is null then raise exception 'An active clinic session is required'; end if;
+
+  -- Explicit legacy/import codes remain intact; ordinary inserts are automatic.
+  if nullif(btrim(new.client_code), '') is null then
+    new.client_code := public.vetra_allocate_client_code(v_clinic_id);
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists vetra_z_client_code_auto_generate on public.clients;
+create trigger vetra_z_client_code_auto_generate
+before insert on public.clients
+for each row execute function public.vetra_assign_client_code();
+
+create or replace function public.vetra_generate_client_code(p_client_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public, pg_catalog
+set row_security = off
+as $$
+declare
+  v_clinic_id uuid := public.vetra_current_clinic_id();
+  v_current_code text;
+  v_generated_code text;
+begin
+  if v_clinic_id is null then raise exception 'An active clinic session is required'; end if;
+  if not public.vetra_has_clinic_staff_permission('patients', 'edit') then
+    raise exception 'Patient edit permission is required';
+  end if;
+
+  select c.client_code into v_current_code
+    from public.clients c
+   where c.id = p_client_id and c.clinic_id = v_clinic_id
+   for update;
+  if not found then raise exception 'Client not found in the active clinic'; end if;
+
+  v_generated_code := public.vetra_allocate_client_code(v_clinic_id, v_current_code);
+  update public.clients
+     set client_code = v_generated_code, updated_at = now()
+   where id = p_client_id and clinic_id = v_clinic_id
+   returning client_code into v_generated_code;
+  return v_generated_code;
+end;
+$$;
+
+revoke all on function public.vetra_allocate_client_code(uuid, text) from public, anon;
+revoke all on function public.vetra_assign_client_code() from public, anon;
 revoke all on function public.vetra_generate_client_code(uuid) from public, anon;
 grant execute on function public.vetra_generate_client_code(uuid) to authenticated;
+
+notify pgrst, 'reload schema';
 commit;
+
+select to_regprocedure('public.vetra_generate_client_code(uuid)') as client_code_rpc,
+       to_regprocedure('public.vetra_assign_client_code()') as client_code_trigger_function;
 
 -- >>> SOURCE: supabase/tenant-sql/vetra_dashboard_stats.sql
 
@@ -5587,6 +5619,9 @@ DECLARE
   v_invoice_max_row bigint := 0;
   v_progress_after bigint := 0;
   v_progress_done boolean := false;
+  v_phase_remaining bigint := 0;
+  v_sequence_name text;
+  v_sequence_max bigint;
 BEGIN
   IF p_phase IS NULL OR p_phase NOT IN ('categories', 'clients', 'products', 'invoices', 'finalize') THEN
     RAISE EXCEPTION 'Invalid import progress phase: %', p_phase;
@@ -5667,12 +5702,13 @@ BEGIN
         ON m.batch_id = r.batch_id AND m.source_table = r.source_table AND m.source_key = r.source_key
      WHERE r.batch_id = p_batch_id AND r.clinic_id = v_clinic_id
        AND r.source_table = 'Category'
-       AND m.mapping_status <> 'imported'
+       AND m.mapping_status = 'pending'
      ORDER BY r.source_row_number
+     LIMIT p_limit
   LOOP
     v_name := nullif(btrim(public.vetra_legacy_json_text(v_row.payload, ARRAY['name','categoryName','category_name'])), '');
     IF v_name IS NULL THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='اسم التصنيف غير موجود؛ تم الاحتفاظ بالسجل في الأرشيف.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='اسم التصنيف غير موجود؛ تم الاحتفاظ بالسجل في الأرشيف.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       CONTINUE;
     END IF;
@@ -5704,8 +5740,9 @@ BEGIN
         ON m.batch_id = r.batch_id AND m.source_table = r.source_table AND m.source_key = r.source_key
      WHERE r.batch_id = p_batch_id AND r.clinic_id = v_clinic_id
        AND r.source_table = 'Subcategory'
-       AND m.mapping_status <> 'imported'
+       AND m.mapping_status = 'pending'
      ORDER BY r.source_row_number
+     LIMIT p_limit
   LOOP
     v_name := nullif(btrim(public.vetra_legacy_json_text(v_row.payload, ARRAY['name','subcategoryName','subcategory_name'])), '');
     v_parent_id_text := public.vetra_legacy_json_text(v_row.payload, ARRAY['catId','categoryId','category_id','parentId','parent_id']);
@@ -5726,7 +5763,7 @@ BEGIN
     END IF;
 
     IF v_name IS NULL OR v_parent_name IS NULL THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='اسم التصنيف الفرعي أو التصنيف الأب غير واضح؛ السجل محفوظ للمراجعة.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='اسم التصنيف الفرعي أو التصنيف الأب غير واضح؛ السجل محفوظ للمراجعة.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       CONTINUE;
     END IF;
@@ -5760,8 +5797,9 @@ BEGIN
       JOIN public.legacy_import_id_map m
         ON m.batch_id=r.batch_id AND m.source_table=r.source_table AND m.source_key=r.source_key
      WHERE r.batch_id=p_batch_id AND r.clinic_id=v_clinic_id
-       AND r.source_table='Customer' AND m.mapping_status <> 'imported'
+       AND r.source_table='Customer' AND m.mapping_status = 'pending'
      ORDER BY r.source_row_number
+     LIMIT p_limit
   LOOP
     v_name := nullif(btrim(public.vetra_legacy_json_text(v_row.payload, ARRAY['name','customerName','customer_name'])), '');
     v_phone := nullif(btrim(public.vetra_legacy_json_text(v_row.payload, ARRAY['phone','mobile','telephone'])), '');
@@ -5771,7 +5809,7 @@ BEGIN
     v_code := public.vetra_legacy_json_text(v_row.payload, ARRAY['code','customerCode','customer_code']);
 
     IF v_name IS NULL THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='اسم العميل فارغ؛ لم يتم إنشاء عميل غير مكتمل.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='اسم العميل فارغ؛ لم يتم إنشاء عميل غير مكتمل.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       CONTINUE;
     END IF;
@@ -5787,7 +5825,7 @@ BEGIN
     END IF;
 
     IF v_existing_client_id IS NOT NULL THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='يوجد عميل حالي بالاسم والهاتف نفسيهما؛ لم يتم الدمج أو الربط تلقائيًا.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='يوجد عميل حالي بالاسم والهاتف نفسيهما؛ لم يتم الدمج أو الربط تلقائيًا.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       CONTINUE;
     END IF;
@@ -5821,8 +5859,9 @@ BEGIN
       JOIN public.legacy_import_id_map m
         ON m.batch_id=r.batch_id AND m.source_table=r.source_table AND m.source_key=r.source_key
      WHERE r.batch_id=p_batch_id AND r.clinic_id=v_clinic_id
-       AND r.source_table='Product' AND m.mapping_status <> 'imported'
+       AND r.source_table='Product' AND m.mapping_status = 'pending'
      ORDER BY r.source_row_number
+     LIMIT p_limit
   LOOP
     v_name := nullif(btrim(public.vetra_legacy_json_text(v_row.payload, ARRAY['name','productName','product_name'])), '');
     v_price := public.vetra_legacy_try_numeric(public.vetra_legacy_json_text(v_row.payload, ARRAY['buyPrice','buy_price','wholesale_price']));
@@ -5835,7 +5874,7 @@ BEGIN
     v_parent_id_text := public.vetra_legacy_json_text(v_row.payload, ARRAY['subcatId','subcategoryId','subcategory_id']);
 
     IF v_name IS NULL THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='اسم الصنف فارغ؛ لم يتم إنشاء صنف غير معروف.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='اسم الصنف فارغ؛ لم يتم إنشاء صنف غير معروف.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       CONTINUE;
     END IF;
@@ -5843,7 +5882,7 @@ BEGIN
        OR (public.vetra_legacy_json_text(v_row.payload, ARRAY['sellPrice','sell_price','retail_price']) IS NOT NULL AND v_final_price IS NULL)
        OR (public.vetra_legacy_json_text(v_row.payload, ARRAY['lastBuyPrice','last_buy_price','last_purchase_price']) IS NOT NULL AND v_last_purchase IS NULL)
        OR v_price < 0 OR v_final_price < 0 OR v_last_purchase < 0 THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='سعر الشراء أو البيع غير صالح؛ تم ترك الصنف للأرشيف والمراجعة.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='سعر الشراء أو البيع غير صالح؛ تم ترك الصنف للأرشيف والمراجعة.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       CONTINUE;
     END IF;
@@ -5911,7 +5950,7 @@ BEGIN
   -- 5) Import sales invoices only when the source number/customer/items/prices/total/payments
   --    can be interpreted without guessing. All invoice and line writes are in this transaction.
   SELECT coalesce(max(i.invoice_number), 0) INTO v_max_target_invoice
-    FROM public.invoices i WHERE i.clinic_id=v_clinic_id;
+    FROM public.invoices i;
   SELECT coalesce(max(
            CASE WHEN s.invoice_number_numeric > 0
                      AND s.invoice_number_numeric <= 9223372036854775807
@@ -5932,10 +5971,11 @@ BEGIN
       JOIN public.legacy_import_id_map m
         ON m.batch_id=r.batch_id AND m.source_table=r.source_table AND m.source_key=r.source_key
      WHERE r.batch_id=p_batch_id AND r.clinic_id=v_clinic_id
-       AND r.source_table='SalesInvoices' AND m.mapping_status <> 'imported'
+       AND r.source_table='SalesInvoices' AND m.mapping_status = 'pending'
        AND r.source_row_number > p_after_row
        AND r.source_row_number <= p_after_row + p_limit
      ORDER BY r.source_row_number
+     LIMIT p_limit
   LOOP
     v_original_invoice_number_text := public.vetra_legacy_json_text(v_row.payload, ARRAY['invoice_no','invoice_number','invoiceNo','invoiceNumber']);
     v_invoice_total := public.vetra_legacy_try_numeric(public.vetra_legacy_json_text(v_row.payload, ARRAY['total','totalAmount','total_amount','netTotal']));
@@ -5948,7 +5988,7 @@ BEGIN
        OR v_original_invoice_numeric <= 0
        OR v_original_invoice_numeric <> trunc(v_original_invoice_numeric)
        OR v_original_invoice_numeric > 9223372036854775807 THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='رقم الفاتورة القديم ليس رقمًا صحيحًا موجبًا؛ تم الاحتفاظ بها للمراجعة.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='رقم الفاتورة القديم ليس رقمًا صحيحًا موجبًا؛ تم الاحتفاظ بها للمراجعة.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       v_invoices_held := v_invoices_held + 1;
       CONTINUE;
@@ -5962,7 +6002,7 @@ BEGIN
      WHERE sr.batch_id=p_batch_id AND sr.source_table='SalesInvoices'
        AND public.vetra_legacy_json_text(sr.payload, ARRAY['invoice_no','invoice_number','invoiceNo','invoiceNumber'])=v_original_invoice_number_text;
     IF v_existing_count <> 1 THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='رقم الفاتورة مكرر داخل الملف القديم؛ لا يمكن التأكد من البنود التابعة لها.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='رقم الفاتورة مكرر داخل الملف القديم؛ لا يمكن التأكد من البنود التابعة لها.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       v_invoices_held := v_invoices_held + 1;
       CONTINUE;
@@ -5979,7 +6019,7 @@ BEGIN
      LIMIT 1;
 
     IF v_client_id IS NULL THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='العميل المرتبط بالفاتورة لم يُنقل أو يحتاج مراجعة؛ الفاتورة محفوظة دون استيراد.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='العميل المرتبط بالفاتورة لم يُنقل أو يحتاج مراجعة؛ الفاتورة محفوظة دون استيراد.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       v_invoices_held := v_invoices_held + 1;
       CONTINUE;
@@ -6000,7 +6040,7 @@ BEGIN
        AND public.vetra_legacy_json_text(d.payload, ARRAY['invoice_id','invoiceNo','invoice_no','invoiceNumber'])=v_original_invoice_number_text;
 
     IF v_line_count = 0 OR v_bad_quantity > 0 OR (v_bad_price = v_line_count AND v_bad_final_price = v_line_count) THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='الفاتورة ليس لها بنود قابلة للاستيراد أو تحتوي كمية/سعرًا غير صالح؛ بقيت في الأرشيف.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='الفاتورة ليس لها بنود قابلة للاستيراد أو تحتوي كمية/سعرًا غير صالح؛ بقيت في الأرشيف.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       v_invoices_held := v_invoices_held + 1;
       CONTINUE;
@@ -6021,7 +6061,7 @@ BEGIN
             AND pm.target_table='products' AND pm.mapping_status='imported'
        );
     IF v_unmapped_products > 0 THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='بعض أصناف الفاتورة لم تُنقل أو تحتاج مراجعة؛ الفاتورة وبنودها بقيت بالأرشيف.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='بعض أصناف الفاتورة لم تُنقل أو تحتاج مراجعة؛ الفاتورة وبنودها بقيت بالأرشيف.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       v_invoices_held := v_invoices_held + 1;
       CONTINUE;
@@ -6051,7 +6091,7 @@ BEGIN
     END IF;
 
     IF v_price_mode IS NULL THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='إجمالي رأس الفاتورة لا يتطابق بشكل واضح مع أسعار البنود والكميات؛ لم يتم تعديل أي مبلغ.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='إجمالي رأس الفاتورة لا يتطابق بشكل واضح مع أسعار البنود والكميات؛ لم يتم تعديل أي مبلغ.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       v_invoices_held := v_invoices_held + 1;
       CONTINUE;
@@ -6060,7 +6100,7 @@ BEGIN
     v_paid := public.vetra_legacy_try_numeric(public.vetra_legacy_json_text(v_row.payload, ARRAY['paid','paidAmount','paid_amount']));
     IF v_paid IS NULL OR v_paid < 0 OR v_paid > v_invoice_total
        OR (v_paid = 1 AND v_invoice_total > 1) THEN
-      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='pending', notes='قيمة المدفوع غير واضحة أو لا تتفق مع إجمالي الفاتورة؛ لم يتم تخمين حالة السداد.', updated_at=now()
+      UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='قيمة المدفوع غير واضحة أو لا تتفق مع إجمالي الفاتورة؛ لم يتم تخمين حالة السداد.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       v_invoices_held := v_invoices_held + 1;
       CONTINUE;
@@ -6075,9 +6115,9 @@ BEGIN
       CASE WHEN abs(v_selected_sum - v_invoice_total) > 0 THEN 'فرق تقريب بين مجموع البنود ورأس الفاتورة: ' || (v_invoice_total - v_selected_sum)::text ELSE NULL END);
 
     v_new_invoice_number := v_original_invoice_number;
-    IF EXISTS (SELECT 1 FROM public.invoices i WHERE i.clinic_id=v_clinic_id AND i.invoice_number=v_original_invoice_number) THEN
+    IF EXISTS (SELECT 1 FROM public.invoices i WHERE i.invoice_number=v_original_invoice_number) THEN
       LOOP
-        WHILE EXISTS (SELECT 1 FROM public.invoices i WHERE i.clinic_id=v_clinic_id AND i.invoice_number=v_next_invoice_number) LOOP
+        WHILE EXISTS (SELECT 1 FROM public.invoices i WHERE i.invoice_number=v_next_invoice_number) LOOP
           v_next_invoice_number := v_next_invoice_number + 1;
         END LOOP;
         v_new_invoice_number := v_next_invoice_number;
@@ -6091,7 +6131,7 @@ BEGIN
       v_invoice_id := NULL;
       INSERT INTO public.invoices(
         invoice_number, client_id, status, payment_method, subtotal, discount,
-        total, paid_amount, notes, issued_at, created_by, updated_by
+        total, paid_amount, notes, invoice_date, issued_at, created_by, updated_by
       ) VALUES (
         v_new_invoice_number, v_client_id,
         CASE WHEN v_paid = v_invoice_total THEN 'paid'
@@ -6102,10 +6142,11 @@ BEGIN
         v_invoice_total,
         v_paid,
         v_notes,
+        coalesce(v_date, now()),
         v_date,
         auth.uid(),
         auth.uid()
-      ) ON CONFLICT (clinic_id, invoice_number) DO NOTHING
+      ) ON CONFLICT DO NOTHING
       RETURNING id INTO v_invoice_id;
 
       EXIT WHEN v_invoice_id IS NOT NULL;
@@ -6116,8 +6157,7 @@ BEGIN
 
       SELECT coalesce(max(i.invoice_number), 0) + 1
         INTO v_max_conflicting_invoice
-        FROM public.invoices i
-       WHERE i.clinic_id = v_clinic_id;
+        FROM public.invoices i;
       v_new_invoice_number := greatest(v_next_invoice_number, v_max_conflicting_invoice);
       v_next_invoice_number := v_new_invoice_number + 1;
     END LOOP;
@@ -6179,13 +6219,27 @@ BEGIN
 
   END IF;
 
+  IF p_phase IN ('categories', 'clients', 'products') THEN
+    SELECT count(*) INTO v_phase_remaining
+      FROM public.legacy_import_id_map m
+     WHERE m.batch_id = p_batch_id
+       AND m.clinic_id = v_clinic_id
+       AND m.mapping_status = 'pending'
+       AND (
+         (p_phase = 'categories' AND m.source_table IN ('Category', 'Subcategory'))
+         OR (p_phase = 'clients' AND m.source_table = 'Customer')
+         OR (p_phase = 'products' AND m.source_table = 'Product')
+       );
+    v_progress_done := v_phase_remaining = 0;
+  END IF;
+
   IF p_phase <> 'finalize' THEN
     IF p_phase = 'invoices' THEN
       v_progress_after := least(p_after_row + p_limit, v_invoice_max_row);
       v_progress_done := v_progress_after >= v_invoice_max_row;
     ELSE
       v_progress_after := 0;
-      v_progress_done := true;
+      v_progress_done := (v_phase_remaining = 0);
     END IF;
 
     UPDATE public.legacy_import_batches
@@ -6252,6 +6306,19 @@ BEGIN
     FROM public.legacy_import_id_map m
    WHERE m.batch_id=p_batch_id AND m.clinic_id=v_clinic_id
      AND m.mapping_status <> 'imported';
+
+  -- Explicit legacy invoice numbers do not advance an identity sequence.
+  -- Synchronize it before returning so the next normal invoice cannot collide.
+  LOCK TABLE public.invoices IN SHARE ROW EXCLUSIVE MODE;
+  v_sequence_name := pg_get_serial_sequence('public.invoices', 'invoice_number');
+  IF v_sequence_name IS NOT NULL THEN
+    SELECT coalesce(max(i.invoice_number), 0)
+      INTO v_sequence_max
+      FROM public.invoices i;
+    IF v_sequence_max > 0 THEN
+      PERFORM setval(v_sequence_name::regclass, v_sequence_max, true);
+    END IF;
+  END IF;
 
   v_result := jsonb_build_object(
     'batchId', p_batch_id,
@@ -6551,7 +6618,8 @@ begin
     ('vetra_get_pet_lab_records'), ('vetra_get_pet_lab_attachments'),
     ('vetra_submit_pet_lab_result'), ('vetra_attach_pet_lab_file'),
      ('vetra_update_pet_photo_for_owner'), ('vetra_delete_client_cascade'),
-     ('vetra_delete_pet_cascade'), ('vetra_generate_client_code'),
+    ('vetra_delete_pet_cascade'), ('vetra_generate_client_code'),
+    ('vetra_allocate_client_code'), ('vetra_assign_client_code'),
     ('vetra_legacy_json_text'), ('vetra_legacy_try_numeric'),
     ('vetra_legacy_try_date'), ('vetra_legacy_try_timestamptz'),
     ('vetra_import_legacy_batch_progress'), ('vetra_repair_legacy_client_codes')

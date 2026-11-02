@@ -91,6 +91,13 @@ function sourceKey(value: unknown): string | null {
   return String(value).trim();
 }
 
+function sourceValue(row: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") return row[key];
+  }
+  return null;
+}
+
 function asNumber(value: unknown): number | null {
   if (value == null || value === "") return null;
   if (typeof value === "object" && value && "__vetra_type" in value) return null;
@@ -137,13 +144,6 @@ async function fetchAll<T>(client: any, table: string, columns: string): Promise
   }
 }
 
-function countRefOrphans(rows: Record<string, unknown>[], field: string, keySet: Set<string>): number {
-  return rows.filter((row) => {
-    const key = sourceKey(row[field]);
-    return key === null || !keySet.has(key);
-  }).length;
-}
-
 function buildReport(
   batch: Batch,
   sourceRows: SourceRow[],
@@ -164,11 +164,11 @@ function buildReport(
   const salesDetails = rowsOf("SalesInvoiceDetails");
   const stock = rowsOf("Temp_stock");
 
-  const customerIds = new Set(customers.map((row) => sourceKey(row.id)).filter((v): v is string => v !== null));
-  const productIds = new Set(products.map((row) => sourceKey(row.id)).filter((v): v is string => v !== null));
-  const categoryIds = new Set(categories.map((row) => sourceKey(row.id)).filter((v): v is string => v !== null));
-  const subcategoryIds = new Set(subcategories.map((row) => sourceKey(row.id)).filter((v): v is string => v !== null));
-  const invoiceNumbers = new Set(salesInvoices.map((row) => sourceKey(row.invoice_no)).filter((v): v is string => v !== null));
+  const customerIds = new Set(customers.map((row) => sourceKey(sourceValue(row, ["id", "customerId", "customer_id"]))).filter((v): v is string => v !== null));
+  const productIds = new Set(products.map((row) => sourceKey(sourceValue(row, ["id", "productId", "product_id"]))).filter((v): v is string => v !== null));
+  const categoryIds = new Set(categories.map((row) => sourceKey(sourceValue(row, ["id", "categoryId", "category_id"]))).filter((v): v is string => v !== null));
+  const subcategoryIds = new Set(subcategories.map((row) => sourceKey(sourceValue(row, ["id", "subcategoryId", "subcategory_id"]))).filter((v): v is string => v !== null));
+  const invoiceNumbers = new Set(salesInvoices.map((row) => sourceKey(sourceValue(row, ["invoice_no", "invoice_number", "invoiceNo", "invoiceNumber"]))).filter((v): v is string => v !== null));
 
   const targetClientNamePhone = new Set(target.clients.map((row) => `${normalize(row.name)}|${normalize(row.phone)}`).filter((key) => !key.startsWith("|")));
   const existingClientCandidates = customers.filter((row) => {
@@ -180,23 +180,32 @@ function buildReport(
   const targetInvoiceNumbers = new Set(target.invoices.map((row) => String(row.invoice_number)));
   const existingProductNameCandidates = products.filter((row) => normalize(row.name) && targetProductNames.has(normalize(row.name))).length;
   const existingCategoryNameCandidates = categories.filter((row) => normalize(row.name) && targetCategoryNames.has(normalize(row.name))).length;
-  const invoiceNumberCollisions = salesInvoices.filter((row) => row.invoice_no != null && targetInvoiceNumbers.has(String(row.invoice_no))).length;
+  const invoiceNumberCollisions = salesInvoices.filter((row) => {
+    const number = sourceKey(sourceValue(row, ["invoice_no", "invoice_number", "invoiceNo", "invoiceNumber"]));
+    return number !== null && targetInvoiceNumbers.has(number);
+  }).length;
 
   const duplicateCustomerNameGroups = countDuplicateGroups(customers, (row) => normalize(row.name));
   const duplicateProductNameGroups = countDuplicateGroups(products, (row) => normalize(row.name));
   const stockProductCounts = new Map<string, number>();
   for (const row of stock) {
-    const key = sourceKey(row.prod_id);
+    const key = sourceKey(sourceValue(row, ["prod_id", "productId", "product_id"]));
     if (key) stockProductCounts.set(key, (stockProductCounts.get(key) || 0) + 1);
   }
   const multipleStockProductGroups = [...stockProductCounts.values()].filter((count) => count > 1).length;
 
-  const invoiceCustomerOrphans = countRefOrphans(salesInvoices, "cust_id", customerIds);
+  const invoiceCustomerOrphans = salesInvoices.filter((row) => {
+    const key = sourceKey(sourceValue(row, ["cust_id", "customerId", "customer_id", "customer_id_fk"]));
+    return key === null || !customerIds.has(key);
+  }).length;
   const invoiceDetailsWithoutHeader = salesDetails.filter((row) => {
-    const key = sourceKey(row.invoice_id);
+    const key = sourceKey(sourceValue(row, ["invoice_id", "invoiceNo", "invoice_no", "invoiceNumber"]));
     return key === null || !invoiceNumbers.has(key);
   }).length;
-  const invoiceDetailsWithoutProduct = countRefOrphans(salesDetails, "prod_id", productIds);
+  const invoiceDetailsWithoutProduct = salesDetails.filter((row) => {
+    const key = sourceKey(sourceValue(row, ["prod_id", "productId", "product_id"]));
+    return key === null || !productIds.has(key);
+  }).length;
   const invoiceDetailsInvalidQuantity = salesDetails.filter((row) => {
     const quantity = asNumber(row.quantity);
     return quantity === null || quantity <= 0;
@@ -208,18 +217,21 @@ function buildReport(
     return (buy !== null && buy < 0) || (sell !== null && sell < 0);
   }).length;
   const productCategoryOrphans = products.filter((row) => {
-    const key = sourceKey(row.catId);
+    const key = sourceKey(sourceValue(row, ["catId", "categoryId", "category_id"]));
     return key !== null && !categoryIds.has(key);
   }).length;
   const productSubcategoryOrphans = products.filter((row) => {
-    const key = sourceKey(row.subcatId);
+    const key = sourceKey(sourceValue(row, ["subcatId", "subcategoryId", "subcategory_id"]));
     return key !== null && !subcategoryIds.has(key);
   }).length;
-  const stockProductOrphans = countRefOrphans(stock, "prod_id", productIds);
+  const stockProductOrphans = stock.filter((row) => {
+    const key = sourceKey(sourceValue(row, ["prod_id", "productId", "product_id"]));
+    return key === null || !productIds.has(key);
+  }).length;
 
   const detailsByInvoice = new Map<string, Record<string, unknown>[]>();
   for (const detail of salesDetails) {
-    const key = sourceKey(detail.invoice_id);
+    const key = sourceKey(sourceValue(detail, ["invoice_id", "invoiceNo", "invoice_no", "invoiceNumber"]));
     if (!key) continue;
     const group = detailsByInvoice.get(key) || [];
     group.push(detail);
@@ -228,7 +240,7 @@ function buildReport(
   let invoicesWithoutDetails = 0;
   let invoiceTotalsFailingAllHypotheses = 0;
   for (const invoice of salesInvoices) {
-    const invoiceNo = sourceKey(invoice.invoice_no);
+    const invoiceNo = sourceKey(sourceValue(invoice, ["invoice_no", "invoice_number", "invoiceNo", "invoiceNumber"]));
     const details = invoiceNo ? detailsByInvoice.get(invoiceNo) || [] : [];
     if (!details.length) { invoicesWithoutDetails += 1; continue; }
     const headerTotal = asNumber(invoice.total);
@@ -409,14 +421,14 @@ export default function LegacyImportReviewPage() {
     }
     const detailsByInvoice = new Map<string, Record<string, unknown>[]>();
     for (const detail of salesDetails) {
-      const key = sourceKey(detail.invoice_id);
+      const key = sourceKey(sourceValue(detail, ["invoice_id", "invoiceNo", "invoice_no", "invoiceNumber"]));
       if (!key) continue;
       const list = detailsByInvoice.get(key) || [];
       list.push(detail);
       detailsByInvoice.set(key, list);
     }
     return salesInvoices.map((invoice) => {
-      const number = sourceKey(invoice.invoice_no);
+      const number = sourceKey(sourceValue(invoice, ["invoice_no", "invoice_number", "invoiceNo", "invoiceNumber"]));
       const details = number ? detailsByInvoice.get(number) || [] : [];
       const total = asNumber(invoice.total);
       const lines = details.map((line) => ({ price: asNumber(line.price), final: asNumber(line.final_price), qty: asNumber(line.quantity) }));
@@ -623,9 +635,22 @@ export default function LegacyImportReviewPage() {
           : phase === "clients"
             ? "استيراد العملاء"
             : "استيراد المنتجات";
-        updatePercent(percentFor(completedRows), `${label}...`);
-        await callImportStep(phase, 0, 20);
-        completedRows += phase === "categories" ? categoryRows : phase === "clients" ? clientRows : productRows;
+        let phaseDone = false;
+        let phaseCalls = 0;
+        while (!phaseDone) {
+          phaseCalls += 1;
+          if (phaseCalls > 10_000) throw new Error(`لم تكتمل خطوة ${phase} بعد عدد محاولات غير متوقع.`);
+          updatePercent(percentFor(completedRows), `${label}: دفعة ${phaseCalls}...`);
+          const step = await callImportStep(phase, 0, 100);
+          phaseDone = step.phaseDone === true || step.phaseDone === "true";
+          if (!phaseDone) {
+            // The server processes at most 100 pending rows per call. Keep the
+            // visual progress moving without claiming rows that are still pending.
+            const phaseTotal = phase === "categories" ? categoryRows : phase === "clients" ? clientRows : productRows;
+            completedRows = Math.min(categoryRows + clientRows + productRows, completedRows + Math.max(1, Math.floor(phaseTotal / 20)));
+          }
+        }
+        completedRows = phase === "categories" ? categoryRows : phase === "clients" ? categoryRows + clientRows : categoryRows + clientRows + productRows;
         updatePercent(percentFor(completedRows), `اكتملت خطوة ${label}.`);
       }
 
