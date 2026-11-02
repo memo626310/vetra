@@ -375,3 +375,8 @@ html[data-vetra-theme="violet"] select,
 html[data-vetra-theme="violet"] textarea {
   color-scheme: dark;
 }
+
+/* Mobile shell defaults for Capacitor and installed PWA. */
+html { min-height: 100%; }
+body { min-height: 100dvh; overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
+button, a, input, select, textarea { touch-action: manipulation; }

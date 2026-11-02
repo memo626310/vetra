@@ -29,6 +29,7 @@ type Movement = {
 const movementLabels: Record<string, { ar: string; en: string }> = {
   sale: { ar: "بيع", en: "Sale" },
   purchase: { ar: "شراء", en: "Purchase" },
+  opening_balance: { ar: "رصيد افتتاحي", en: "Opening balance" },
   return: { ar: "مرتجع", en: "Return" },
   cancelled_sale: { ar: "إلغاء بيع", en: "Cancelled sale" },
   adjustment: { ar: "تعديل مخزون", en: "Adjustment" },

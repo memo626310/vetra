@@ -49,6 +49,8 @@ type ReviewReport = {
     productCategoryOrphans: number;
     productSubcategoryOrphans: number;
     stockProductOrphans: number;
+    productsWithoutSourceQuantity: number;
+    productsWithInvalidSourceQuantity: number;
     duplicateCustomerNameGroups: number;
     duplicateProductNameGroups: number;
     multipleStockProductGroups: number;
@@ -122,7 +124,7 @@ function role(name: string): string {
     Product: "منتجات",
     SalesInvoices: "فواتير بيع",
     SalesInvoiceDetails: "تفاصيل فواتير بيع",
-    Temp_stock: "أرصدة مخزون — تتطلب مطابقة",
+    Temp_stock: "أرصدة افتتاحية تُنقل مع الأصناف",
     BuyInvoices: "فواتير شراء — غير مدعومة مباشرة",
     BuyInvoiceDetails: "تفاصيل شراء — غير مدعومة مباشرة",
     Supplier: "موردون — غير مدعومين مباشرة",
@@ -188,9 +190,15 @@ function buildReport(
   const duplicateCustomerNameGroups = countDuplicateGroups(customers, (row) => normalize(row.name));
   const duplicateProductNameGroups = countDuplicateGroups(products, (row) => normalize(row.name));
   const stockProductCounts = new Map<string, number>();
+  const stockRowsByProduct = new Map<string, Record<string, unknown>[]>();
   for (const row of stock) {
     const key = sourceKey(sourceValue(row, ["prod_id", "productId", "product_id"]));
-    if (key) stockProductCounts.set(key, (stockProductCounts.get(key) || 0) + 1);
+    if (key) {
+      stockProductCounts.set(key, (stockProductCounts.get(key) || 0) + 1);
+      const linked = stockRowsByProduct.get(key) || [];
+      linked.push(row);
+      stockRowsByProduct.set(key, linked);
+    }
   }
   const multipleStockProductGroups = [...stockProductCounts.values()].filter((count) => count > 1).length;
 
@@ -227,6 +235,22 @@ function buildReport(
   const stockProductOrphans = stock.filter((row) => {
     const key = sourceKey(sourceValue(row, ["prod_id", "productId", "product_id"]));
     return key === null || !productIds.has(key);
+  }).length;
+  const productsWithoutSourceQuantity = products.filter((product) => {
+    const id = sourceKey(sourceValue(product, ["id", "productId", "product_id"]));
+    const linkedStock = id ? stockRowsByProduct.get(id) || [] : [];
+    if (linkedStock.length) return false;
+    return sourceValue(product, ["quantity", "currentQuantity", "current_quantity", "stock", "qty", "available_quantity"]) === null;
+  }).length;
+  const productsWithInvalidSourceQuantity = products.filter((product) => {
+    const id = sourceKey(sourceValue(product, ["id", "productId", "product_id"]));
+    const linkedStock = id ? stockRowsByProduct.get(id) || [] : [];
+    if (linkedStock.length > 1) return false; // Reported separately; import holds these products.
+    const raw = linkedStock.length === 1
+      ? sourceValue(linkedStock[0], ["quantity", "currentQuantity", "current_quantity", "stock", "qty"])
+      : sourceValue(product, ["quantity", "currentQuantity", "current_quantity", "stock", "qty", "available_quantity"]);
+    const value = asNumber(raw);
+    return raw !== null && (value === null || value < 0);
   }).length;
 
   const detailsByInvoice = new Map<string, Record<string, unknown>[]>();
@@ -265,7 +289,10 @@ function buildReport(
   });
   const archivedCountMatchesExpected = countsBySourceTable.every((table) => table.expected === null || table.count === table.expected);
 
-  const unsupportedRows = sourceRows.filter((row) => UNSUPPORTED_TABLES.has(row.source_table) || !["Customer", "Category", "Subcategory", "Product", "SalesInvoices", "SalesInvoiceDetails"].includes(row.source_table)).length;
+  const supportedSourceTables = ["Customer", "Category", "Subcategory", "Product", "SalesInvoices", "SalesInvoiceDetails", "Temp_stock"];
+  const unsupportedRows = sourceRows.filter((row) =>
+    (UNSUPPORTED_TABLES.has(row.source_table) && row.source_table !== "Temp_stock") || !supportedSourceTables.includes(row.source_table)
+  ).length;
   const issues: Issue[] = [];
   const add = (code: string, count: number, severity: Issue["severity"], detail: string) => { if (count > 0) issues.push({ code, count, severity, detail }); };
   add("ARCHIVE_COUNT_MISMATCH", countsBySourceTable.filter((table) => table.delta !== null && table.delta !== 0).length, "block", "عدد السجلات في الأرشيف لا يطابق عدد السجلات المتوقع في ملخص الدفعة. لا تستمر قبل استكمال الأرشيف.");
@@ -282,6 +309,8 @@ function buildReport(
   add("DUPLICATE_CUSTOMER_NAMES", duplicateCustomerNameGroups, "review", "أسماء العملاء المتكررة تحتاج مراجعة؛ لا دمج آليًا.");
   add("DUPLICATE_PRODUCT_NAMES", duplicateProductNameGroups, "review", "أسماء المنتجات المتكررة قد تمثل أحجام أو عبوات مختلفة؛ لا دمج آليًا.");
   add("MULTIPLE_STOCK_ROWS", multipleStockProductGroups, "block", "أكثر من صف مخزون لبعض المنتجات؛ لا تُجمع الأرصدة تلقائيًا.");
+  add("PRODUCTS_WITHOUT_SOURCE_QUANTITY", productsWithoutSourceQuantity, "review", "بعض الأصناف لا تحتوي كمية حالية في Product أو صفًا مطابقًا في Temp_stock؛ ستبدأ هذه الأصناف بصفر لأن المصدر لا يتضمن رصيدًا يمكن نقله.");
+  add("INVALID_SOURCE_STOCK_QUANTITY", productsWithInvalidSourceQuantity, "review", "بعض أرصدة المصدر سالبة أو غير رقمية؛ الأصناف المرتبطة بها ستبقى للمراجعة بدل نقل كمية خاطئة.");
   add("POSSIBLE_EXISTING_CLIENT_MATCH", existingClientCandidates, "review", "عميل قد يطابق عميلًا حاليًا بالاسم والهاتف؛ يتطلب مراجعة يدوية.");
   add("POSSIBLE_EXISTING_PRODUCT_MATCH", existingProductNameCandidates, "review", "منتجات مصدر أسماؤها موجودة حاليًا؛ الاسم وحده لا يثبت التطابق.");
   add("POSSIBLE_EXISTING_CATEGORY_MATCH", existingCategoryNameCandidates, "review", "تصنيفات المصدر قد تتطابق مع تصنيفات حالية؛ لا تدمج تلقائيًا.");
@@ -311,6 +340,8 @@ function buildReport(
       productCategoryOrphans,
       productSubcategoryOrphans,
       stockProductOrphans,
+      productsWithoutSourceQuantity,
+      productsWithInvalidSourceQuantity,
       duplicateCustomerNameGroups,
       duplicateProductNameGroups,
       multipleStockProductGroups,
@@ -408,6 +439,29 @@ export default function LegacyImportReviewPage() {
   const salesInvoices = rowsOf("SalesInvoices");
   const salesDetails = rowsOf("SalesInvoiceDetails");
   const stockRows = rowsOf("Temp_stock");
+  const stockRowsByProduct = useMemo(() => {
+    const byProduct = new Map<string, Record<string, unknown>[]>();
+    for (const row of stockRows) {
+      const productId = sourceKey(sourceValue(row, ["prod_id", "productId", "product_id"]));
+      if (!productId) continue;
+      const linkedRows = byProduct.get(productId) || [];
+      linkedRows.push(row);
+      byProduct.set(productId, linkedRows);
+    }
+    return byProduct;
+  }, [stockRows]);
+  const sourceStockLabel = (product: Record<string, unknown>) => {
+    const productId = sourceKey(sourceValue(product, ["id", "productId", "product_id"]));
+    const linkedRows = productId ? stockRowsByProduct.get(productId) || [] : [];
+    if (linkedRows.length > 1) return "مراجعة: أكثر من صف رصيد";
+    const raw = linkedRows.length === 1
+      ? sourceValue(linkedRows[0], ["quantity", "currentQuantity", "current_quantity", "stock", "qty"])
+      : sourceValue(product, ["quantity", "currentQuantity", "current_quantity", "stock", "qty", "available_quantity"]);
+    const quantity = asNumber(raw);
+    if (raw !== null && (quantity === null || quantity < 0)) return "مراجعة: كمية غير صالحة";
+    if (quantity === null) return "غير موجودة في المصدر · ستبدأ بصفر";
+    return `${quantity.toLocaleString("en-US")} ${linkedRows.length === 1 ? "· Temp_stock" : "· Product"}`;
+  };
   const invoicesWithProblems = useMemo(() => {
     // Link each legacy invoice to the archived Customer row through its source customer ID.
     // This is display-only; it does not create or alter any migration mapping.
@@ -721,6 +775,8 @@ export default function LegacyImportReviewPage() {
     PRODUCT_CATEGORY_ORPHANS: "تصنيف صنف غير موجود",
     PRODUCT_SUBCATEGORY_ORPHANS: "تصنيف فرعي غير موجود",
     STOCK_PRODUCT_ORPHANS: "رصيد مخزون بلا صنف معروف",
+    PRODUCTS_WITHOUT_SOURCE_QUANTITY: "أصناف بلا رصيد محفوظ في المصدر",
+    INVALID_SOURCE_STOCK_QUANTITY: "رصيد غير صالح في المصدر",
     DUPLICATE_CUSTOMER_NAMES: "أسماء عملاء متكررة (لا تعني بالضرورة نفس الشخص)",
     DUPLICATE_PRODUCT_NAMES: "أسماء أصناف متكررة (قد تكون عبوات مختلفة)",
     MULTIPLE_STOCK_ROWS: "أكثر من رصيد للصنف نفسه",
@@ -737,6 +793,8 @@ export default function LegacyImportReviewPage() {
     INVOICE_TOTAL_RECONCILIATION: "لن نغيّر سعرًا أو إجماليًا تلقائيًا. ستظل هذه الفواتير وتفاصيلها محفوظة حتى نتأكد من طريقة الحساب الأصلية.",
     TARGET_INVOICE_NUMBER_COLLISION: "يمكن نقل الفاتورة برقم جديد فريد مع الاحتفاظ برقمها القديم في الملاحظات وسجل الربط.",
     MULTIPLE_STOCK_ROWS: "سنحافظ على الكميات كما هي في الأرشيف حتى نحدد الرصيد الصحيح، ولن نجمعها تلقائيًا.",
+    PRODUCTS_WITHOUT_SOURCE_QUANTITY: "لم يسجل المصدر كمية حالية لهذه الأصناف؛ ستُنقل بصفر فقط لهذه الحالات.",
+    INVALID_SOURCE_STOCK_QUANTITY: "الأصناف ذات الرصيد السالب أو غير الرقمي ستبقى للمراجعة، ولن تُنقل بقيمة غير مؤكدة.",
     DUPLICATE_CUSTOMER_NAMES: "سيتم الاحتفاظ بكل سجل مستقل. لا دمج اعتمادًا على الاسم فقط.",
     DUPLICATE_PRODUCT_NAMES: "سيظل كل صنف مستقلًا. تشابه الاسم لا يكفي لاعتبار العبوة أو المنتج واحدًا.",
     UNSUPPORTED_SOURCE_ROWS: "لن تُحذف هذه البيانات. ستظل في نسخة الأرشيف حتى نضيف لها وجهة مناسبة في VETRA.",
@@ -809,8 +867,8 @@ export default function LegacyImportReviewPage() {
             <h2 className="text-lg font-extrabold">ملخص بسيط قبل الاستيراد</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">الاختلاف في بعض السجلات لا يعني أن قاعدة البيانات كلها غير صالحة. الأشياء السليمة يمكن نقلها، والحالات غير الواضحة تفضل محفوظة بدل ما نخمن فيها.</p>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><div className="font-extrabold text-emerald-900">بيانات يمكن تجهيزها للنقل</div><div className="mt-1 text-sm leading-6 text-emerald-900">العملاء ذوو البيانات المكتملة، التصنيفات، وبيانات الأصناف التي يمكن قراءتها بأمان. كميات المخزون لن تتغير قبل مطابقتها.</div></div>
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><div className="font-extrabold text-amber-950">تحتاج مراجعة</div><div className="mt-1 text-sm leading-6 text-amber-950">فواتير إجمالياتها غير متطابقة، العملاء المحتمل تكرارهم، وبعض أرصدة المخزون. ستظل هذه السجلات في الأرشيف.</div></div>
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><div className="font-extrabold text-emerald-900">بيانات يمكن تجهيزها للنقل</div><div className="mt-1 text-sm leading-6 text-emerald-900">العملاء ذوو البيانات المكتملة، التصنيفات، وبيانات الأصناف. الرصيد الحالي الواضح ينتقل تلقائيًا كرصيد افتتاحي مع كل صنف.</div></div>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><div className="font-extrabold text-amber-950">تحتاج مراجعة</div><div className="mt-1 text-sm leading-6 text-amber-950">فواتير إجمالياتها غير متطابقة، العملاء المحتمل تكرارهم، وأرصدة الأصناف المكررة أو غير الواضحة. هذه الحالات فقط تظل في الأرشيف للمراجعة.</div></div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="font-extrabold text-slate-900">ستظل محفوظة في الأرشيف</div><div className="mt-1 text-sm leading-6 text-slate-700">المشتريات والموردون والحسابات والحركات المالية التي ليس لها وجهة تشغيلية معتمدة حاليًا في VETRA.</div></div>
             </div>
           </section>
@@ -824,7 +882,7 @@ export default function LegacyImportReviewPage() {
               </div>
               <div>
                 {smallTableButton("Product", "الأصناف والمنتجات", products.length)}
-                {openTables.Product && <div className="overflow-x-auto border-t border-slate-100"><table className="min-w-full text-sm"><thead className="bg-slate-50"><tr><th className="px-3 py-3 text-right">اسم الصنف</th><th className="px-3 py-3 text-right">سعر الشراء</th><th className="px-3 py-3 text-right">سعر البيع</th><th className="px-3 py-3 text-right">حد التنبيه</th><th className="px-3 py-3 text-right">ملاحظة</th></tr></thead><tbody>{products.slice(0,100).map((row,index)=><tr key={index} className="border-t border-slate-100"><td className="px-3 py-2 font-semibold">{String(row.name || "بدون اسم")}</td><td className="px-3 py-2">{moneyLabel(row.buyPrice)}</td><td className="px-3 py-2">{moneyLabel(row.sellPrice)}</td><td className="px-3 py-2">{asNumber(row.miniQuantity)?.toLocaleString("en-US") ?? "—"}</td><td className="px-3 py-2 text-xs text-slate-600">كمية المخزون ستظل للمطابقة قبل اعتماد الرصيد</td></tr>)}</tbody></table>{products.length>100&&<p className="p-3 text-xs text-slate-500">يعرض أول 100 صنف؛ باقي الأصناف محفوظة أيضًا.</p>}</div>}
+                {openTables.Product && <div className="overflow-x-auto border-t border-slate-100"><table className="min-w-full text-sm"><thead className="bg-slate-50"><tr><th className="px-3 py-3 text-right">اسم الصنف</th><th className="px-3 py-3 text-right">سعر الشراء</th><th className="px-3 py-3 text-right">سعر البيع</th><th className="px-3 py-3 text-right">حد التنبيه</th><th className="px-3 py-3 text-right">الرصيد الحالي</th></tr></thead><tbody>{products.slice(0,100).map((row,index)=><tr key={index} className="border-t border-slate-100"><td className="px-3 py-2 font-semibold">{String(row.name || "بدون اسم")}</td><td className="px-3 py-2">{moneyLabel(row.buyPrice)}</td><td className="px-3 py-2">{moneyLabel(row.sellPrice)}</td><td className="px-3 py-2">{asNumber(row.miniQuantity)?.toLocaleString("en-US") ?? "—"}</td><td className="px-3 py-2 text-xs text-slate-600">{sourceStockLabel(row)}</td></tr>)}</tbody></table>{products.length>100&&<p className="p-3 text-xs text-slate-500">يعرض أول 100 صنف؛ باقي الأصناف محفوظة أيضًا.</p>}</div>}
               </div>
               <div>
                 {smallTableButton("SalesInvoices", "فواتير البيع", salesInvoices.length)}
@@ -836,7 +894,7 @@ export default function LegacyImportReviewPage() {
               </div>
               <div>
                 {smallTableButton("Temp_stock", "أرصدة المخزون في النظام القديم", stockRows.length)}
-                {openTables.Temp_stock && <div className="overflow-x-auto border-t border-slate-100"><table className="min-w-full text-sm"><thead className="bg-slate-50"><tr><th className="px-3 py-3 text-right">معرّف الصنف القديم</th><th className="px-3 py-3 text-right">الكمية</th><th className="px-3 py-3 text-right">آخر كمية مسجلة</th><th className="px-3 py-3 text-right">الإجراء</th></tr></thead><tbody>{stockRows.slice(0,100).map((row,index)=><tr key={index} className="border-t border-slate-100"><td className="px-3 py-2">{String(row.prod_id ?? "—")}</td><td className="px-3 py-2">{String(row.quantity ?? "—")}</td><td className="px-3 py-2">{String(row.lastQuantity ?? "—")}</td><td className="px-3 py-2 text-xs text-amber-800">لن تتغير كمية VETRA قبل مطابقة الرصيد</td></tr>)}</tbody></table>{stockRows.length>100&&<p className="p-3 text-xs text-slate-500">يعرض أول 100 رصيد فقط.</p>}</div>}
+                {openTables.Temp_stock && <div className="overflow-x-auto border-t border-slate-100"><table className="min-w-full text-sm"><thead className="bg-slate-50"><tr><th className="px-3 py-3 text-right">معرّف الصنف القديم</th><th className="px-3 py-3 text-right">الكمية الحالية</th><th className="px-3 py-3 text-right">آخر كمية مسجلة</th><th className="px-3 py-3 text-right">الإجراء</th></tr></thead><tbody>{stockRows.slice(0,100).map((row,index)=><tr key={index} className="border-t border-slate-100"><td className="px-3 py-2">{String(row.prod_id ?? "—")}</td><td className="px-3 py-2">{String(row.quantity ?? "—")}</td><td className="px-3 py-2">{String(row.lastQuantity ?? "—")}</td><td className="px-3 py-2 text-xs text-emerald-800">تُنقل كرصد افتتاحي إذا كان هناك صف واحد واضح للصنف</td></tr>)}</tbody></table>{stockRows.length>100&&<p className="p-3 text-xs text-slate-500">يعرض أول 100 رصيد فقط.</p>}</div>}
               </div>
             </div>
           </section>
@@ -866,7 +924,7 @@ export default function LegacyImportReviewPage() {
           </details>
         </>}
 
-        {importResult && <section className="mb-6 rounded-3xl border border-emerald-200 bg-emerald-50 p-5 sm:p-6"><h2 className="text-lg font-extrabold text-emerald-950">نتيجة الاستيراد</h2><p className="mt-1 text-sm text-emerald-900">نُقلت البيانات الآمنة التالية. باقي السجلات ما زالت محفوظة للمراجعة ولم تُحذف.</p><div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric label="عملاء تم نقلهم" value={String(importResult.clientsImported ?? 0)} /><Metric label="تصنيفات تم نقلها" value={String(importResult.categoriesImported ?? 0)} /><Metric label="أصناف تم نقلها" value={String(importResult.productsImported ?? 0)} /><Metric label="فواتير تم نقلها" value={String(importResult.invoicesImported ?? 0)} /></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-white p-3 text-sm">فواتير محتاجة مراجعة: <b>{String(importResult.invoicesHeldForReview ?? 0)}</b></div><div className="rounded-xl bg-white p-3 text-sm">سجلات غير مدعومة ظلت بالأرشيف: <b>{String(importResult.unsupportedRowsPreserved ?? 0)}</b></div></div></section>}
+        {importResult && <section className="mb-6 rounded-3xl border border-emerald-200 bg-emerald-50 p-5 sm:p-6"><h2 className="text-lg font-extrabold text-emerald-950">نتيجة الاستيراد</h2><p className="mt-1 text-sm text-emerald-900">تمت مزامنة البيانات الآمنة التالية؛ السجلات الموجودة تحدّثت بدل تكرارها. باقي السجلات ما زالت محفوظة للمراجعة ولم تُحذف.</p><div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric label="عملاء تمت مزامنتهم" value={String(importResult.clientsImported ?? 0)} /><Metric label="تصنيفات تمت مزامنتها" value={String(importResult.categoriesImported ?? 0)} /><Metric label="أصناف تمت مزامنتها" value={String(importResult.productsImported ?? 0)} /><Metric label="فواتير تمت مزامنتها" value={String(importResult.invoicesImported ?? 0)} /></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-white p-3 text-sm">فواتير محتاجة مراجعة: <b>{String(importResult.invoicesHeldForReview ?? 0)}</b></div><div className="rounded-xl bg-white p-3 text-sm">سجلات غير مدعومة ظلت بالأرشيف: <b>{String(importResult.unsupportedRowsPreserved ?? 0)}</b></div></div></section>}
 
         <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
           <div className="mx-auto flex max-w-7xl flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">

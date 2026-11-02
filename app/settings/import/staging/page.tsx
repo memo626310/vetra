@@ -232,7 +232,12 @@ export default function LegacySourceStagingPage() {
       if (existing.error) throw new Error(`تعذر البحث عن سجل الاستيراد: ${existing.error.message}. شغّل SQL المرحلتين 2 و3 أولًا.`);
       let id = existing.data?.id as string | undefined;
       if (existing.data?.status === "committed" || existing.data?.status === "importing") {
-        throw new Error(`السجل ${existing.data.id} حالته ${existing.data.status}; لا يمكن تغييره من هذه الصفحة.`);
+        setBatchId(existing.data.id);
+        setStaged(scan.totalRows);
+        setMessage(existing.data.status === "committed"
+          ? `نفس الملف سبق استيراده بالكامل (دفعة ${existing.data.id}). لم نرفع نسخة ثانية ولم ننشئ سجلات مكررة؛ أعد الاستيراد فقط عند وجود ملف مصدر مختلف.`
+          : `هذا الملف مطابق لدفعة يجري استيرادها الآن (دفعة ${existing.data.id}). لم نرفع نسخة ثانية أو نغيّر بياناتها أثناء التنفيذ.`);
+        return;
       }
       if (!id) {
         const { data, error: insertError } = await db.from("legacy_import_batches").insert({

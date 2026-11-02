@@ -5583,6 +5583,16 @@ DECLARE
   v_price numeric;
   v_final_price numeric;
   v_last_purchase numeric;
+  v_stock numeric;
+  v_stock_row_count bigint;
+  v_stock_value_count bigint;
+  v_stock_raw text;
+  v_product_id_text text;
+  v_stock_source text;
+  v_prior_target_id uuid;
+  v_prior_stock numeric;
+  v_prior_batch_id uuid;
+  v_prior_detail_id uuid;
   v_unit_source text;
   v_original_invoice_numeric numeric;
   v_selected_sum numeric;
@@ -5640,6 +5650,8 @@ BEGIN
 
   -- Serialize invoice-number selection across every import batch for this clinic.
   PERFORM pg_advisory_xact_lock(hashtext(v_clinic_id::text), hashtext('vetra_import_legacy_batch_invoice_numbers'));
+  -- Serialize matching/upserts across batches so two imports of the same source cannot create duplicate targets concurrently.
+  PERFORM pg_advisory_xact_lock(hashtext(v_clinic_id::text), hashtext('vetra_import_legacy_batch_source_sync'));
 
   SELECT *
     INTO v_batch
@@ -5715,6 +5727,21 @@ BEGIN
 
     v_base_name := left(v_name, 200);
     v_candidate_name := v_base_name;
+    SELECT pm.target_id INTO v_prior_target_id
+      FROM public.legacy_import_source_rows old_row
+      JOIN public.legacy_import_batches old_batch ON old_batch.id=old_row.batch_id AND old_batch.clinic_id=old_row.clinic_id
+      JOIN public.legacy_import_id_map pm ON pm.batch_id=old_row.batch_id AND pm.source_table=old_row.source_table AND pm.source_key=old_row.source_key
+      JOIN public.product_categories old_category ON old_category.id=pm.target_id AND old_category.clinic_id=v_clinic_id
+     WHERE old_row.clinic_id=v_clinic_id AND old_row.batch_id<>p_batch_id
+       AND old_batch.source_file_name=v_batch.source_file_name
+       AND old_row.source_table=v_row.source_table AND old_row.source_key=v_row.source_key
+       AND old_row.source_key NOT LIKE 'row:%'
+       AND pm.target_table='product_categories' AND pm.mapping_status='imported'
+     ORDER BY old_batch.created_at DESC LIMIT 1;
+    IF v_prior_target_id IS NOT NULL THEN
+      UPDATE public.product_categories SET name=v_candidate_name WHERE id=v_prior_target_id AND clinic_id=v_clinic_id;
+      v_target_id := v_prior_target_id;
+    ELSE
     v_suffix := 1;
     WHILE EXISTS (
       SELECT 1 FROM public.product_categories c
@@ -5725,9 +5752,11 @@ BEGIN
     END LOOP;
 
     INSERT INTO public.product_categories(name) VALUES (v_candidate_name) RETURNING id INTO v_target_id;
+    END IF;
     UPDATE public.legacy_import_id_map
        SET target_table='product_categories', target_id=v_target_id,
-           decision='create_new', mapping_status='imported', notes='تم استيراد التصنيف دون دمجه مع تصنيف موجود.', updated_at=now()
+           decision=CASE WHEN v_prior_target_id IS NULL THEN 'create_new' ELSE 'reuse_existing' END,
+           mapping_status='imported', notes=CASE WHEN v_prior_target_id IS NULL THEN 'تم استيراد التصنيف.' ELSE 'تم تحديث التصنيف المطابق من الاستيراد السابق.' END, updated_at=now()
      WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
     v_categories_imported := v_categories_imported + 1;
   END LOOP;
@@ -5770,6 +5799,21 @@ BEGIN
 
     v_base_name := left(v_parent_name || ' / ' || v_name, 200);
     v_candidate_name := v_base_name;
+    SELECT pm.target_id INTO v_prior_target_id
+      FROM public.legacy_import_source_rows old_row
+      JOIN public.legacy_import_batches old_batch ON old_batch.id=old_row.batch_id AND old_batch.clinic_id=old_row.clinic_id
+      JOIN public.legacy_import_id_map pm ON pm.batch_id=old_row.batch_id AND pm.source_table=old_row.source_table AND pm.source_key=old_row.source_key
+      JOIN public.product_categories old_category ON old_category.id=pm.target_id AND old_category.clinic_id=v_clinic_id
+     WHERE old_row.clinic_id=v_clinic_id AND old_row.batch_id<>p_batch_id
+       AND old_batch.source_file_name=v_batch.source_file_name
+       AND old_row.source_table=v_row.source_table AND old_row.source_key=v_row.source_key
+       AND old_row.source_key NOT LIKE 'row:%'
+       AND pm.target_table='product_categories' AND pm.mapping_status='imported'
+     ORDER BY old_batch.created_at DESC LIMIT 1;
+    IF v_prior_target_id IS NOT NULL THEN
+      UPDATE public.product_categories SET name=v_candidate_name WHERE id=v_prior_target_id AND clinic_id=v_clinic_id;
+      v_target_id := v_prior_target_id;
+    ELSE
     v_suffix := 1;
     WHILE EXISTS (
       SELECT 1 FROM public.product_categories c
@@ -5780,9 +5824,11 @@ BEGIN
     END LOOP;
 
     INSERT INTO public.product_categories(name) VALUES (v_candidate_name) RETURNING id INTO v_target_id;
+    END IF;
     UPDATE public.legacy_import_id_map
        SET target_table='product_categories', target_id=v_target_id,
-           decision='create_new', mapping_status='imported', notes='تم حفظ التصنيف الفرعي كتصنيف مستقل باسم يتضمن التصنيف الأب.', updated_at=now()
+           decision=CASE WHEN v_prior_target_id IS NULL THEN 'create_new' ELSE 'reuse_existing' END,
+           mapping_status='imported', notes=CASE WHEN v_prior_target_id IS NULL THEN 'تم حفظ التصنيف الفرعي.' ELSE 'تم تحديث التصنيف الفرعي المطابق من الاستيراد السابق.' END, updated_at=now()
      WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
     v_categories_imported := v_categories_imported + 1;
   END LOOP;
@@ -5815,7 +5861,19 @@ BEGIN
     END IF;
 
     v_existing_client_id := NULL;
-    IF v_phone IS NOT NULL THEN
+    v_prior_target_id := NULL;
+    SELECT pm.target_id INTO v_prior_target_id
+      FROM public.legacy_import_source_rows old_row
+      JOIN public.legacy_import_batches old_batch ON old_batch.id=old_row.batch_id AND old_batch.clinic_id=old_row.clinic_id
+      JOIN public.legacy_import_id_map pm ON pm.batch_id=old_row.batch_id AND pm.source_table=old_row.source_table AND pm.source_key=old_row.source_key
+      JOIN public.clients old_client ON old_client.id=pm.target_id AND old_client.clinic_id=v_clinic_id
+     WHERE old_row.clinic_id=v_clinic_id AND old_row.batch_id<>p_batch_id
+       AND old_batch.source_file_name=v_batch.source_file_name
+       AND old_row.source_table=v_row.source_table AND old_row.source_key=v_row.source_key
+       AND old_row.source_key NOT LIKE 'row:%'
+       AND pm.target_table='clients' AND pm.mapping_status='imported'
+     ORDER BY old_batch.created_at DESC LIMIT 1;
+    IF v_phone IS NOT NULL AND v_prior_target_id IS NULL THEN
       SELECT c.id INTO v_existing_client_id
         FROM public.clients c
        WHERE c.clinic_id=v_clinic_id
@@ -5824,7 +5882,7 @@ BEGIN
        LIMIT 1;
     END IF;
 
-    IF v_existing_client_id IS NOT NULL THEN
+    IF v_existing_client_id IS NOT NULL AND v_prior_target_id IS NULL THEN
       UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='يوجد عميل حالي بالاسم والهاتف نفسيهما؛ لم يتم الدمج أو الربط تلقائيًا.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       CONTINUE;
@@ -5836,15 +5894,20 @@ BEGIN
       CASE WHEN public.vetra_legacy_json_text(v_row.payload, ARRAY['phone2','phone_2','mobile2']) IS NOT NULL
         THEN 'هاتف إضافي قديم: ' || public.vetra_legacy_json_text(v_row.payload, ARRAY['phone2','phone_2','mobile2']) ELSE NULL END);
 
-    INSERT INTO public.clients(name, phone, email, address, notes, client_code)
-    VALUES (
-      v_name, v_phone, v_email, v_address, v_notes,
-      'LEG-CUST-' || upper(substr(md5(v_row.source_key), 1, 16))
-    ) RETURNING id INTO v_target_id;
+    IF v_prior_target_id IS NOT NULL THEN
+      UPDATE public.clients SET name=v_name, phone=v_phone, email=v_email, address=v_address, notes=v_notes
+       WHERE id=v_prior_target_id AND clinic_id=v_clinic_id;
+      v_target_id := v_prior_target_id;
+    ELSE
+      INSERT INTO public.clients(name, phone, email, address, notes, client_code)
+      VALUES (v_name, v_phone, v_email, v_address, v_notes,
+        'LEG-CUST-' || upper(substr(md5(v_row.source_key), 1, 16))) RETURNING id INTO v_target_id;
+    END IF;
 
     UPDATE public.legacy_import_id_map
-       SET target_table='clients', target_id=v_target_id, decision='create_new', mapping_status='imported',
-           notes='تم إنشاء عميل مستقل مع الاحتفاظ بالكود القديم في الملاحظات.', updated_at=now()
+       SET target_table='clients', target_id=v_target_id,
+           decision=CASE WHEN v_prior_target_id IS NULL THEN 'create_new' ELSE 'reuse_existing' END, mapping_status='imported',
+           notes=CASE WHEN v_prior_target_id IS NULL THEN 'تم إنشاء عميل مستقل مع الاحتفاظ بالكود القديم في الملاحظات.' ELSE 'تم تحديث العميل المطابق من الاستيراد السابق.' END, updated_at=now()
      WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
     v_clients_imported := v_clients_imported + 1;
   END LOOP;
@@ -5852,7 +5915,7 @@ BEGIN
   END IF;
 
   IF p_phase = 'products' THEN
-  -- 4) Products. Quantity is intentionally zero until opening stock is reconciled.
+  -- 4) Products. Import the current source balance as opening stock when available.
   FOR v_row IN
     SELECT r.*
       FROM public.legacy_import_source_rows r
@@ -5867,6 +5930,9 @@ BEGIN
     v_price := public.vetra_legacy_try_numeric(public.vetra_legacy_json_text(v_row.payload, ARRAY['buyPrice','buy_price','wholesale_price']));
     v_final_price := public.vetra_legacy_try_numeric(public.vetra_legacy_json_text(v_row.payload, ARRAY['sellPrice','sell_price','retail_price']));
     v_last_purchase := public.vetra_legacy_try_numeric(public.vetra_legacy_json_text(v_row.payload, ARRAY['lastBuyPrice','last_buy_price','last_purchase_price']));
+    v_stock := NULL;
+    v_stock_source := NULL;
+    v_product_id_text := public.vetra_legacy_json_text(v_row.payload, ARRAY['id','productId','product_id']);
     v_unit_source := public.vetra_legacy_json_text(v_row.payload, ARRAY['unit','unitName','unit_name']);
     v_notes := nullif(btrim(public.vetra_legacy_json_text(v_row.payload, ARRAY['notes','note','description'])), '');
     v_code := public.vetra_legacy_json_text(v_row.payload, ARRAY['code','productCode','product_code','barcode']);
@@ -5885,6 +5951,65 @@ BEGIN
       UPDATE public.legacy_import_id_map SET decision='needs_review', mapping_status='held', notes='سعر الشراء أو البيع غير صالح؛ تم ترك الصنف للأرشيف والمراجعة.', updated_at=now()
        WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
       CONTINUE;
+    END IF;
+
+    -- Temp_stock is the source system's dedicated current-balance table. Only
+    -- use it when there is one unambiguous row for this product.
+    v_stock_row_count := 0;
+    v_stock_value_count := 0;
+    v_stock_raw := NULL;
+    IF v_product_id_text IS NOT NULL THEN
+      SELECT count(*),
+             count(public.vetra_legacy_json_text(sr.payload, ARRAY['quantity','currentQuantity','current_quantity','stock','qty'])),
+             min(public.vetra_legacy_json_text(sr.payload, ARRAY['quantity','currentQuantity','current_quantity','stock','qty']))
+        INTO v_stock_row_count, v_stock_value_count, v_stock_raw
+        FROM public.legacy_import_source_rows sr
+       WHERE sr.batch_id = p_batch_id
+         AND sr.clinic_id = v_clinic_id
+         AND sr.source_table = 'Temp_stock'
+         AND public.vetra_legacy_json_text(sr.payload, ARRAY['prod_id','productId','product_id']) = v_product_id_text;
+    END IF;
+
+    IF v_stock_row_count > 1 THEN
+      UPDATE public.legacy_import_id_map
+         SET decision='needs_review', mapping_status='held',
+             notes='للصنف أكثر من صف رصيد في Temp_stock؛ بقي الصنف ورصيده بالأرشيف حتى لا يتم جمع أو تخمين المخزون.', updated_at=now()
+       WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
+      CONTINUE;
+    END IF;
+
+    IF v_stock_row_count = 1 THEN
+      IF v_stock_value_count = 0 THEN
+        UPDATE public.legacy_import_id_map
+           SET decision='needs_review', mapping_status='held',
+               notes='صف Temp_stock المرتبط بالصنف لا يحتوي كمية حالية واضحة؛ بقي الصنف بالأرشيف للمراجعة.', updated_at=now()
+         WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
+        CONTINUE;
+      END IF;
+      v_stock := public.vetra_legacy_try_numeric(v_stock_raw);
+      IF v_stock IS NULL OR v_stock < 0 THEN
+        UPDATE public.legacy_import_id_map
+           SET decision='needs_review', mapping_status='held',
+               notes='كمية Temp_stock غير رقمية أو سالبة؛ بقي الصنف بالأرشيف للمراجعة.', updated_at=now()
+         WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
+        CONTINUE;
+      END IF;
+      v_stock_source := 'Temp_stock';
+    ELSE
+      v_stock_raw := public.vetra_legacy_json_text(v_row.payload, ARRAY['quantity','currentQuantity','current_quantity','stock','qty','available_quantity']);
+      IF v_stock_raw IS NOT NULL THEN
+        v_stock := public.vetra_legacy_try_numeric(v_stock_raw);
+        IF v_stock IS NULL OR v_stock < 0 THEN
+          UPDATE public.legacy_import_id_map
+             SET decision='needs_review', mapping_status='held',
+                 notes='كمية الصنف المسجلة في Product غير صالحة؛ بقي الصنف بالأرشيف للمراجعة.', updated_at=now()
+           WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
+          CONTINUE;
+        END IF;
+        v_stock_source := 'Product';
+      ELSE
+        v_stock := 0;
+      END IF;
     END IF;
 
     IF v_parent_id_text IS NOT NULL THEN
@@ -5918,28 +6043,73 @@ BEGIN
       CASE WHEN v_final_price IS NULL THEN 'سعر البيع غير مسجل في المصدر؛ تم تركه صفرًا لحين المراجعة.' ELSE NULL END,
       CASE WHEN v_last_purchase IS NULL THEN 'آخر سعر شراء غير مسجل في المصدر.' ELSE NULL END,
       CASE WHEN v_unit_source IS NOT NULL THEN 'قيمة الوحدة في المصدر: ' || v_unit_source ELSE NULL END,
-      'رصيد الافتتاح لم يُنقل؛ كمية الصنف في VETRA تبدأ من صفر حتى مطابقة المخزون القديم.');
+      CASE WHEN v_stock_source IS NOT NULL THEN 'تم نقل الرصيد الافتتاحي ' || v_stock::text || ' من جدول ' || v_stock_source || '.'
+           ELSE 'المصدر لا يحتوي رصيدًا حاليًا واضحًا لهذا الصنف؛ تم تسجيله بكمية صفر.' END);
 
-    INSERT INTO public.products(
-      name, category_id, barcode, unit, quantity, wholesale_price, retail_price,
-      last_purchase_price, expiry_date, reorder_level, notes
-    ) VALUES (
-      v_name,
-      v_category_id,
-      NULL,
-      CASE WHEN v_unit_source IS NULL OR btrim(v_unit_source) = '' OR v_unit_source ~ '^[0-9]+$' THEN 'piece' ELSE left(v_unit_source, 100) END,
-      0,
-      coalesce(v_price, 0),
-      coalesce(v_final_price, 0),
-      coalesce(v_last_purchase, 0),
-      public.vetra_legacy_try_date(public.vetra_legacy_json_text(v_row.payload, ARRAY['expDate','expiry_date','expiryDate'])),
-      greatest(coalesce(public.vetra_legacy_try_numeric(public.vetra_legacy_json_text(v_row.payload, ARRAY['miniQuantity','mini_quantity','reorder_level'])), 0), 0),
-      v_notes
-    ) RETURNING id INTO v_target_id;
+    v_prior_target_id := NULL;
+    v_prior_stock := NULL;
+    SELECT pm.target_id INTO v_prior_target_id
+      FROM public.legacy_import_source_rows old_row
+      JOIN public.legacy_import_batches old_batch ON old_batch.id=old_row.batch_id AND old_batch.clinic_id=old_row.clinic_id
+      JOIN public.legacy_import_id_map pm ON pm.batch_id=old_row.batch_id AND pm.source_table=old_row.source_table AND pm.source_key=old_row.source_key
+      JOIN public.products old_product ON old_product.id=pm.target_id AND old_product.clinic_id=v_clinic_id
+     WHERE old_row.clinic_id=v_clinic_id AND old_row.batch_id<>p_batch_id
+       AND old_batch.source_file_name=v_batch.source_file_name
+       AND old_row.source_table=v_row.source_table AND old_row.source_key=v_row.source_key
+       AND old_row.source_key NOT LIKE 'row:%'
+       AND pm.target_table='products' AND pm.mapping_status='imported'
+     ORDER BY old_batch.created_at DESC LIMIT 1;
+
+    IF v_prior_target_id IS NOT NULL THEN
+      SELECT quantity INTO v_prior_stock FROM public.products WHERE id=v_prior_target_id AND clinic_id=v_clinic_id;
+      UPDATE public.products SET
+        name=v_name, category_id=v_category_id,
+        unit=CASE WHEN v_unit_source IS NULL OR btrim(v_unit_source) = '' OR v_unit_source ~ '^[0-9]+$' THEN 'piece' ELSE left(v_unit_source, 100) END,
+        quantity=coalesce(v_stock, 0), wholesale_price=coalesce(v_price, 0), retail_price=coalesce(v_final_price, 0),
+        last_purchase_price=coalesce(v_last_purchase, 0),
+        expiry_date=public.vetra_legacy_try_date(public.vetra_legacy_json_text(v_row.payload, ARRAY['expDate','expiry_date','expiryDate'])),
+        reorder_level=greatest(coalesce(public.vetra_legacy_try_numeric(public.vetra_legacy_json_text(v_row.payload, ARRAY['miniQuantity','mini_quantity','reorder_level'])), 0), 0),
+        notes=v_notes, updated_at=now()
+       WHERE id=v_prior_target_id AND clinic_id=v_clinic_id;
+      v_target_id := v_prior_target_id;
+    ELSE
+      INSERT INTO public.products(
+        name, category_id, barcode, unit, quantity, wholesale_price, retail_price,
+        last_purchase_price, expiry_date, reorder_level, notes
+      ) VALUES (
+        v_name, v_category_id, NULL,
+        CASE WHEN v_unit_source IS NULL OR btrim(v_unit_source) = '' OR v_unit_source ~ '^[0-9]+$' THEN 'piece' ELSE left(v_unit_source, 100) END,
+        coalesce(v_stock, 0), coalesce(v_price, 0), coalesce(v_final_price, 0), coalesce(v_last_purchase, 0),
+        public.vetra_legacy_try_date(public.vetra_legacy_json_text(v_row.payload, ARRAY['expDate','expiry_date','expiryDate'])),
+        greatest(coalesce(public.vetra_legacy_try_numeric(public.vetra_legacy_json_text(v_row.payload, ARRAY['miniQuantity','mini_quantity','reorder_level'])), 0), 0),
+        v_notes
+      ) RETURNING id INTO v_target_id;
+    END IF;
+
+    IF v_prior_target_id IS NOT NULL AND coalesce(v_prior_stock, 0) <> coalesce(v_stock, 0) THEN
+      INSERT INTO public.inventory_movements(
+        clinic_id, product_id, movement_type, quantity, unit_cost,
+        reference_type, reference_id, notes, created_by
+      ) VALUES (
+        v_clinic_id, v_target_id, 'adjustment', coalesce(v_stock, 0) - coalesce(v_prior_stock, 0), coalesce(v_last_purchase, v_price),
+        'legacy_import', p_batch_id, 'تحديث رصيد الصنف من نسخة أحدث لقاعدة ' || v_batch.source_file_name, auth.uid()
+      );
+    ELSIF v_prior_target_id IS NULL AND coalesce(v_stock, 0) > 0 THEN
+      INSERT INTO public.inventory_movements(
+        clinic_id, product_id, movement_type, quantity, unit_cost,
+        reference_type, reference_id, notes, created_by
+      ) VALUES (
+        v_clinic_id, v_target_id, 'opening_balance', v_stock, coalesce(v_last_purchase, v_price),
+        'legacy_import', p_batch_id,
+        'رصيد افتتاحي من قاعدة قديمة: ' || v_batch.source_file_name || '؛ المصدر: ' || coalesce(v_stock_source, 'غير محدد'),
+        auth.uid()
+      );
+    END IF;
 
     UPDATE public.legacy_import_id_map
-       SET target_table='products', target_id=v_target_id, decision='create_new', mapping_status='imported',
-           notes='تم إنشاء الصنف دون باركود قديم أو كمية مخزون غير مؤكدة.', updated_at=now()
+       SET target_table='products', target_id=v_target_id,
+           decision=CASE WHEN v_prior_target_id IS NULL THEN 'create_new' ELSE 'reuse_existing' END, mapping_status='imported',
+           notes=CASE WHEN v_prior_target_id IS NOT NULL THEN 'تم تحديث الصنف ورصيده من نسخة أحدث لقاعدة المصدر.' WHEN v_stock_source IS NOT NULL THEN 'تم إنشاء الصنف ونقل رصيده الافتتاحي من المصدر.' ELSE 'تم إنشاء الصنف دون كمية موثقة في المصدر؛ الكمية صفر.' END, updated_at=now()
      WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
     v_products_imported := v_products_imported + 1;
   END LOOP;
@@ -6114,6 +6284,41 @@ BEGIN
       'قيمة الإجمالي الأصلية: ' || v_invoice_total::text,
       CASE WHEN abs(v_selected_sum - v_invoice_total) > 0 THEN 'فرق تقريب بين مجموع البنود ورأس الفاتورة: ' || (v_invoice_total - v_selected_sum)::text ELSE NULL END);
 
+    v_prior_target_id := NULL;
+    v_prior_batch_id := NULL;
+    SELECT pm.target_id, pm.batch_id INTO v_prior_target_id, v_prior_batch_id
+      FROM public.legacy_import_source_rows old_row
+      JOIN public.legacy_import_batches old_batch ON old_batch.id=old_row.batch_id AND old_batch.clinic_id=old_row.clinic_id
+      JOIN public.legacy_import_id_map pm ON pm.batch_id=old_row.batch_id AND pm.source_table=old_row.source_table AND pm.source_key=old_row.source_key
+      JOIN public.invoices old_invoice ON old_invoice.id=pm.target_id AND old_invoice.clinic_id=v_clinic_id
+     WHERE old_row.clinic_id=v_clinic_id AND old_row.batch_id<>p_batch_id
+       AND old_batch.source_file_name=v_batch.source_file_name
+       AND old_row.source_table=v_row.source_table AND old_row.source_key=v_row.source_key
+       AND old_row.source_key NOT LIKE 'row:%'
+       AND pm.target_table='invoices' AND pm.mapping_status='imported'
+     ORDER BY old_batch.created_at DESC LIMIT 1;
+
+    IF v_prior_target_id IS NOT NULL AND (
+      EXISTS (SELECT 1 FROM public.financial_transactions ft WHERE ft.related_invoice_id=v_prior_target_id)
+      OR EXISTS (SELECT 1 FROM public.invoice_returns ir WHERE ir.invoice_id=v_prior_target_id)
+    ) THEN
+      UPDATE public.legacy_import_id_map
+         SET decision='needs_review', mapping_status='held',
+             notes='الفاتورة مرتبطة بحركات مالية أو مرتجعات؛ لم يتم تحديثها تلقائيًا للحفاظ على الأرصدة والمرتجعات.', updated_at=now()
+       WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
+      CONTINUE;
+    END IF;
+
+    IF v_prior_target_id IS NOT NULL THEN
+      v_invoice_id := v_prior_target_id;
+      SELECT invoice_number INTO v_new_invoice_number FROM public.invoices WHERE id=v_invoice_id AND clinic_id=v_clinic_id;
+      UPDATE public.invoices SET
+        client_id=v_client_id,
+        status=CASE WHEN v_paid = v_invoice_total THEN 'paid' WHEN v_paid > 0 THEN 'partially_paid' ELSE 'unpaid' END,
+        subtotal=v_selected_sum, discount=0, total=v_invoice_total, paid_amount=v_paid,
+        notes=v_notes, invoice_date=coalesce(v_date, now()), issued_at=v_date, updated_by=auth.uid(), updated_at=now()
+       WHERE id=v_invoice_id AND clinic_id=v_clinic_id;
+    ELSE
     v_new_invoice_number := v_original_invoice_number;
     IF EXISTS (SELECT 1 FROM public.invoices i WHERE i.invoice_number=v_original_invoice_number) THEN
       LOOP
@@ -6161,14 +6366,30 @@ BEGIN
       v_new_invoice_number := greatest(v_next_invoice_number, v_max_conflicting_invoice);
       v_next_invoice_number := v_new_invoice_number + 1;
     END LOOP;
+    END IF;
 
     UPDATE public.legacy_import_id_map
-       SET target_table='invoices', target_id=v_invoice_id, decision='create_new', mapping_status='imported',
-           notes=CASE WHEN v_new_invoice_number <> v_original_invoice_number
+       SET target_table='invoices', target_id=v_invoice_id,
+           decision=CASE WHEN v_prior_target_id IS NULL THEN 'create_new' ELSE 'reuse_existing' END, mapping_status='imported',
+           notes=CASE WHEN v_prior_target_id IS NOT NULL THEN 'تم تحديث الفاتورة من نسخة أحدث لقاعدة المصدر.' WHEN v_new_invoice_number <> v_original_invoice_number
              THEN 'تم نقل الفاتورة برقم جديد لتفادي التعارض؛ الرقم الأصلي محفوظ في ملاحظات الفاتورة.'
              ELSE 'تم نقل الفاتورة بعد التحقق من إجمالي البنود.' END,
            updated_at=now()
      WHERE batch_id=p_batch_id AND source_table=v_row.source_table AND source_key=v_row.source_key;
+
+    IF v_prior_batch_id IS NOT NULL THEN
+      DELETE FROM public.invoice_items old_item
+       USING public.legacy_import_id_map old_map
+       WHERE old_map.batch_id=v_prior_batch_id AND old_map.clinic_id=v_clinic_id
+         AND old_map.source_table='SalesInvoiceDetails' AND old_map.target_table='invoice_items'
+         AND old_map.mapping_status='imported' AND old_map.target_id=old_item.id
+         AND old_item.invoice_id=v_invoice_id
+         AND NOT EXISTS (
+           SELECT 1 FROM public.legacy_import_id_map new_map
+            WHERE new_map.batch_id=p_batch_id AND new_map.clinic_id=v_clinic_id
+              AND new_map.source_table='SalesInvoiceDetails' AND new_map.source_key=old_map.source_key
+         );
+    END IF;
 
     FOR v_detail IN
       SELECT d.*
@@ -6199,17 +6420,35 @@ BEGIN
         'سعر الوحدة الأصلي: ' || coalesce(v_code, 'غير مسجل'),
         'تم الاحتفاظ بوصف الصنف من الفاتورة القديمة.');
 
-      INSERT INTO public.invoice_items(
-        invoice_id, item_type, product_id, service_name, description,
-        quantity, unit_price, discount, total
-      ) VALUES (
-        v_invoice_id, 'product', v_product_id, NULL, v_notes,
-        v_quantity, v_price, 0, v_quantity * v_price
-      ) RETURNING id INTO v_invoice_item_id;
+      v_prior_detail_id := NULL;
+      IF v_prior_batch_id IS NOT NULL THEN
+        SELECT old_map.target_id INTO v_prior_detail_id
+          FROM public.legacy_import_id_map old_map
+          JOIN public.invoice_items old_item ON old_item.id=old_map.target_id AND old_item.invoice_id=v_invoice_id
+         WHERE old_map.batch_id=v_prior_batch_id AND old_map.clinic_id=v_clinic_id
+           AND old_map.source_table='SalesInvoiceDetails' AND old_map.source_key=v_detail.source_key
+           AND old_map.target_table='invoice_items' AND old_map.mapping_status='imported';
+      END IF;
+
+      IF v_prior_detail_id IS NOT NULL THEN
+        UPDATE public.invoice_items SET product_id=v_product_id, description=v_notes,
+          quantity=v_quantity, unit_price=v_price, discount=0, total=v_quantity*v_price
+         WHERE id=v_prior_detail_id AND invoice_id=v_invoice_id;
+        v_invoice_item_id := v_prior_detail_id;
+      ELSE
+        INSERT INTO public.invoice_items(
+          invoice_id, item_type, product_id, service_name, description,
+          quantity, unit_price, discount, total
+        ) VALUES (
+          v_invoice_id, 'product', v_product_id, NULL, v_notes,
+          v_quantity, v_price, 0, v_quantity * v_price
+        ) RETURNING id INTO v_invoice_item_id;
+      END IF;
 
       UPDATE public.legacy_import_id_map
          SET target_table='invoice_items', target_id=v_invoice_item_id,
-             decision='create_new', mapping_status='imported', notes='تم نقل بند الفاتورة مع الاحتفاظ بوصف المصدر.', updated_at=now()
+             decision=CASE WHEN v_prior_detail_id IS NULL THEN 'create_new' ELSE 'reuse_existing' END,
+             mapping_status='imported', notes=CASE WHEN v_prior_detail_id IS NULL THEN 'تم نقل بند الفاتورة مع الاحتفاظ بوصف المصدر.' ELSE 'تم تحديث بند الفاتورة من نسخة أحدث.' END, updated_at=now()
        WHERE batch_id=p_batch_id AND source_table='SalesInvoiceDetails' AND source_key=v_detail.source_key;
       v_invoice_items_imported := v_invoice_items_imported + 1;
     END LOOP;
@@ -6300,7 +6539,7 @@ BEGIN
   SELECT count(*) INTO v_unsupported_rows
     FROM public.legacy_import_source_rows r
    WHERE r.batch_id=p_batch_id AND r.clinic_id=v_clinic_id
-     AND r.source_table NOT IN ('Customer','Category','Subcategory','Product','SalesInvoices','SalesInvoiceDetails');
+     AND r.source_table NOT IN ('Customer','Category','Subcategory','Product','SalesInvoices','SalesInvoiceDetails','Temp_stock');
 
   SELECT count(*) INTO v_pending_rows
     FROM public.legacy_import_id_map m

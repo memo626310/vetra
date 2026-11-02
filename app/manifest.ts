@@ -10,6 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#F8FBFF",
     theme_color: "#07111C",
     orientation: "portrait",
+    scope: "/",
+    id: "/",
     icons: [
       {
         src: "/vetra-client-icons-20261012-androidfix/icon-192.png",
@@ -24,3 +26,5 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
   };
 }
+
+
