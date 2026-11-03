@@ -426,9 +426,10 @@ begin
     group by product_id
   loop
     update public.products
-       set quantity = quantity - v_item.quantity, updated_at = now()
-     where id = v_item.product_id and clinic_id = v_clinic_id and is_active
-       and quantity >= v_item.quantity;
+       set quantity = coalesce(quantity, 0) - v_item.quantity, updated_at = now()
+     where id = v_item.product_id and clinic_id = v_clinic_id
+       and coalesce(is_active, true)
+       and coalesce(quantity, 0) >= v_item.quantity;
     if not found then raise exception 'Product missing or insufficient stock: %', v_item.product_id; end if;
     insert into public.inventory_movements
       (clinic_id, product_id, movement_type, quantity, reference_type, reference_id, notes, created_by)
