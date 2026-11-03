@@ -1133,11 +1133,16 @@ export default function NewInvoicePage() {
         for (const [productId, requestedQuantity] of requestedByProduct) {
           const product = currentProductMap.get(productId);
           const available = Number(product?.quantity || 0);
+          const reason = !product
+            ? (language === "ar" ? "المنتج غير موجود في قاعدة البيانات" : "The product is missing from the database")
+            : product.is_active === false
+              ? (language === "ar" ? "المنتج غير نشط" : "The product is inactive")
+              : (language === "ar" ? `المطلوب ${requestedQuantity} والمتاح ${available}` : `Requested ${requestedQuantity}, available ${available}`);
           if (!product || product.is_active === false || available < requestedQuantity) {
             const productName = String(product?.name || lines.find((line) => line.product_id === productId)?.description || "المنتج");
             setMessage(language === "ar"
-              ? `المنتج «${productName}» غير متاح بالكمية المطلوبة. المتاح حاليًا: ${available}.`
-              : `${productName} is not available in the requested quantity. Current stock: ${available}.`);
+              ? `المنتج «${productName}» غير متاح للإصدار: ${reason}.`
+              : `${productName} cannot be issued: ${reason}.`);
             releaseInvoiceSaveLock();
             return;
           }
