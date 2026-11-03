@@ -133,6 +133,12 @@ export default function NewInvoicePage() {
   const [draftKey, setDraftKey] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
   const visitPrefilledRef = useRef(false);
+  const savingInvoiceRef = useRef(false);
+
+  function releaseInvoiceSaveLock() {
+    savingInvoiceRef.current = false;
+    setSaving(false);
+  }
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("vetra-theme");
@@ -788,6 +794,30 @@ export default function NewInvoicePage() {
     setServicePrice("");
   }
 
+  async function ensureDailyClient(): Promise<Client> {
+    const context = await getClinicContext();
+    const db = await getClinicDb();
+    const dailyClientName = "عميل يومي";
+    const { data: existing, error: lookupError } = await db
+      .from("clients")
+      .select("id, name, phone")
+      .eq("clinic_id", context.clinic_id)
+      .eq("name", dailyClientName)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existing) return existing as Client;
+
+    const { data: created, error: createError } = await db
+      .from("clients")
+      .insert({ clinic_id: context.clinic_id, name: dailyClientName, phone: null })
+      .select("id, name, phone")
+      .single();
+    if (createError || !created) throw createError || new Error("Could not create the daily customer.");
+    return created as Client;
+  }
+
   function addConsultation() {
     const alreadyAdded = lines.some(
       (line) =>
@@ -892,10 +922,13 @@ export default function NewInvoicePage() {
   }
 
   async function saveInvoice(issueAfterSave = false) {
+    if (savingInvoiceRef.current) return;
+
     setMessage("");
     setSuccess("");
 
-    if (!clientId) {
+    let invoiceClientId = clientId;
+    if (!invoiceClientId && visitId) {
       setMessage(language === "ar" ? "اختار العميل أولًا." : "Select a client first.");
       return;
     }
@@ -953,13 +986,30 @@ export default function NewInvoicePage() {
     }
 
     const selectedFinancialAccount = financialAccounts.find((account) => account.id === financialAccountId);
-setSaving(true);
+    savingInvoiceRef.current = true;
+    setSaving(true);
+    if (!invoiceClientId) {
+      try {
+        const dailyClient = await ensureDailyClient();
+        invoiceClientId = dailyClient.id;
+        setClientId(dailyClient.id);
+        setClientSearch(dailyClient.name);
+        setClients((current) => current.some((client) => client.id === dailyClient.id)
+          ? current
+          : [...current, dailyClient].sort((a, b) => a.name.localeCompare(b.name)));
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : (language === "ar" ? "تعذر إنشاء العميل اليومي." : "Could not create the daily customer."));
+        releaseInvoiceSaveLock();
+        return;
+      }
+    }
 
     const {
       data: { user },
     } = await vetraCore.auth.getUser();
 
     if (!user) {
+      releaseInvoiceSaveLock();
       router.replace("/login");
       return;
     }
@@ -980,14 +1030,14 @@ setSaving(true);
       const token = sessionData.session?.access_token;
       if (!token) {
         setMessage(language === "ar" ? "انتهت جلسة الدخول. سجّل الدخول مرة أخرى." : "Your session expired. Sign in again.");
-        setSaving(false);
+        releaseInvoiceSaveLock();
         return;
       }
       const response = await fetch(`/api/reception/invoices/${encodeURIComponent(draftId)}`, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId,
+          clientId: invoiceClientId,
           petId,
           discount: invoiceDiscount,
           notes: notes.trim(),
@@ -1005,13 +1055,13 @@ setSaving(true);
       const result = await response.json().catch(() => null) as { error?: string } | null;
       if (!response.ok) {
         setMessage(result?.error || (language === "ar" ? "تعذر تعديل الفاتورة." : "Could not edit the invoice."));
-        setSaving(false);
+        releaseInvoiceSaveLock();
         return;
       }
       setSuccess(language === "ar" ? "تم حفظ تعديلات الفاتورة." : "Invoice changes saved.");
       clearFormDraft(draftKey);
       setDraftKey(null);
-      setSaving(false);
+      releaseInvoiceSaveLock();
       router.push(`/invoices/${encodeURIComponent(draftId)}`);
       return;
     }
@@ -1021,14 +1071,14 @@ setSaving(true);
       : can("invoices", "create");
     if (!permissionsLoaded || (!canSaveInvoice && !["owner", "admin"].includes(context.role))) {
       setAuthorized(false);
-      setSaving(false);
+      releaseInvoiceSaveLock();
       return;
     }
 
     const canCreateVisitInvoice = context.role === "reception" && Boolean(visitId) && !draftId;
     if (!canSaveInvoice && !["owner", "admin"].includes(context.role)) {
       setAuthorized(false);
-      setSaving(false);
+      releaseInvoiceSaveLock();
       return;
     }
 
@@ -1038,9 +1088,9 @@ setSaving(true);
         .eq("id", visitId)
         .eq("clinic_id", context.clinic_id)
         .maybeSingle();
-      if (visitError || !visit || visit.client_id !== clientId || visit.pet_id !== petId) {
+      if (visitError || !visit || visit.client_id !== invoiceClientId || visit.pet_id !== petId) {
         setMessage(language === "ar" ? "الزيارة أو بيانات العميل والحيوان غير متطابقة." : "The visit and selected client or pet do not match.");
-        setSaving(false);
+        releaseInvoiceSaveLock();
         return;
       }
 
@@ -1052,19 +1102,52 @@ setSaving(true);
         .maybeSingle();
       if (existingInvoiceError) {
         setMessage(existingInvoiceError.message);
-        setSaving(false);
+        releaseInvoiceSaveLock();
         return;
       }
       if (existingInvoice) {
         router.replace(`/invoices/${existingInvoice.id}`);
-        setSaving(false);
+        releaseInvoiceSaveLock();
         return;
+      }
+    }
+
+    if (issueAfterSave && (!draftId || editingInvoiceStatus === "draft")) {
+      const requestedByProduct = new Map<string, number>();
+      for (const line of lines) {
+        if (line.item_type !== "product" || !line.product_id) continue;
+        requestedByProduct.set(line.product_id, (requestedByProduct.get(line.product_id) || 0) + Number(line.quantity || 0));
+      }
+      if (requestedByProduct.size) {
+        const { data: currentProducts, error: currentProductsError } = await db
+          .from("products")
+          .select("id, name, quantity, is_active")
+          .eq("clinic_id", context.clinic_id)
+          .in("id", [...requestedByProduct.keys()]);
+        if (currentProductsError) {
+          setMessage(currentProductsError.message);
+          releaseInvoiceSaveLock();
+          return;
+        }
+        const currentProductMap = new Map((currentProducts || []).map((product) => [String(product.id), product]));
+        for (const [productId, requestedQuantity] of requestedByProduct) {
+          const product = currentProductMap.get(productId);
+          const available = Number(product?.quantity || 0);
+          if (!product || product.is_active === false || available < requestedQuantity) {
+            const productName = String(product?.name || lines.find((line) => line.product_id === productId)?.description || "المنتج");
+            setMessage(language === "ar"
+              ? `المنتج «${productName}» غير متاح بالكمية المطلوبة. المتاح حاليًا: ${available}.`
+              : `${productName} is not available in the requested quantity. Current stock: ${available}.`);
+            releaseInvoiceSaveLock();
+            return;
+          }
+        }
       }
     }
 
     const invoicePayload = {
       clinic_id: context.clinic_id,
-      client_id: clientId,
+      client_id: invoiceClientId,
       pet_id: petId || null,
       visit_id: visitId || null,
       status: draftId ? (editingInvoiceStatus || "draft") : "draft",
@@ -1102,7 +1185,7 @@ setSaving(true);
     if (invoiceError || !invoice) {
       setMessage(receptionDraftEdit && invoiceError?.code === "42501"
         ? draftPermissionMessage : invoiceError?.message || "Could not create invoice.");
-      setSaving(false);
+      releaseInvoiceSaveLock();
       return;
     }
 
@@ -1137,7 +1220,7 @@ setSaving(true);
       if (deleteItemsError) {
         setMessage(receptionDraftEdit && deleteItemsError.code === "42501"
           ? draftPermissionMessage : deleteItemsError.message);
-        setSaving(false);
+        releaseInvoiceSaveLock();
         return;
       }
     }
@@ -1149,7 +1232,7 @@ setSaving(true);
     if (itemsError) {
       if (!draftId) await db.from("invoices").delete().eq("id", invoice.id).eq("clinic_id", context.clinic_id);
       setMessage(itemsError.message);
-      setSaving(false);
+      releaseInvoiceSaveLock();
       return;
     }
 
@@ -1162,7 +1245,7 @@ setSaving(true);
         setMessage(language === "ar"
           ? `تعذر فتح وردية الخزنة تلقائيًا، ولم يتم إصدار الفاتورة: ${sessionError.message}`
           : `Could not open the cash register automatically; the invoice was not issued: ${sessionError.message}`);
-        setSaving(false);
+        releaseInvoiceSaveLock();
         return;
       }
     }
@@ -1179,7 +1262,7 @@ setSaving(true);
               ? "تعذر إصدار الفاتورة."
               : "Could not issue invoice.")
         );
-        setSaving(false);
+        releaseInvoiceSaveLock();
         return;
       }
     }
@@ -1201,7 +1284,7 @@ setSaving(true);
             ? `تم إصدار الفاتورة، لكن التحصيل لم يُسجل في الخزنة: ${receiptError.message}. سجّل التحصيل من صفحة المالية.`
             : `The invoice was issued, but the receipt was not posted: ${receiptError.message}. Record it from the Finance page.`
         );
-        setSaving(false);
+        releaseInvoiceSaveLock();
         setTimeout(() => router.push(`/invoices/${invoice.id}`), 1200);
         return;
       }
@@ -1218,7 +1301,7 @@ setSuccess(
     clearFormDraft(draftKey);
     setDraftKey(null);
 
-    setSaving(false);
+    releaseInvoiceSaveLock();
 
     setTimeout(() => {
       router.push(`/invoices/${invoice.id}`);
@@ -1802,6 +1885,7 @@ setSuccess(
                 </div>
 
                 {(!visitId || editingInvoiceStatus === "draft") && <button
+                  type="button"
                   disabled={saving}
                   onClick={() => saveInvoice(false)}
                   className="w-full rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300"
@@ -1814,6 +1898,7 @@ setSuccess(
                 </button>}
 
                 {canIssueInvoices && <button
+                  type="button"
                   disabled={saving || (Boolean(visitId) && visitBillLoading)}
                   onClick={() => saveInvoice(Boolean(!draftId || editingInvoiceStatus === "draft"))}
                   className="w-full rounded-2xl bg-blue-600 px-5 py-4 font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
