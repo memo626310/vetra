@@ -34,6 +34,7 @@ type Product = {
   unit: string;
   quantity: number;
   retail_price: number;
+  is_active?: boolean | null;
   category?: { name: string } | null;
 };
 
@@ -251,10 +252,12 @@ export default function NewInvoicePage() {
             unit,
             quantity,
             retail_price,
+            is_active,
             category_id,
             category:product_categories(name)
           `)
           .eq("clinic_id", context.clinic_id)
+          .eq("is_active", true)
           .order("name"),
         db
           .from("product_categories")
@@ -881,9 +884,11 @@ export default function NewInvoicePage() {
         unit,
         quantity,
         retail_price,
+        is_active,
         category:product_categories(name)
       `)
       .eq("clinic_id", context.clinic_id)
+      .eq("is_active", true)
       .eq("barcode", clean)
       .maybeSingle();
 
@@ -1136,7 +1141,7 @@ export default function NewInvoicePage() {
           const reason = !product
             ? (language === "ar" ? "المنتج غير موجود في قاعدة البيانات" : "The product is missing from the database")
             : product.is_active === false
-              ? (language === "ar" ? "المنتج غير نشط" : "The product is inactive")
+              ? (language === "ar" ? "المنتج غير نشط؛ فعّله من المخزون أولًا" : "The product is inactive; activate it in inventory first")
               : (language === "ar" ? `المطلوب ${requestedQuantity} والمتاح ${available}` : `Requested ${requestedQuantity}, available ${available}`);
           if (!product || product.is_active === false || available < requestedQuantity) {
             const productName = String(product?.name || lines.find((line) => line.product_id === productId)?.description || "المنتج");
