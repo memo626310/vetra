@@ -631,7 +631,7 @@ export default function NewVisitPage() {
       const followUpDetail = followUpValue.split(" — ").slice(1).join(" — ").trim();
       const followUpLabel = followUpValue.split(" — ")[0].trim();
       const followUpCode = Object.entries({
-        none: t.followUpNone, "3d": t.followUp3Days, "1w": t.followUp1Week, "2w": t.followUp2Weeks, "1m": t.followUp1Month, custom: t.followUpCustom,
+        none: t.followUpNone, "1d": t.followUp1Day, "3d": t.followUp3Days, "1w": t.followUp1Week, "2w": t.followUp2Weeks, "1m": t.followUp1Month, custom: t.followUpCustom,
       }).find(([, label]) => label === followUpLabel)?.[0] || "";
       setFollowUp(followUpCode);
       setFollowUpDetails(followUpDetail);
@@ -1084,8 +1084,8 @@ export default function NewVisitPage() {
 
   const selectedFollowUpLabel = useMemo(() => {
     const labels: Record<string, string> = language === "ar"
-      ? { none: t.followUpNone, "3d": t.followUp3Days, "1w": t.followUp1Week, "2w": t.followUp2Weeks, "1m": t.followUp1Month, custom: t.followUpCustom }
-      : { none: t.followUpNone, "3d": t.followUp3Days, "1w": t.followUp1Week, "2w": t.followUp2Weeks, "1m": t.followUp1Month, custom: t.followUpCustom };
+      ? { none: t.followUpNone, "1d": t.followUp1Day, "3d": t.followUp3Days, "1w": t.followUp1Week, "2w": t.followUp2Weeks, "1m": t.followUp1Month, custom: t.followUpCustom }
+      : { none: t.followUpNone, "1d": t.followUp1Day, "3d": t.followUp3Days, "1w": t.followUp1Week, "2w": t.followUp2Weeks, "1m": t.followUp1Month, custom: t.followUpCustom };
     return labels[followUp] || "";
   }, [followUp, language, t]);
 

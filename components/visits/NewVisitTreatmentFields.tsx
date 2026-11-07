@@ -361,6 +361,7 @@ export default function NewVisitTreatmentFields({
                   <div className="flex flex-wrap gap-2">
                     {[
                       ["none", t.followUpNone],
+                      ["1d", t.followUp1Day],
                       ["3d", t.followUp3Days],
                       ["1w", t.followUp1Week],
                       ["2w", t.followUp2Weeks],
