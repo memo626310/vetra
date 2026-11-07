@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import { getClientPortalDb } from "@/lib/client-portal-db";
+import { clientVaccineLabel } from "@/lib/client-portal-vaccine-label";
 
 
 
@@ -1005,7 +1006,7 @@ export default function ClientPetProfilePage() {
 
     const visitEvents = visits.map(v => ({ id: `visit-${v.id}`, date: v.visit_date, kind: "visit" as const, title: v.reason || t.visit, sub: v.diagnosis || v.examination || v.notes || "" }));
 
-    const vaccineEvents = vaccines.filter(v => v.administered_at).map(v => ({ id: `vaccine-${v.id}`, date: v.administered_at as string, kind: "vaccine" as const, title: v.vaccine_name || v.vaccine_type || t.vaccineHistory, sub: v.next_dose_at ? `${t.nextDue}: ${formatDate(v.next_dose_at, lang)}` : "" }));
+    const vaccineEvents = vaccines.filter(v => v.administered_at).map(v => ({ id: `vaccine-${v.id}`, date: v.administered_at as string, kind: "vaccine" as const, title: clientVaccineLabel(v, lang, t.vaccineHistory), sub: v.next_dose_at ? `${t.nextDue}: ${formatDate(v.next_dose_at, lang)}` : "" }));
 
     const medicalEvents = medicalRecords.map((record) => ({
       id: `medical-${record.id}`, date: record.performed_at || record.created_at,
@@ -1171,7 +1172,7 @@ export default function ClientPetProfilePage() {
 
           <div className="flex items-center justify-between"><div><p className="text-xs font-bold text-cyan-300">{t.vaccineHistory}</p><h2 className="mt-1 text-xl font-black">{pet.name}</h2></div><span className="rounded-full bg-white/[.05] px-3 py-1.5 text-[10px] font-black text-slate-500">{vaccines.length}</span></div>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">{vaccines.slice(0, 6).map(v => <div key={v.id} className={dark ? "rounded-2xl border border-white/[.05] bg-white/[.025] p-3.5" : "rounded-2xl border border-slate-100 bg-slate-50 p-3.5"}><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-400/10">💉</div><div className="min-w-0 flex-1"><div className="truncate text-sm font-black">{v.vaccine_name || v.vaccine_type || t.vaccineHistory}</div><div className="mt-1 text-[10px] text-slate-500">{v.administered_at ? formatDate(v.administered_at, lang) : "—"}</div></div></div></div>)}{!vaccines.length && <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">{t.noVaccines}</div>}</div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">{vaccines.slice(0, 6).map(v => <div key={v.id} className={dark ? "rounded-2xl border border-white/[.05] bg-white/[.025] p-3.5" : "rounded-2xl border border-slate-100 bg-slate-50 p-3.5"}><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-400/10">💉</div><div className="min-w-0 flex-1"><div className="truncate text-sm font-black">{clientVaccineLabel(v, lang, t.vaccineHistory)}</div><div className="mt-1 text-[10px] text-slate-500">{v.administered_at ? formatDate(v.administered_at, lang) : "—"}</div></div></div></div>)}{!vaccines.length && <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">{t.noVaccines}</div>}</div>
 
         </section>
 

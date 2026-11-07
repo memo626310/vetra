@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { clientVaccineKey, clientVaccineLabel } from "@/lib/client-portal-vaccine-label";
+
 type Lang = "ar" | "en";
 type PetInfo = {
   id: string;
@@ -97,8 +99,8 @@ export default function ClientCareHub({
     .filter((v) => v.days !== null)
     .sort((a, b) => (a.days as number) - (b.days as number));
   const allUniqueSchedules = vaccineSchedules.filter((v, index, all) => {
-    const key = (v.vaccine_name || v.vaccine_type || v.id).trim().toLowerCase();
-    return all.findIndex((item) => (item.vaccine_name || item.vaccine_type || item.id).trim().toLowerCase() === key) === index;
+    const key = clientVaccineKey(v).trim().toLowerCase();
+    return all.findIndex((item) => clientVaccineKey(item).trim().toLowerCase() === key) === index;
   });
   const uniqueSchedules = allUniqueSchedules.slice(0, 4);
   const overdueCount = allUniqueSchedules.filter((v) => (v.days as number) < 0).length;
@@ -128,7 +130,7 @@ export default function ClientCareHub({
         ${v.notes ? `<p><b>${escapeHtml(label(lang, "ملاحظات", "Notes"))}:</b> ${escapeHtml(v.notes)}</p>` : ""}
       </article>`).join("");
     const vaccinesHtml = vaccines.slice(0, 12).map((v) => `
-      <tr><td>${escapeHtml(v.vaccine_name || v.vaccine_type || "—")}</td><td>${escapeHtml(formatDate(v.administered_at, lang))}</td><td>${escapeHtml(formatDate(v.next_dose_at, lang))}</td></tr>`).join("");
+      <tr><td>${escapeHtml(clientVaccineLabel(v, lang, "—"))}</td><td>${escapeHtml(formatDate(v.administered_at, lang))}</td><td>${escapeHtml(formatDate(v.next_dose_at, lang))}</td></tr>`).join("");
     const title = label(lang, "الملف الصحي للحيوان", "Pet Health Passport");
     const direction = lang === "ar" ? "rtl" : "ltr";
 
@@ -213,7 +215,7 @@ export default function ClientCareHub({
                     <strong className={`text-lg leading-none ${accent}`}>{days < 0 ? Math.abs(days) : days}</strong>
                     <span className={`mt-1 text-[9px] ${mutedText}`}>{days < 0 ? label(lang, "يوم تأخير", "days late") : label(lang, "يوم", "days")}</span>
                   </div>
-                  <div className="min-w-0"><h4 className="truncate text-sm font-black">{v.vaccine_name || v.vaccine_type || label(lang, "تطعيم", "Vaccination")}</h4><p className={`mt-1 text-xs font-bold ${accent}`}>{status}</p><p className={`mt-1 text-[11px] ${mutedText}`}>{formatDate(v.next_dose_at, lang)}</p></div>
+                  <div className="min-w-0"><h4 className="truncate text-sm font-black">{clientVaccineLabel(v, lang)}</h4><p className={`mt-1 text-xs font-bold ${accent}`}>{status}</p><p className={`mt-1 text-[11px] ${mutedText}`}>{formatDate(v.next_dose_at, lang)}</p></div>
                 </article>
               );
             })}
