@@ -1544,6 +1544,17 @@ setSuccess(
                 <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center">
                   🔎
                 </span>
+                {productSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setProductSearch("")}
+                    aria-label={language === "ar" ? "مسح البحث" : "Clear search"}
+                    title={language === "ar" ? "مسح البحث" : "Clear search"}
+                    className={`absolute inset-y-0 left-3 flex items-center px-2 text-lg leading-none transition-colors ${darkMode ? "text-slate-500 hover:text-white" : "text-slate-400 hover:text-slate-700"}`}
+                  >
+                    ×
+                  </button>
+                )}
                 <input
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}

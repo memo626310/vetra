@@ -45,6 +45,18 @@ type VaccineStockProduct = { id: string; name: string; active_ingredient: string
 
 const NEW_VISIT_DRAFT_MAX_AGE_MS = 5 * 60 * 1000;
 
+async function loadAllProductRows<T>(
+  fetchPage: (offset: number) => PromiseLike<{ data: T[] | null; error: unknown }>
+) {
+  const rows: T[] = [];
+  while (true) {
+    const result = await fetchPage(rows.length);
+    if (result.error) return { data: null, error: result.error };
+    if (!result.data?.length) return { data: rows, error: null };
+    rows.push(...result.data);
+  }
+}
+
 export default function NewVisitPage() {
   const { loaded: permissionsLoaded, can } = useStaffPermissions();
   const [originalVaccinations, setOriginalVaccinations] = useState<VaccinationDraft[]>([]);
@@ -340,14 +352,18 @@ export default function NewVisitPage() {
       }
       setAvailableDoctors(doctors);
       const [vaccineProductsResult, vaccineMappingsResult, categoriesResult] = await Promise.all([
-        db.from("products")
+        loadAllProductRows<VaccineStockProduct>((offset) => db.from("products")
           .select("id,name,active_ingredient,barcode,quantity,unit,retail_price,category_id")
           .eq("clinic_id", context.clinic_id)
           .eq("is_active", true)
-          .order("name", { ascending: true }),
-        db.from("clinic_vaccination_products")
+          .order("name", { ascending: true })
+          .order("id", { ascending: true })
+          .range(offset, offset + 499)),
+        loadAllProductRows<{ protocol_key: string; product_id: string }>((offset) => db.from("clinic_vaccination_products")
           .select("protocol_key,product_id")
-          .eq("clinic_id", context.clinic_id),
+          .eq("clinic_id", context.clinic_id)
+          .order("id", { ascending: true })
+          .range(offset, offset + 499)),
         db.from("product_categories").select("id,name").eq("clinic_id", context.clinic_id),
       ]);
       if (vaccineProductsResult.error) {
@@ -356,9 +372,14 @@ export default function NewVisitPage() {
         const stockProducts = (vaccineProductsResult.data || []) as VaccineStockProduct[];
         const categories = categoriesResult.data || [];
         const medicationCategory = categories.find((category) => ["الأدوية", "ادوية", "medications", "medicines"].includes(String(category.name).trim().toLocaleLowerCase()));
-        const vaccineCategory = categories.find((category) => ["التطعيمات", "اللقاحات", "تطعيمات", "vaccines", "vaccinations"].includes(String(category.name).trim().toLocaleLowerCase()));
         setClinicStockProducts(medicationCategory ? stockProducts.filter((product) => product.category_id === medicationCategory.id) : []);
-        setVaccineStockProducts(vaccineCategory ? stockProducts.filter((product) => product.category_id === vaccineCategory.id) : []);
+        const vaccineCategoryIds = new Set(categories
+          .filter((category) => ["التطعيمات", "اللقاحات", "تطعيمات", "vaccines", "vaccinations"].includes(String(category.name).trim().toLocaleLowerCase()))
+          .map((category) => String(category.id)));
+        const mappedVaccineProductIds = new Set((vaccineMappingsResult.data || []).map((row) => String(row.product_id)));
+        setVaccineStockProducts(stockProducts.filter((product) =>
+          vaccineCategoryIds.has(product.category_id || "") || mappedVaccineProductIds.has(product.id)
+        ));
       }
       if (vaccineMappingsResult.error) {
         console.warn("LOAD VACCINE PRODUCT MAPPINGS ERROR:", vaccineMappingsResult.error);
@@ -1009,6 +1030,19 @@ export default function NewVisitPage() {
     setVaccinations((current) => current.filter((item) => item.id !== id));
   }
 
+  function findVaccineStockProduct(vaccination: VaccinationDraft) {
+    const linkedProduct = vaccination.product_id
+      ? vaccineStockProducts.find((product) => product.id === vaccination.product_id)
+      : undefined;
+    if (linkedProduct) return linkedProduct;
+
+    const vaccineName = vaccination.vaccine_name.toLocaleLowerCase().replace(/\s+/g, " ").trim();
+    if (!vaccineName) return undefined;
+    return vaccineStockProducts.find((product) =>
+      product.name.toLocaleLowerCase().replace(/\s+/g, " ").trim() === vaccineName
+    );
+  }
+
   const selectedFollowUpLabel = useMemo(() => {
     const labels: Record<string, string> = language === "ar"
       ? { none: t.followUpNone, "3d": t.followUp3Days, "1w": t.followUp1Week, "2w": t.followUp2Weeks, "1m": t.followUp1Month, custom: t.followUpCustom }
@@ -1348,7 +1382,7 @@ export default function NewVisitPage() {
               unit_price: medicationChargePrices[line.id] ?? injectionFee,
             })),
             ...validVaccinations.flatMap((v) => {
-              const product = vaccineStockProducts.find((item) => item.id === v.product_id);
+              const product = findVaccineStockProduct(v);
               return product ? [{ item_type: "service" as const, product_id: null, name: product.name, quantity: 1, unit_price: Number(product.retail_price) || 0 }] : [];
             }),
           ];
@@ -1539,7 +1573,7 @@ export default function NewVisitPage() {
   const visitServiceTotal = visitServices.reduce((sum, service) => sum + Math.max(0, service.quantity) * Math.max(0, service.price), 0);
   const medicationChargeTotal = medicationBillLines.reduce((sum, line) => sum + Math.max(1, medicationChargeQuantities[line.id] ?? 1) * Math.max(0, medicationChargePrices[line.id] ?? injectionFee), 0);
   const vaccinationChargeTotal = vaccinations.reduce((sum, vaccination) => {
-    const product = vaccineStockProducts.find((item) => item.id === vaccination.product_id);
+    const product = findVaccineStockProduct(vaccination);
     return sum + (vaccination.vaccine_name.trim() && product ? Math.max(0, Number(product.retail_price) || 0) : 0);
   }, 0);
   const baseVisitFee = reason === "followup" ? followUpFee : consultationFee;

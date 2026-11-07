@@ -236,7 +236,7 @@ export default function NewVisitTreatmentFields({
                                 : typeKey.includes("viral") ? "viral" : "";
                               const allowedProductIds = vaccineProductMappings[protocolKey] || [];
                               const options = vaccineStockProducts.filter((product) => allowedProductIds.includes(product.id));
-                              if (!protocolKey || options.length === 0) return null;
+                              if (options.length === 0) return null;
                               return <label className="block md:col-span-2"><span className="mb-1 block text-xs font-semibold text-slate-500">{language === "ar" ? "منتج المخزون المستخدم" : "Inventory product used"}</span><select disabled={vaccinationIsSaved(v.id) ? !canEditVaccination : !canAddVaccination} value={v.product_id || ""} onChange={(event) => {
                                 const product = options.find((item) => item.id === event.target.value);
                                 updateVaccination(v.id, { product_id: product?.id || null, vaccine_name: product?.name || v.vaccine_name });
