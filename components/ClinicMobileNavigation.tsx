@@ -34,7 +34,9 @@ export default function ClinicMobileNavigation() {
   const [loggingOut, setLoggingOut] = useState(false);
 
   const isClientPortal = pathname === "/client-interface" || pathname.startsWith("/client-interface/");
+  const hideForNewVisit = pathname === "/visits/new" || pathname.startsWith("/visits/new/");
   const isPublic = PUBLIC_ROUTES.includes(pathname) || isClientPortal;
+  const hideMobileShell = isPublic || hideForNewVisit;
 
   useEffect(() => {
     const savedLanguage = localStorage.getItem("vetra-language");
@@ -51,20 +53,20 @@ export default function ClinicMobileNavigation() {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (isPublic) {
+    if (hideMobileShell) {
       root.classList.remove("clinic-mobile-shell");
       setMoreOpen(false);
       return;
     }
     root.classList.add("clinic-mobile-shell");
     return () => root.classList.remove("clinic-mobile-shell");
-  }, [isPublic, pathname]);
+  }, [hideMobileShell, pathname]);
 
   useEffect(() => {
     setMoreOpen(false);
   }, [pathname]);
 
-  if (isPublic) return null;
+  if (hideMobileShell) return null;
 
   const isActive = (href: string) => pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
   const goTo = (href: string) => { setMoreOpen(false); router.push(href); };

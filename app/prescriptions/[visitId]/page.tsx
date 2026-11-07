@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { getClinicContext, getClinicDb } from "@/lib/clinic-db";
+import { vetraCore } from "@/lib/vetra-core";
 import { openWhatsAppTemplate } from "@/lib/clinic-message-templates";
 import { loadClinicProfile } from "@/lib/clinic-profile";
 import { HumanMedicationList, type HumanMedicationEntry } from "@/components/VisitHumanMedications";
@@ -93,6 +94,7 @@ type ClinicContext = {
   website_url?: string | null;
   logo_url?: string | null;
 };
+type PrescriptionAttachment = { id: string; file_name: string; mime_type: string; url: string };
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "-";
@@ -170,6 +172,8 @@ export default function PrescriptionPage() {
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
   const [humanMedications, setHumanMedications] = useState<HumanMedicationEntry[]>([]);
   const [clinicMedications, setClinicMedications] = useState<ClinicMedicationEntry[]>([]);
+  const [prescriptionAttachments, setPrescriptionAttachments] = useState<PrescriptionAttachment[]>([]);
+  const [prescriptionScanFiles, setPrescriptionScanFiles] = useState<File[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -293,7 +297,7 @@ export default function PrescriptionPage() {
         throw visitError || new Error("Prescription visit was not found.");
       }
 
-      const [{ data: petData, error: petError }, { data: clientData, error: clientError }, { data: medicationRowsData, error: medicationRowsError }, { data: vaccinationData, error: vaccinationError }, { data: prescriptionData, error: prescriptionError }] =
+      const [{ data: petData, error: petError }, { data: clientData, error: clientError }, { data: medicationRowsData, error: medicationRowsError }, { data: vaccinationData, error: vaccinationError }, { data: prescriptionData, error: prescriptionError }, { data: attachmentData, error: attachmentError }] =
         await Promise.all([
           db
             .from("pets")
@@ -320,6 +324,13 @@ export default function PrescriptionPage() {
             .eq("clinic_id", context.clinic_id)
             .eq("visit_id", visitId)
             .order("created_at", { ascending: true }),
+          db
+            .from("visit_attachments")
+            .select("id,file_name,mime_type,category")
+            .eq("clinic_id", context.clinic_id)
+            .eq("visit_id", visitId)
+            .eq("category", "prescription")
+            .order("created_at", { ascending: true }),
         ]);
 
       if (petError) throw petError;
@@ -327,6 +338,7 @@ export default function PrescriptionPage() {
       if (medicationRowsError) throw medicationRowsError;
       if (vaccinationError) throw vaccinationError;
       if (prescriptionError) throw prescriptionError;
+      if (attachmentError) console.warn("LOAD PRESCRIPTION ATTACHMENTS ERROR:", attachmentError);
 
       const rows = (medicationRowsData || []) as VisitMedication[];
       const medicationIds = [...new Set(rows.map((row) => row.medication_id).filter(Boolean))];
@@ -355,6 +367,40 @@ export default function PrescriptionPage() {
         return prescription ? [{ id: String(row.id), name: String(row.medication_name), prescription }] : [];
       }));
       setClinicMedications(clinicDrawerMedicationEntries(prescriptionData || []));
+
+      const session = await vetraCore.auth.getSession();
+      const token = session.data.session?.access_token;
+      const attachmentRows = (attachmentData || []) as Array<{ id: string; file_name: string; mime_type: string }>;
+      if (token && !attachmentError && attachmentRows.length) {
+        const linked = await Promise.all(attachmentRows.map(async (attachment) => {
+          try {
+            const response = await fetch(`/api/visits/attachments?id=${encodeURIComponent(attachment.id)}&share=1`, {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: "no-store",
+            });
+            const result = await response.json().catch(() => null) as { url?: string } | null;
+            return response.ok && result?.url ? { ...attachment, url: result.url } : null;
+          } catch {
+            return null;
+          }
+        }));
+        const available = linked.filter((item): item is PrescriptionAttachment => Boolean(item));
+        setPrescriptionAttachments(available);
+        const files = await Promise.all(available.map(async (attachment) => {
+          try {
+            const response = await fetch(attachment.url, { cache: "no-store" });
+            if (!response.ok) return null;
+            const blob = await response.blob();
+            return new File([blob], attachment.file_name, { type: attachment.mime_type || blob.type || "application/octet-stream" });
+          } catch {
+            return null;
+          }
+        }));
+        setPrescriptionScanFiles(files.filter((file): file is File => Boolean(file)));
+      } else {
+        setPrescriptionAttachments([]);
+        setPrescriptionScanFiles([]);
+      }
     } catch (loadError) {
       console.error("LOAD PRESCRIPTION ERROR:", loadError);
       setError(
@@ -416,6 +462,12 @@ export default function PrescriptionPage() {
       })
       .join("\n");
 
+    const lang = window.localStorage.getItem("vetra-language") === "ar" ? "ar" : "en";
+    const scannedPrescriptionLinks = prescriptionAttachments
+      .map((attachment) => attachment.url)
+      .filter(Boolean)
+      .map((url) => `- ${url}`)
+      .join("\n");
     const lines = [
       "VETRA - Prescription",
       `Pet: ${pet.name}`,
@@ -437,12 +489,14 @@ export default function PrescriptionPage() {
       vaccinations.length
         ? `Vaccination:\n${vaccinations.map((item) => `- ${item.vaccine_name}${item.next_dose_at ? ` - next dose ${formatDate(item.next_dose_at)}` : ""}`).join("\n")}`
         : "",
+      scannedPrescriptionLinks
+        ? `${lang === "ar" ? "صورة الروشتة المكتوبة:" : "Scanned written prescription:"}\n${scannedPrescriptionLinks}`
+        : "",
       followUpData.followUp ? `Follow-up: ${followUpData.followUp}` : "",
       "",
       "Prescription generated by VETRA",
     ].filter(Boolean);
 
-    const lang = window.localStorage.getItem("vetra-language") === "ar" ? "ar" : "en";
     void openWhatsAppTemplate(client.phone, "prescription_sharing", lang, {
       customer_name: client.name,
       pet_name: pet.name,
@@ -461,10 +515,11 @@ export default function PrescriptionPage() {
         type: "application/pdf",
       });
 
+      const shareFiles = [file, ...prescriptionScanFiles];
       const canShareFile =
         typeof navigator !== "undefined" &&
         typeof navigator.share === "function" &&
-        (!navigator.canShare || navigator.canShare({ files: [file] }));
+        (!navigator.canShare || navigator.canShare({ files: shareFiles }));
 
       if (canShareFile) {
         // Keep the share call directly inside the user click handler.
@@ -472,7 +527,7 @@ export default function PrescriptionPage() {
         await navigator.share({
           title: `VETRA Prescription - ${pet?.name || "Pet"}`,
           text: `Prescription for ${pet?.name || "Pet"}`,
-          files: [file],
+          files: shareFiles,
         });
         return;
       }
@@ -750,6 +805,19 @@ export default function PrescriptionPage() {
 
             <HumanMedicationList entries={humanMedications} ar />
             <ClinicMedicationList entries={clinicMedications} ar />
+
+            {prescriptionAttachments.length > 0 && (
+              <Section title="Scanned written prescription / الروشتة المصوّرة">
+                <div className="space-y-2">
+                  {prescriptionAttachments.map((attachment) => (
+                    <a key={attachment.id} href={attachment.url} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-bold text-cyan-800 hover:bg-cyan-100">
+                      <span className="min-w-0 truncate">{attachment.file_name}</span>
+                      <span className="shrink-0">فتح / Open</span>
+                    </a>
+                  ))}
+                </div>
+              </Section>
+            )}
 
             {vaccinations.length > 0 && (
               <Section title="Vaccination / التطعيمات">

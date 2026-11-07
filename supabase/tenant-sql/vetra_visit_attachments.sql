@@ -12,7 +12,7 @@ create table if not exists public.visit_attachments (
   storage_path text not null unique,
   mime_type text not null,
   size_bytes bigint not null check (size_bytes > 0 and size_bytes <= 10485760),
-  category text not null check (category in ('analysis', 'xray')),
+  category text not null check (category in ('analysis', 'xray', 'prescription')),
   created_at timestamptz not null default now()
 );
 

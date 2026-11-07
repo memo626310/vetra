@@ -16,6 +16,7 @@ type Visit = {
   reason: string | null;
   examination: string | null;
   diagnosis: string | null;
+  prognosis: "good" | "mild" | "moderate" | "sever" | "fear" | "bad" | null;
   treatment: string | null;
   weight: number | null;
   temperature: number | null;
@@ -28,7 +29,7 @@ type Client = { id: string; name: string; client_code: string | null; phone: str
 type Vaccination = { id: string; visit_id: string; vaccine_name: string | null; administered_at: string | null; next_dose_at: string | null };
 // Keep the history screen compatible with older tenant databases. The vital
 // sign columns are optional enhancements and are displayed when present.
-const COLUMNS = "id,client_id,pet_id,visit_date,reason,examination,diagnosis,treatment,notes";
+const COLUMNS = "id,client_id,pet_id,visit_date,reason,examination,diagnosis,prognosis,treatment,notes";
 type VisitInvoice = { id: string; visit_id: string; status: string };
 
 type SupabaseErrorLike = { message?: string; code?: string; details?: string; hint?: string };
@@ -237,7 +238,7 @@ export default function VisitHistoryDashboardPage() {
     search: ar ? "ابحث باسم العميل أو الحيوان أو التشخيص..." : "Search client, pet, or diagnosis...",
     count: ar ? "زيارة" : "visits", date: ar ? "التاريخ والوقت" : "Date and time",
     client: ar ? "العميل" : "Client", pet: ar ? "الحيوان" : "Pet", reason: ar ? "سبب الزيارة" : "Reason",
-    exam: ar ? "الفحص" : "Examination", diagnosis: ar ? "التشخيص" : "Diagnosis", treatment: ar ? "العلاج" : "Treatment",
+    exam: ar ? "الفحص" : "Examination", diagnosis: ar ? "التشخيص" : "Diagnosis", prognosis: ar ? "التوقع الطبي" : "Prognosis", treatment: ar ? "العلاج" : "Treatment",
     weight: ar ? "الوزن (كجم)" : "Weight (kg)", temp: ar ? "الحرارة (°C)" : "Temperature (°C)",
     heart: ar ? "نبض القلب" : "Heart rate", respiration: ar ? "معدل التنفس" : "Respiratory rate", notes: ar ? "ملاحظات" : "Notes",
     edit: ar ? "تعديل الزيارة" : "Edit visit", save: ar ? "حفظ التعديلات" : "Save changes",
@@ -306,7 +307,7 @@ export default function VisitHistoryDashboardPage() {
                       </div></td>
                     </tr>
                     {expandedId === visit.id && <tr><td colSpan={7} className="bg-[#24292a] px-4 py-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                      {([[text.reason, visit.reason], [text.exam, visit.examination], [text.diagnosis, visit.diagnosis], [text.treatment, visit.treatment], [text.weight, visit.weight == null ? null : String(visit.weight)], [text.temp, visit.temperature == null ? null : String(visit.temperature)], [text.heart, visit.heart_rate == null ? null : String(visit.heart_rate)], [text.respiration, visit.respiratory_rate == null ? null : String(visit.respiratory_rate)], [text.notes, visit.notes]] as Array<[string, string | null]>).map(([label, value]) => <div key={label} className="min-w-0"><div className="text-xs font-bold text-slate-400">{label}</div><div className="mt-1 whitespace-pre-wrap break-words text-sm">{value || "—"}</div></div>)}
+                      {([[text.reason, visit.reason], [text.exam, visit.examination], [text.diagnosis, visit.diagnosis], [text.prognosis, visit.prognosis], [text.treatment, visit.treatment], [text.weight, visit.weight == null ? null : String(visit.weight)], [text.temp, visit.temperature == null ? null : String(visit.temperature)], [text.heart, visit.heart_rate == null ? null : String(visit.heart_rate)], [text.respiration, visit.respiratory_rate == null ? null : String(visit.respiratory_rate)], [text.notes, visit.notes]] as Array<[string, string | null]>).map(([label, value]) => <div key={label} className="min-w-0"><div className="text-xs font-bold text-slate-400">{label}</div><div className="mt-1 whitespace-pre-wrap break-words text-sm">{value || "—"}</div></div>)}
                       {(vaccinationsByVisit[visit.id] || []).length > 0 && <div className="min-w-0 sm:col-span-2 lg:col-span-4"><div className="text-xs font-bold text-slate-400">{text.vaccines}</div><div className="mt-1 flex flex-wrap gap-2">{vaccinationsByVisit[visit.id].map((vaccination) => <span key={vaccination.id} className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1.5 text-sm text-cyan-100">{vaccination.vaccine_name || "—"}{vaccination.administered_at ? ` · ${new Date(vaccination.administered_at).toLocaleDateString(ar ? "ar-EG" : "en-GB")}` : ""}</span>)}</div></div>}
                     </div><div className="mt-4 flex justify-end">{permissionsLoaded && can("medical_records", "delete") && <button type="button" onClick={() => setDeleting(visit)} className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700">{text.delete}</button>}</div></td></tr>}
                   </Fragment>

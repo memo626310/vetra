@@ -7,6 +7,7 @@ import type { ExternalMedicationDraft, Language, Medication, MedicationDraft, Va
 import { getVaccinationStageOptions, calculateNextVaccinationDose } from "./new-visit-utils";
 type VaccineStockProduct = { id: string; name: string; quantity: number; unit: string | null; retail_price: number };
 type ClinicStockProduct = VaccineStockProduct & { active_ingredient: string | null; barcode?: string | null };
+type PrescriptionScan = { id: string; file?: File; fileName?: string; url?: string };
 
 type Props = {
   clinicId: string;
@@ -50,6 +51,9 @@ type Props = {
   setFollowUp: (value: string) => void;
   followUpDetails: string;
   setFollowUpDetails: (value: string) => void;
+  prescriptionAttachments: PrescriptionScan[];
+  onAddPrescriptionScan: (files: File[]) => void;
+  onRemovePrescriptionAttachment: (id: string) => void;
 };
 
 export default function NewVisitTreatmentFields({
@@ -62,7 +66,8 @@ export default function NewVisitTreatmentFields({
   drawerMedications, setDrawerMedications,
   showDrawerMedicationsOnPrescription, setShowDrawerMedicationsOnPrescription,
   resetVaccinationNextDoseToAutomatic, visitNotes, setVisitNotes, followUp, setFollowUp,
-  followUpDetails, setFollowUpDetails, canViewVaccination = false, canAddVaccination = false, canEditVaccination = false, canDeleteVaccination = false, vaccinationIsSaved = () => true,
+  followUpDetails, setFollowUpDetails, prescriptionAttachments, onAddPrescriptionScan, onRemovePrescriptionAttachment,
+  canViewVaccination = false, canAddVaccination = false, canEditVaccination = false, canDeleteVaccination = false, vaccinationIsSaved = () => true,
 }: Props) {
   const [showTreatmentNotes, setShowTreatmentNotes] = useState(Boolean(treatment));
   const [drawerSearch, setDrawerSearch] = useState("");
@@ -72,10 +77,13 @@ export default function NewVisitTreatmentFields({
   });
 
   return (<>
-                <details className={`group rounded-2xl border lg:col-span-2 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-white"}`}>
+                <details className={`group rounded-2xl border border-s-4 border-s-orange-400 lg:col-span-2 ${darkMode ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-white"}`}>
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-4 text-lg font-bold focus-visible:outline-2 focus-visible:outline-cyan-500 [&::-webkit-details-marker]:hidden">
                     <span>{language === "ar" ? "الروشتة — Prescription" : "Prescription"}</span>
-                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5 shrink-0 text-cyan-600 transition-transform group-open:rotate-180"><path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" /></svg>
+                    <span className="shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700 group-open:bg-rose-600 group-open:hover:bg-rose-700">
+                      <span className="group-open:hidden">{language === "ar" ? "فتح" : "Open"}</span>
+                      <span className="hidden group-open:inline">{language === "ar" ? "طي" : "Collapse"}</span>
+                    </span>
                   </summary>
                   <div className="space-y-4 px-3 pb-4 sm:px-4">
                   <HumanPrescriptionEditor clinicId={clinicId} language={language} darkMode={darkMode} drafts={externalMedicationDrafts} onAdd={onAddManualExternalMedication} onUpdate={onUpdateExternalMedication} onSave={onSaveExternalMedication} onRemove={onRemoveManualExternalMedication} />
@@ -84,6 +92,35 @@ export default function NewVisitTreatmentFields({
                      const name = product?.name || item.prescriptionName;
                      return name ? [{ id: item.id, name, quantity: item.quantity, unit: product?.unit || item.prescriptionUnit || "" }] : [];
                    })} ar={language === "ar"} darkMode={darkMode} />}
+                    <section className={`rounded-xl border border-s-4 border-s-violet-400 p-3 ${darkMode ? "border-cyan-900/60 bg-slate-950/60" : "border-cyan-200 bg-cyan-50/40"}`}>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-bold">{language === "ar" ? "مسح روشتة مكتوبة" : "Scan a written prescription"}</h3>
+                          <p className="mt-1 text-xs text-slate-500">{language === "ar" ? "صوّر الروشتة بالكاميرا أو ارفع صورة/PDF، وسيتم حفظها مع الزيارة بدون إدخال الأصناف يدويًا." : "Take a photo or upload a PDF. It will be saved with the visit without entering each item manually."}</p>
+                        </div>
+                        <label className="cursor-pointer rounded-lg bg-cyan-600 px-3 py-2 text-xs font-bold text-white hover:bg-cyan-700">
+                          {language === "ar" ? "تصوير / رفع الروشتة" : "Capture / upload prescription"}
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            capture="environment"
+                            multiple
+                            className="sr-only"
+                            onChange={(event) => {
+                              onAddPrescriptionScan(Array.from(event.target.files || []));
+                              event.target.value = "";
+                            }}
+                          />
+                        </label>
+                      </div>
+                      {prescriptionAttachments.length > 0 && <div className="mt-3 space-y-2">
+                        {prescriptionAttachments.map((item) => <div key={item.id} className="flex items-center gap-2 rounded-lg border border-cyan-200/60 bg-white/60 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900/60">
+                          <span className="min-w-0 flex-1 truncate font-semibold">{item.file?.name || item.fileName || (language === "ar" ? "روشتة مرفقة" : "Attached prescription")}</span>
+                          {item.url && <a href={item.url} target="_blank" rel="noreferrer" className="shrink-0 text-xs font-bold text-cyan-700 underline dark:text-cyan-300">{language === "ar" ? "فتح" : "Open"}</a>}
+                          <button type="button" onClick={() => onRemovePrescriptionAttachment(item.id)} className="shrink-0 px-1 text-lg leading-none text-rose-500" aria-label={language === "ar" ? "إزالة الروشتة" : "Remove prescription"}>×</button>
+                        </div>)}
+                      </div>}
+                    </section>
                     <div className="mt-3 border-t pt-3" style={{ borderColor: darkMode ? "#334155" : "#e2e8f0" }}>
                       <button
                         type="button"
@@ -113,7 +150,7 @@ export default function NewVisitTreatmentFields({
                 </details>
 
                 <div className="lg:col-span-2">
-                  <section className={`mb-4 rounded-xl border p-3 ${darkMode ? "border-cyan-900/60 bg-slate-950/60" : "border-cyan-200 bg-cyan-50/40"}`}>
+                  <section className={`mb-4 rounded-xl border border-s-4 border-s-orange-400 p-3 ${darkMode ? "border-cyan-900/60 bg-slate-950/60" : "border-cyan-200 bg-cyan-50/40"}`}>
                     <div className="mb-2 text-sm font-bold">{language === "ar" ? "درج الأدوية" : "Medication drawer"}</div>
                     <label className={`mb-3 flex cursor-pointer items-start gap-2 text-sm ${darkMode ? "text-slate-200" : "text-slate-700"}`}>
                       <input type="checkbox" checked={showDrawerMedicationsOnPrescription} onChange={(event) => setShowDrawerMedicationsOnPrescription(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-600" />

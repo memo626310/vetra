@@ -1,4 +1,5 @@
 export type Language = "en" | "ar";
+export type Prognosis = "" | "good" | "mild" | "moderate" | "sever" | "fear" | "bad";
 
 export type Client = {
   id: string;
@@ -27,6 +28,7 @@ export type Visit = {
   pet_id: string;
   visit_date: string;
   reason: string | null;
+  prognosis: Prognosis | null;
   examination: string | null;
   diagnosis: string | null;
   treatment: string | null;
@@ -144,6 +146,8 @@ export const translations = {
 
     patientSummary: "Patient Summary",
     owner: "Owner",
+    species: "Species",
+    age: "Age",
     breed: "Breed",
     gender: "Gender",
     birthDate: "Birth date",
@@ -158,6 +162,7 @@ export const translations = {
 
     lastDiagnosis: "Last Diagnosis",
     noDiagnosis: "No previous diagnosis",
+    lastPrognosis: "Last Prognosis",
 
     lastTreatment: "Last Treatment",
     noTreatment: "No previous treatment",
@@ -261,6 +266,8 @@ export const translations = {
 
     patientSummary: "ملخص حالة الحيوان",
     owner: "المالك",
+    species: "النوع",
+    age: "العمر",
     breed: "السلالة",
     gender: "النوع",
     birthDate: "تاريخ الميلاد",
@@ -275,6 +282,7 @@ export const translations = {
 
     lastDiagnosis: "آخر تشخيص",
     noDiagnosis: "لا يوجد تشخيص سابق",
+    lastPrognosis: "آخر توقع طبي",
 
     lastTreatment: "آخر علاج",
     noTreatment: "لا يوجد علاج سابق",

@@ -10,10 +10,10 @@ import { readVetraTheme, writeVetraThemeMode } from "@/lib/theme";
 
 type VisitRow = {
   id: string; client_id: string; pet_id: string; visit_date: string; reason: string | null;
-  examination: string | null; diagnosis: string | null; treatment: string | null; notes: string | null;
+  examination: string | null; diagnosis: string | null; prognosis: "good" | "mild" | "moderate" | "sever" | "fear" | "bad" | null; treatment: string | null; notes: string | null;
   weight: number | null; temperature: number | null; heart_rate: number | null; respiratory_rate: number | null;
 };
-type Attachment = { id: string; file_name: string; storage_path: string; mime_type: string; category: "analysis" | "xray"; url: string };
+type Attachment = { id: string; file_name: string; storage_path: string; mime_type: string; category: "analysis" | "xray" | "prescription"; url: string };
 type Invoice = { id: string; invoice_number: number; status: string; total: number; paid_amount: number; subtotal: number };
 type InvoiceItem = { id: string; service_name: string | null; description: string | null; quantity: number; unit_price: number; total: number };
 
@@ -134,6 +134,7 @@ export default function VisitDetailsPage() {
           <Info label={ar ? "الحيوان" : "Pet"} value={petName} />
           <Info label={ar ? "المالك" : "Owner"} value={ownerName} />
           <Info label={ar ? "السبب" : "Reason"} value={label(visit.reason)} />
+          <div className="min-w-0"><div className="text-xs font-medium text-slate-500">{ar ? "التوقع الطبي" : "Prognosis"}</div><div className="mt-1"><PrognosisBadge value={visit.prognosis} ar={ar} /></div></div>
           <Info label={ar ? "التاريخ" : "Date"} value={new Date(visit.visit_date).toLocaleString(ar ? "ar-EG" : "en-US")} />
         </section>
 
@@ -150,7 +151,7 @@ export default function VisitDetailsPage() {
             </section>
             <section className={`rounded-xl border p-5 ${surface}`}>
               <h2 className="text-base font-bold">{ar ? "المرفقات الطبية" : "Medical attachments"}</h2>
-              {attachments.length ? <ul className="mt-3 divide-y divide-slate-200 dark:divide-white/10">{attachments.map((file) => <li key={file.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{file.file_name}</span><span className="text-xs text-slate-500">{file.category === "xray" ? (ar ? "أشعة" : "X-ray") : (ar ? "تحليل" : "Analysis")}</span></span><a href={file.url} target="_blank" rel="noreferrer" className="rounded-lg bg-cyan-600 px-3 py-2 font-semibold text-white">{ar ? "فتح" : "Open"}</a></li>)}</ul> : <p className="mt-3 text-sm text-slate-500">{ar ? "لا توجد مرفقات." : "No attachments."}</p>}
+              {attachments.length ? <ul className="mt-3 divide-y divide-slate-200 dark:divide-white/10">{attachments.map((file) => <li key={file.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{file.file_name}</span><span className="text-xs text-slate-500">{file.category === "prescription" ? (ar ? "روشتة" : "Prescription") : file.category === "xray" ? (ar ? "أشعة" : "X-ray") : (ar ? "تحليل" : "Analysis")}</span></span><a href={file.url} target="_blank" rel="noreferrer" className="rounded-lg bg-cyan-600 px-3 py-2 font-semibold text-white">{ar ? "فتح" : "Open"}</a></li>)}</ul> : <p className="mt-3 text-sm text-slate-500">{ar ? "لا توجد مرفقات." : "No attachments."}</p>}
             </section>
           </div>
 
@@ -176,4 +177,20 @@ function Info({ label, value }: { label: string; value: string }) {
 
 function Record({ label, value }: { label: string; value: string | null }) {
   return <div className="min-w-0"><h3 className="text-xs font-semibold text-slate-500">{label}</h3><p className="mt-2 min-h-6 whitespace-pre-wrap break-words text-sm leading-6">{value || "—"}</p></div>;
+}
+
+function PrognosisBadge({ value, ar }: { value: VisitRow["prognosis"]; ar: boolean }) {
+  const labels: Record<NonNullable<VisitRow["prognosis"]>, string> = {
+    good: ar ? "جيد" : "Good", mild: ar ? "بسيط" : "Mild", moderate: ar ? "متوسط" : "Moderate",
+    sever: ar ? "شديد" : "Sever", fear: ar ? "خطر" : "Fear", bad: ar ? "سيئ" : "Bad",
+  };
+  const colors: Record<NonNullable<VisitRow["prognosis"]>, string> = {
+    good: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+    mild: "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/60 dark:text-yellow-300",
+    moderate: "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300",
+    sever: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300",
+    fear: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300",
+    bad: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300",
+  };
+  return value ? <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${colors[value]}`}>{labels[value]}</span> : <span className="text-sm text-slate-400">—</span>;
 }

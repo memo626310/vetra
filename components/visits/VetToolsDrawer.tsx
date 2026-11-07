@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import type { Language } from "./new-visit-types";
 
 export type VetTool = "common" | "bsava" | "drugeye";
@@ -18,7 +18,10 @@ export default function VetToolsDrawer({ language, darkMode, children, onOpenCha
   const [hasOpened, setHasOpened] = useState(false);
   const [activeTool, setActiveTool] = useState<VetTool>("common");
   const [collapsed, setCollapsed] = useState(false);
+  const [showSwipeHint, setShowSwipeHint] = useState(false);
   const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const id = useId();
   const isAr = language === "ar";
   const tools = [
@@ -27,11 +30,22 @@ export default function VetToolsDrawer({ language, darkMode, children, onOpenCha
     { id: "common", label: "Common Conditions", icon: "cross", description: isAr ? "بروتوكولات الأمراض الشائعة" : "Common condition protocols", color: "text-violet-600 dark:text-violet-300", fill: "bg-violet-500/10" },
   ] as const;
 
+  function showSwipeHintBriefly() {
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    setShowSwipeHint(true);
+    hintTimerRef.current = setTimeout(() => setShowSwipeHint(false), 3000);
+  }
+
+  function collapseRail() {
+    setCollapsed(true);
+    showSwipeHintBriefly();
+  }
+
   function scheduleMobileCollapse() {
     if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current);
     if (!window.matchMedia("(max-width: 639px)").matches) return;
     collapseTimerRef.current = setTimeout(() => {
-      if (!dialogRef.current?.open) setCollapsed(true);
+      if (!dialogRef.current?.open) collapseRail();
     }, 3000);
   }
 
@@ -39,15 +53,20 @@ export default function VetToolsDrawer({ language, darkMode, children, onOpenCha
     const mobile = window.matchMedia("(max-width: 639px)");
     const schedule = () => {
       if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current);
-      if (!mobile.matches) return;
+      if (!mobile.matches) {
+        setCollapsed(false);
+        setShowSwipeHint(false);
+        return;
+      }
       collapseTimerRef.current = setTimeout(() => {
-        if (!dialogRef.current?.open) setCollapsed(true);
+        if (!dialogRef.current?.open) collapseRail();
       }, 3000);
     };
     schedule();
     mobile.addEventListener("change", schedule);
     return () => {
       if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current);
+      if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
       mobile.removeEventListener("change", schedule);
     };
   }, []);
@@ -67,6 +86,8 @@ export default function VetToolsDrawer({ language, darkMode, children, onOpenCha
   function openDrawer(tool: VetTool) {
     if (!dialogRef.current) return;
     if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current);
+    setCollapsed(false);
+    setShowSwipeHint(false);
     setHasOpened(true);
     setActiveTool(tool);
     setOpen(true);
@@ -79,10 +100,35 @@ export default function VetToolsDrawer({ language, darkMode, children, onOpenCha
     scheduleMobileCollapse();
   }
 
+  function handleEdgePointerDown(event: PointerEvent<HTMLDivElement>) {
+    swipeStartRef.current = { x: event.clientX, y: event.clientY };
+  }
+
+  function handleEdgePointerUp(event: PointerEvent<HTMLDivElement>) {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    if (!start) return;
+    const deltaX = event.clientX - start.x;
+    const deltaY = Math.abs(event.clientY - start.y);
+    const swipedTowardPage = isAr ? deltaX > 42 : deltaX < -42;
+    if (deltaY < 80 && swipedTowardPage) {
+      setCollapsed(false);
+      setShowSwipeHint(false);
+      scheduleMobileCollapse();
+    }
+  }
+
   return <>
-    <button type="button" onClick={() => { setCollapsed(false); scheduleMobileCollapse(); }} aria-label={isAr ? "إظهار Vet Tools" : "Expand Vet Tools"} aria-expanded={false} aria-controls={`${id}-rail`} className={`${collapsed ? "flex sm:hidden" : "hidden"} fixed end-0 top-1/2 z-40 h-12 w-8 -translate-y-1/2 items-center justify-center rounded-s-xl border border-cyan-500/30 shadow-md ${darkMode ? "bg-[#15252C] text-cyan-300" : "bg-white text-cyan-700"}`}>
-      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d={isAr ? "m9 6 6 6-6 6" : "m15 6-6 6 6 6"} /></svg>
-    </button>
+    {collapsed && <div
+      aria-hidden="true"
+      onPointerDown={handleEdgePointerDown}
+      onPointerUp={handleEdgePointerUp}
+      onPointerCancel={() => { swipeStartRef.current = null; }}
+      className="fixed inset-y-0 end-0 z-40 block w-10 touch-pan-y sm:hidden"
+    />}
+    {collapsed && showSwipeHint && <div role="status" className={`pointer-events-none fixed end-0 top-1/2 z-40 -translate-y-1/2 rounded-s-xl bg-cyan-600/95 px-2 py-2 text-[10px] font-bold text-white shadow-lg sm:hidden`}>
+      {isAr ? "اسحب للفتح" : "Swipe to open"}
+    </div>}
     <section id={`${id}-rail`} data-vet-tools-expanded={!collapsed} aria-label="Vet Tools" onPointerDown={scheduleMobileCollapse} onFocusCapture={scheduleMobileCollapse} className={`${collapsed ? "hidden sm:block" : ""} fixed end-1 top-1/2 z-40 max-h-[calc(100dvh-2rem)] w-[4.25rem] -translate-y-1/2 overflow-y-auto rounded-2xl border p-1.5 shadow-lg sm:end-3 sm:w-20 sm:p-2 ${darkMode ? "border-cyan-500/20 bg-gradient-to-b from-[#15252C] via-[#181B21] to-[#1E1C2A]" : "border-cyan-200/70 bg-gradient-to-b from-cyan-50 via-white to-violet-50"}`}>
       <div className="flex flex-col gap-3">
         <div className="flex shrink-0 flex-col items-center gap-2 border-b border-cyan-500/15 pb-3 text-center">

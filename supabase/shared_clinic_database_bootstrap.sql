@@ -169,11 +169,14 @@ create table if not exists public.visits (
   pet_id uuid not null references public.pets(id) on delete restrict,
   visit_date timestamptz not null default now(), reason text, symptoms text,
   examination text, heart_rate numeric(8,2), respiratory_rate numeric(8,2),
-  diagnosis text, treatment text, notes text, weight numeric(8,2), temperature numeric(5,2),
+  diagnosis text, prognosis text, treatment text, notes text, weight numeric(8,2), temperature numeric(5,2),
   veterinarian text, veterinarian_id uuid, status text not null default 'completed',
   follow_up_date date, created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(), created_by uuid, updated_by uuid
 );
+
+alter table public.visits
+  add column if not exists prognosis text;
 
 create table if not exists public.visit_medications (
   id uuid primary key default gen_random_uuid(), clinic_id uuid not null,
@@ -3659,7 +3662,7 @@ create table if not exists public.visit_attachments (
   storage_path text not null unique,
   mime_type text not null,
   size_bytes bigint not null check (size_bytes > 0 and size_bytes <= 10485760),
-  category text not null check (category in ('analysis', 'xray')),
+  category text not null check (category in ('analysis', 'xray', 'prescription')),
   created_at timestamptz not null default now()
 );
 

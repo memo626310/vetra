@@ -1,5 +1,6 @@
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import type { Client, Pet, VisitTranslations } from "./new-visit-types";
 import { speciesLabel } from "./new-visit-utils";
 
@@ -29,11 +30,27 @@ export default function NewVisitPatientSelector({
   setSelectedPetId, setPetSearch, selectedPetId, petSearch,
   loadingPets, filteredPets, startExamination, loadingDetails,
 }: Props) {
+  const [clientCollapsed, setClientCollapsed] = useState(false);
+  const [petCollapsed, setPetCollapsed] = useState(false);
+  const selectedClient = filteredClients.find((client) => client.id === selectedClientId);
+  const selectedPet = filteredPets.find((pet) => pet.id === selectedPetId);
+
+  useEffect(() => {
+    if (!selectedClientId) {
+      setClientCollapsed(false);
+      setPetCollapsed(false);
+    }
+  }, [selectedClientId]);
+
+  useEffect(() => {
+    if (!selectedPetId) setPetCollapsed(false);
+  }, [selectedPetId]);
+
   return (
     <>
         {/* SELECTION */}
         {!started && (
-          <section className="grid grid-cols-2 gap-3 sm:gap-4">
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
             {/* CLIENT */}
             <div
               className={`min-w-0 rounded-2xl border p-3 shadow-sm transition-colors duration-200 sm:p-5 ${
@@ -59,28 +76,41 @@ export default function NewVisitPatientSelector({
                   >
                     {t.selectClientHint}
                   </p>
+                  {clientCollapsed && selectedClient && <p className={`mt-1 text-xs font-semibold sm:hidden ${darkMode ? "text-cyan-300" : "text-cyan-700"}`}>
+                    {selectedClient.name}
+                  </p>}
                 </div>
 
-                <Link
-                  href="/clients/new"
-                  className="max-w-full rounded-lg bg-cyan-600 px-2 py-1.5 text-[10px] font-semibold leading-tight text-white transition-colors hover:bg-cyan-700 sm:px-3 sm:py-2 sm:text-xs"
-                >
-                  + {t.addClient}
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href="/clients/new"
+                    className="max-w-full rounded-lg bg-cyan-600 px-2 py-1.5 text-[10px] font-semibold leading-tight text-white transition-colors hover:bg-cyan-700 sm:px-3 sm:py-2 sm:text-xs"
+                  >
+                    + {t.addClient}
+                  </Link>
+                  {selectedClientId && <button
+                    type="button"
+                    onClick={() => { setClientCollapsed(false); setPetCollapsed(false); }}
+                    className="rounded-lg border border-cyan-500/40 px-2 py-1.5 text-[10px] font-semibold leading-tight text-cyan-700 transition-colors hover:bg-cyan-50 dark:text-cyan-300 dark:hover:bg-cyan-950/40 sm:hidden"
+                  >
+                    {t.changeSelection}
+                  </button>}
+                </div>
               </div>
 
-              <input
-                value={clientSearch}
-                onChange={(e) => setClientSearch(e.target.value)}
-                placeholder={t.searchClient}
-                className={`mb-3 w-full min-w-0 rounded-lg border px-2 py-2 text-xs outline-none transition-all duration-200 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 sm:mb-4 sm:px-3 sm:py-2.5 sm:text-sm ${
-                  darkMode
-                    ? "border-white/[0.09] bg-[#111419] text-white placeholder:text-slate-500"
-                    : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                }`}
-              />
+              <div className={clientCollapsed ? "hidden sm:block" : "block"}>
+                <input
+                  value={clientSearch}
+                  onChange={(e) => setClientSearch(e.target.value)}
+                  placeholder={t.searchClient}
+                  className={`mb-3 w-full min-w-0 rounded-lg border px-2 py-2 text-xs outline-none transition-all duration-200 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 sm:mb-4 sm:px-3 sm:py-2.5 sm:text-sm ${
+                    darkMode
+                      ? "border-white/[0.09] bg-[#111419] text-white placeholder:text-slate-500"
+                      : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                  }`}
+                />
 
-              <div className="max-h-80 space-y-2 overflow-y-auto">
+                <div className="max-h-80 space-y-2 overflow-y-auto">
                 {loadingClients ? (
                   <div
                     className={`rounded-xl p-4 text-center text-sm ${
@@ -114,6 +144,8 @@ export default function NewVisitPatientSelector({
                           setSelectedClientId(client.id);
                           setSelectedPetId("");
                           setPetSearch("");
+                          setClientCollapsed(true);
+                          setPetCollapsed(false);
                         }}
                         className={`w-full rounded-2xl border p-4 text-start transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
                           active
@@ -164,6 +196,7 @@ export default function NewVisitPatientSelector({
                     );
                   })
                 )}
+                </div>
               </div>
             </div>
 
@@ -192,37 +225,50 @@ export default function NewVisitPatientSelector({
                   >
                     {t.selectPetHint}
                   </p>
+                  {petCollapsed && selectedPet && <p className={`mt-1 text-xs font-semibold sm:hidden ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
+                    {selectedPet.name}
+                  </p>}
                 </div>
 
-                <Link
-                  href={
-                    selectedClientId
-                      ? `/clients/${selectedClientId}`
-                      : "/clients"
-                  }
-                  className={`max-w-full rounded-lg px-2 py-1.5 text-[10px] font-semibold leading-tight transition-colors sm:px-3 sm:py-2 sm:text-xs ${
-                    darkMode
-                      ? "bg-slate-800 text-slate-200 hover:bg-slate-700"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  + {t.addPet}
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href={
+                      selectedClientId
+                        ? `/clients/${selectedClientId}`
+                        : "/clients"
+                    }
+                    className={`max-w-full rounded-lg px-2 py-1.5 text-[10px] font-semibold leading-tight transition-colors sm:px-3 sm:py-2 sm:text-xs ${
+                      darkMode
+                        ? "bg-slate-800 text-slate-200 hover:bg-slate-700"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    + {t.addPet}
+                  </Link>
+                  {selectedPetId && <button
+                    type="button"
+                    onClick={() => setPetCollapsed(false)}
+                    className="rounded-lg border border-emerald-500/40 px-2 py-1.5 text-[10px] font-semibold leading-tight text-emerald-700 transition-colors hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40 sm:hidden"
+                  >
+                    {t.changeSelection}
+                  </button>}
+                </div>
               </div>
 
-              <input
-                value={petSearch}
-                onChange={(e) => setPetSearch(e.target.value)}
-                disabled={!selectedClientId}
-                placeholder={t.searchPet}
-                className={`mb-3 w-full min-w-0 rounded-lg border px-2 py-2 text-xs outline-none transition-all duration-200 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:mb-4 sm:px-3 sm:py-2.5 sm:text-sm ${
-                  darkMode
-                    ? "border-white/[0.09] bg-[#111419] text-white placeholder:text-slate-500"
-                    : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
-                }`}
-              />
+              <div className={petCollapsed ? "hidden sm:block" : "block"}>
+                <input
+                  value={petSearch}
+                  onChange={(e) => setPetSearch(e.target.value)}
+                  disabled={!selectedClientId}
+                  placeholder={t.searchPet}
+                  className={`mb-3 w-full min-w-0 rounded-lg border px-2 py-2 text-xs outline-none transition-all duration-200 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:mb-4 sm:px-3 sm:py-2.5 sm:text-sm ${
+                    darkMode
+                      ? "border-white/[0.09] bg-[#111419] text-white placeholder:text-slate-500"
+                      : "border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400"
+                  }`}
+                />
 
-              <div className="max-h-80 space-y-2 overflow-y-auto">
+                <div className="max-h-80 space-y-2 overflow-y-auto">
                 {!selectedClientId ? (
                   <div
                     className={`rounded-xl p-5 text-center text-sm ${
@@ -261,7 +307,10 @@ export default function NewVisitPatientSelector({
                       <button
                         key={pet.id}
                         type="button"
-                        onClick={() => setSelectedPetId(pet.id)}
+                        onClick={() => {
+                          setSelectedPetId(pet.id);
+                          setPetCollapsed(true);
+                        }}
                         className={`w-full min-w-0 rounded-xl border p-2.5 text-start transition-colors duration-150 sm:p-3 ${
                           active
                             ? darkMode
@@ -318,6 +367,7 @@ export default function NewVisitPatientSelector({
                     );
                   })
                 )}
+                </div>
               </div>
             </div>
           </section>

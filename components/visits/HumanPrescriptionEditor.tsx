@@ -143,10 +143,16 @@ export default function HumanPrescriptionEditor({ clinicId, language, darkMode, 
       <details open={!collapsedDefaults[draft.id]} onToggle={(event) => {
         const collapsed = !event.currentTarget.open;
         setCollapsedDefaults((current) => current[draft.id] === collapsed ? current : { ...current, [draft.id]: collapsed });
-      }} className={`rounded-lg border p-3 ${darkMode ? "border-slate-800" : "border-slate-200"}`}>
-        <summary className="cursor-pointer text-xs font-semibold">
-          {ar ? "التكرار والمدة والتعليمات — تعديل" : "Schedule and instructions — edit"}
-          {collapsedDefaults[draft.id] && <span className="mt-2 block font-normal text-slate-500">{humanPrescriptionDetails({ ...humanPrescriptionFromDraft(draft), doseText: "" }, ar)}</span>}
+      }} className={`group rounded-lg border p-3 ${darkMode ? "border-slate-800" : "border-slate-200"}`}>
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-3 text-xs font-semibold [&::-webkit-details-marker]:hidden">
+          <span>
+            {ar ? "التكرار والمدة والتعليمات — تعديل" : "Schedule and instructions — edit"}
+            {collapsedDefaults[draft.id] && <span className="mt-2 block font-normal text-slate-500">{humanPrescriptionDetails({ ...humanPrescriptionFromDraft(draft), doseText: "" }, ar)}</span>}
+          </span>
+          <span className="shrink-0 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-emerald-700 group-open:bg-rose-600 group-open:hover:bg-rose-700">
+            <span className="group-open:hidden">{ar ? "فتح" : "Open"}</span>
+            <span className="hidden group-open:inline">{ar ? "طي" : "Collapse"}</span>
+          </span>
         </summary>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <ScheduleChoice id={`${id}-${draft.id}-hours`} label={ar ? "التكرار كل كام ساعة؟" : "Repeat every how many hours?"} value={draft.intervalHours || ""} field={field} unit={ar ? "ساعة" : "hours"}

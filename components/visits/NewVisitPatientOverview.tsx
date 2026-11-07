@@ -41,108 +41,61 @@ export default function NewVisitPatientOverview({
   const previousHeartRate = vitalData.heartRate[1]?.value ?? null;
   const latestRespiratoryRate = vitalData.respiratoryRate[0]?.value ?? null;
   const previousRespiratoryRate = vitalData.respiratoryRate[1]?.value ?? null;
+  const prognosisLabels = language === "ar"
+    ? { good: "جيد", mild: "بسيط", moderate: "متوسط", sever: "شديد", fear: "خطر", bad: "سيئ" }
+    : { good: "Good", mild: "Mild", moderate: "Moderate", sever: "Sever", fear: "Fear", bad: "Bad" };
+  const latestPrognosis = latestVisit?.prognosis ? prognosisLabels[latestVisit.prognosis] : "—";
+  const latestPrognosisClass = latestVisit?.prognosis === "good"
+    ? "text-emerald-500"
+    : latestVisit?.prognosis === "mild"
+    ? "text-yellow-500"
+    : latestVisit?.prognosis === "moderate"
+    ? "text-orange-500"
+    : latestVisit?.prognosis
+    ? "text-red-500"
+    : darkMode ? "text-slate-500" : "text-slate-400";
 
   return (<>
-            {/* PATIENT HEADER */}
-            <section
-              className={`overflow-hidden rounded-2xl border shadow-sm transition-colors duration-200 ${
-                darkMode
-                  ? "border-white/[0.07] bg-[#181B21]"
-                  : "border-slate-200 bg-white"
-              }`}
-            >
-              <div className="flex flex-col gap-5 p-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10 text-sm font-bold text-cyan-700 dark:text-cyan-300">
-                    {petDetails.species?.slice(0, 1).toUpperCase() || "P"}
-                  </div>
-
-                  <div>
-                    <div
-                      className={`mb-1 text-2xl font-bold ${
-                        darkMode ? "text-white" : "text-slate-900"
-                      }`}
-                    >
-                      {petDetails.name}
-                    </div>
-
-                    <div
-                      className={`text-sm ${
-                        darkMode
-                          ? "text-slate-400"
-                          : "text-slate-500"
-                      }`}
-                    >
-                      {speciesLabel(petDetails.species, t)}
-                      {petDetails.breed
-                        ? ` • ${petDetails.breed}`
-                        : ""}
-                      {petDetails.gender
-                        ? ` • ${genderLabel(
-                            petDetails.gender,
-                            t
-                          )}`
-                        : ""}
-                    </div>
-                  </div>
-                </div>
-
-                {canChangeSelection && <button
-                  type="button"
-                  onClick={resetSelection}
-                  className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                    darkMode
-                      ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  ← {t.changeSelection}
-                </button>}
-              </div>
-            </section>
-
             {/* PATIENT SUMMARY */}
             <details
               key={petDetails.id}
-              className={`group rounded-2xl border shadow-sm transition-colors duration-200 ${
-                darkMode
-                  ? "border-white/[0.07] bg-[#181B21]"
-                  : "border-slate-200 bg-white"
-              }`}
+              className={`group overflow-hidden rounded-xl border border-s-4 border-s-indigo-400 shadow-sm transition-colors duration-200 sm:rounded-2xl ${darkMode ? "border-white/[0.07] bg-[#181B21]" : "border-slate-200 bg-white"}`}
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-2xl p-4 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 sm:p-5 [&::-webkit-details-marker]:hidden">
-                <div>
-                  <h2
-                    className={`text-xl font-bold ${
-                      darkMode ? "text-white" : "text-slate-900"
-                    }`}
-                  >
-                    {t.patientSummary}
-                  </h2>
-
-                  <p
-                    className={`mt-1 text-sm ${
-                      darkMode
-                        ? "text-slate-500"
-                        : "text-slate-500"
-                    }`}
-                  >
-                    {t.previousVisits}: {visits.length}
-                  </p>
+              <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 p-3 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 sm:gap-4 sm:p-5 lg:flex-nowrap [&::-webkit-details-marker]:hidden">
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <h2 className={`truncate text-base font-bold leading-tight sm:text-xl ${darkMode ? "text-white" : "text-slate-900"}`}>{t.patientSummary}</h2>
+                    <p className={`shrink-0 whitespace-nowrap text-[10px] sm:text-sm ${darkMode ? "text-slate-500" : "text-slate-500"}`}>{t.previousVisits}: {visits.length}</p>
+                  </div>
+                  <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] sm:mt-2 sm:flex sm:flex-wrap sm:gap-x-6 sm:gap-y-1 sm:text-xs">
+                    <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">
+                      <span className={`shrink-0 ${darkMode ? "text-slate-500" : "text-slate-400"}`}>{t.owner}:</span>
+                      <span className={`min-w-0 truncate font-semibold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>{petDetails.client?.name || "—"}</span>
+                    </div>
+                    <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">
+                      <span className={`shrink-0 ${darkMode ? "text-slate-500" : "text-slate-400"}`}>{t.selectedPet}:</span>
+                      <span className={`min-w-0 truncate font-semibold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>{petDetails.name || "—"}</span>
+                    </div>
+                    <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">
+                      <span className={`shrink-0 ${darkMode ? "text-slate-500" : "text-slate-400"}`}>{t.species}:</span>
+                      <span className={`min-w-0 truncate font-semibold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>{speciesLabel(petDetails.species, t)}</span>
+                    </div>
+                    <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">
+                      <span className={`shrink-0 ${darkMode ? "text-slate-500" : "text-slate-400"}`}>{t.age}:</span>
+                      <span className={`min-w-0 truncate font-semibold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>{calculateAge(petDetails.birth_date, language)}</span>
+                    </div>
+                  </div>
                 </div>
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  className="h-5 w-5 shrink-0 text-cyan-600 transition-transform group-open:rotate-180 dark:text-cyan-300"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
-                </svg>
+                <div className="ms-auto flex shrink-0 items-center gap-1">
+                  {canChangeSelection && <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); resetSelection(); }} className={`rounded-lg border px-2 py-1 text-[10px] font-semibold transition-all duration-200 hover:shadow-md sm:rounded-xl sm:px-3 sm:py-2 sm:text-xs ${darkMode ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}><span className="sm:hidden">{language === "ar" ? "تغيير" : "Change"}</span><span className="hidden sm:inline">{t.changeSelection}</span></button>}
+                  <span className="rounded-lg bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white transition-colors hover:bg-emerald-700 group-open:bg-rose-600 group-open:hover:bg-rose-700 sm:px-3 sm:py-2 sm:text-xs">
+                    <span className="group-open:hidden">{language === "ar" ? "فتح" : "Open"}</span>
+                    <span className="hidden group-open:inline">{language === "ar" ? "طي" : "Collapse"}</span>
+                  </span>
+                </div>
               </summary>
 
-              <div className="space-y-5 px-4 pb-4 sm:px-5 sm:pb-5">
+              <div className="space-y-5 px-3 pb-3 sm:px-5 sm:pb-5">
               <section>
               <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4">
                 <div
@@ -432,33 +385,43 @@ export default function NewVisitPatientOverview({
             {/* VITAL GRAPHS */}
             <details
               key={`${petDetails.id}-trends`}
-              className={`group rounded-2xl border shadow-sm transition-colors duration-200 ${
+              className={`group rounded-xl border border-s-4 border-s-violet-400 shadow-sm transition-colors duration-200 sm:rounded-2xl ${
                 darkMode
                   ? "border-white/[0.07] bg-[#181B21]"
                   : "border-slate-200 bg-white"
               }`}
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-2xl p-4 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 sm:p-5 [&::-webkit-details-marker]:hidden">
-                <h2
-                  className={`text-xl font-bold ${
-                    darkMode ? "text-white" : "text-slate-900"
-                  }`}
-                >
-                  {t.trends}
-                </h2>
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  className="h-5 w-5 shrink-0 text-cyan-600 transition-transform group-open:rotate-180 dark:text-cyan-300"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
-                </svg>
+              <summary className="flex cursor-pointer list-none items-start justify-between gap-2 rounded-xl p-3 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 sm:gap-4 sm:rounded-2xl sm:p-5 [&::-webkit-details-marker]:hidden">
+                <div className="min-w-0 flex-1">
+                  <h2
+                    className={`truncate text-base font-bold leading-tight sm:text-xl ${
+                      darkMode ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {t.trends}
+                  </h2>
+                  <div className="mt-2 grid grid-cols-3 gap-x-2 gap-y-0 text-[10px] sm:mt-3 sm:grid-cols-3 sm:gap-x-6 sm:gap-y-1 sm:text-xs">
+                    <div className="min-w-0">
+                      <span className={`block truncate ${darkMode ? "text-slate-500" : "text-slate-400"}`}>{t.temperature}</span>
+                      <span className={`block truncate font-semibold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>{latestTemperature !== null ? `${latestTemperature}${t.celsius}` : "—"}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <span className={`block truncate ${darkMode ? "text-slate-500" : "text-slate-400"}`}>{t.lastDiagnosis}</span>
+                      <span className={`block truncate font-semibold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>{latestVisit?.diagnosis || t.noDiagnosis}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <span className={`block truncate ${darkMode ? "text-slate-500" : "text-slate-400"}`}>{t.lastPrognosis}</span>
+                      <span className={`block truncate font-semibold ${latestPrognosisClass}`}>{latestPrognosis}</span>
+                    </div>
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-lg bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white transition-colors hover:bg-emerald-700 group-open:bg-rose-600 group-open:hover:bg-rose-700 sm:px-3 sm:py-2 sm:text-xs">
+                  <span className="group-open:hidden">{language === "ar" ? "فتح" : "Open"}</span>
+                  <span className="hidden group-open:inline">{language === "ar" ? "طي" : "Collapse"}</span>
+                </span>
               </summary>
 
-              <div className="space-y-4 px-4 pb-4 sm:px-5 sm:pb-5">
+              <div className="space-y-4 px-3 pb-3 sm:px-5 sm:pb-5">
                 <p
                   className={`text-sm ${
                     darkMode

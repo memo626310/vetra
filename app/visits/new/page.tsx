@@ -8,12 +8,12 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
 import { vetraCore } from "@/lib/vetra-core";
-import { readVetraTheme, writeVetraThemeMode } from "@/lib/theme";
+import { readVetraTheme } from "@/lib/theme";
 import { clearClinicCache, readClinicCache, writeClinicCache } from "@/lib/clinic-cache";
 import ClinicCacheRefreshButton from "@/components/ClinicCacheRefreshButton";
 import type { FormularyVisitDraft } from "@/components/BSAVAFormularyPicker";
 import type {
-  Language, Client, Pet, Visit, Medication, MedicationDraft, ExternalMedicationDraft,
+  Language, Client, Pet, Visit, Medication, MedicationDraft, ExternalMedicationDraft, Prognosis,
   VaccinationDraft, PetDetails,
 } from "@/components/visits/new-visit-types";
 import { translations } from "@/components/visits/new-visit-types";
@@ -39,11 +39,20 @@ type SymptomDraft = { id: string; name: string; days: string };
 type AvailableDoctor = { id: string; full_name: string; specialty: string | null };
 type VisitServiceDraft = { id: string; name: string; quantity: number; price: number };
 type MedicationBillLine = { id: string; name: string };
-type VisitAttachmentDraft = { id: string; file: File; category: "analysis" | "xray" };
-type ExistingVisitAttachment = { id: string; file_name: string; storage_path: string; category: "analysis" | "xray"; url: string };
+type VisitAttachmentCategory = "analysis" | "xray" | "prescription";
+type VisitAttachmentDraft = { id: string; file: File; category: VisitAttachmentCategory };
+type ExistingVisitAttachment = { id: string; file_name: string; storage_path: string; category: VisitAttachmentCategory; url: string };
 type VaccineStockProduct = { id: string; name: string; active_ingredient: string | null; quantity: number; unit: string | null; retail_price: number; barcode?: string | null; category_id?: string | null };
 
 const NEW_VISIT_DRAFT_MAX_AGE_MS = 5 * 60 * 1000;
+
+function prognosisTone(value: Prognosis, darkMode: boolean) {
+  if (value === "good") return darkMode ? "border-emerald-500 bg-emerald-950/50 text-emerald-300" : "border-emerald-400 bg-emerald-50 text-emerald-700";
+  if (value === "mild") return darkMode ? "border-yellow-500 bg-yellow-950/50 text-yellow-300" : "border-yellow-400 bg-yellow-50 text-yellow-700";
+  if (value === "moderate") return darkMode ? "border-orange-500 bg-orange-950/50 text-orange-300" : "border-orange-400 bg-orange-50 text-orange-700";
+  if (value === "sever" || value === "fear" || value === "bad") return darkMode ? "border-red-500 bg-red-950/50 text-red-300" : "border-red-400 bg-red-50 text-red-700";
+  return darkMode ? "border-slate-700 bg-slate-900 text-white" : "border-slate-300 bg-transparent text-slate-900";
+}
 
 async function loadAllProductRows<T>(
   fetchPage: (offset: number) => PromiseLike<{ data: T[] | null; error: unknown }>
@@ -116,6 +125,7 @@ export default function NewVisitPage() {
   const [followUp, setFollowUp] = useState("");
   const [followUpDetails, setFollowUpDetails] = useState("");
   const [diagnosis, setDiagnosis] = useState("");
+  const [prognosis, setPrognosis] = useState<Prognosis>("");
   const [treatment, setTreatment] = useState("");
   const [visitNotes, setVisitNotes] = useState("");
 
@@ -162,7 +172,7 @@ export default function NewVisitPage() {
           injectionFee: number; medicationChargePrices: Record<string, number>;
           medicationChargeQuantities: Record<string, number>; symptoms: SymptomDraft[];
           visitServices: VisitServiceDraft[]; visitDate: string; reason: string; examStatus: "normal" | "abnormal" | "";
-          examination: string; followUp: string; followUpDetails: string; diagnosis: string; treatment: string;
+          examination: string; followUp: string; followUpDetails: string; diagnosis: string; prognosis?: Prognosis; treatment: string;
           visitNotes: string; weight: string; temperature: string; heartRate: string; respiratoryRate: string;
           medicationSearch: string; selectedMedicationId: string; medicationDrafts: MedicationDraft[];
           formularyDrafts: FormularyVisitDraft[]; externalMedicationDrafts: ExternalMedicationDraft[];
@@ -191,7 +201,7 @@ export default function NewVisitPage() {
           setMedicationChargeQuantities(draft.medicationChargeQuantities || {}); setSymptoms(draft.symptoms || []);
           setVisitServices(draft.visitServices || []); setVisitDate(draft.visitDate || ""); setReason(draft.reason || "examination");
           setExamStatus(draft.examStatus || ""); setExamination(draft.examination || ""); setFollowUp(draft.followUp || "");
-          setFollowUpDetails(draft.followUpDetails || ""); setDiagnosis(draft.diagnosis || ""); setTreatment(draft.treatment || "");
+          setFollowUpDetails(draft.followUpDetails || ""); setDiagnosis(draft.diagnosis || ""); setPrognosis(draft.prognosis || ""); setTreatment(draft.treatment || "");
           setVisitNotes(draft.visitNotes || ""); setWeight(draft.weight || ""); setTemperature(draft.temperature || "");
           setHeartRate(draft.heartRate || ""); setRespiratoryRate(draft.respiratoryRate || "");
           setMedicationSearch(draft.medicationSearch || ""); setSelectedMedicationId(draft.selectedMedicationId || "");
@@ -212,13 +222,13 @@ export default function NewVisitPage() {
       selectedClientId, selectedPetId, clientSearch, petSearch, started, visitSource, appointmentId,
       performingDoctor, groomingType, consultationFee, autoAddConsultationFee, followUpFee, injectionFee, medicationChargePrices,
       medicationChargeQuantities, symptoms, visitServices, visitDate, reason, examStatus, examination,
-      followUp, followUpDetails, diagnosis, treatment, visitNotes, weight, temperature, heartRate,
+      followUp, followUpDetails, diagnosis, prognosis, treatment, visitNotes, weight, temperature, heartRate,
       respiratoryRate, medicationSearch, selectedMedicationId, medicationDrafts, formularyDrafts,
       externalMedicationDrafts, vaccinations, drawerMedications, showDrawerMedicationsOnPrescription, medicalRecordDraft,
     }), [selectedClientId, selectedPetId, clientSearch, petSearch,
     started, visitSource, appointmentId, performingDoctor, groomingType, consultationFee, autoAddConsultationFee, followUpFee,
     injectionFee, medicationChargePrices, medicationChargeQuantities, symptoms, visitServices, visitDate,
-    reason, examStatus, examination, followUp, followUpDetails, diagnosis, treatment, visitNotes, weight,
+    reason, examStatus, examination, followUp, followUpDetails, diagnosis, prognosis, treatment, visitNotes, weight,
     temperature, heartRate, respiratoryRate, medicationSearch, selectedMedicationId, medicationDrafts,
     formularyDrafts, externalMedicationDrafts, vaccinations, drawerMedications, showDrawerMedicationsOnPrescription, medicalRecordDraft]);
 
@@ -577,6 +587,7 @@ export default function NewVisitPage() {
       setExamStatus(clinicalExam.startsWith("Normal") ? "normal" : clinicalExam.startsWith("Abnormal") ? "abnormal" : "");
       setExamination(clinicalExam.replace(/^(?:Normal|Abnormal):?\s*/, ""));
       setDiagnosis(visit.diagnosis || "");
+      setPrognosis((visit.prognosis || "") as Prognosis);
       setWeight(visit.weight == null ? "" : String(visit.weight));
       setTemperature(visit.temperature == null ? "" : String(visit.temperature));
       setHeartRate(visit.heart_rate == null ? "" : String(visit.heart_rate));
@@ -683,7 +694,7 @@ export default function NewVisitPage() {
           const result = await response.json().catch(() => null) as { url?: string } | null;
           if (response.ok) url = result?.url || "";
         }
-        return { id: row.id, file_name: row.file_name, storage_path: row.storage_path, category: row.category as "analysis" | "xray", url };
+        return { id: row.id, file_name: row.file_name, storage_path: row.storage_path, category: row.category as VisitAttachmentCategory, url };
       }));
       setExistingAttachments(savedAttachments);
       setRemovedAttachments([]);
@@ -1030,6 +1041,34 @@ export default function NewVisitPage() {
     setVaccinations((current) => current.filter((item) => item.id !== id));
   }
 
+  function addPrescriptionScans(files: File[]) {
+    const validTypes = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+    const oversized = files.some((file) => file.size > 10 * 1024 * 1024);
+    const invalidType = files.find((file) => !validTypes.has(file.type));
+    if (oversized) {
+      setMessage(language === "ar" ? "حجم كل ملف يجب ألا يتجاوز 10 ميجابايت" : "Each file must be 10 MB or smaller");
+      return;
+    }
+    if (invalidType) {
+      setMessage(language === "ar" ? "ارفع صورة أو ملف PDF للروشتة" : "Upload a prescription image or PDF file");
+      return;
+    }
+    setMessage("");
+    setAttachments((current) => [
+      ...current,
+      ...files.map((file) => ({ id: crypto.randomUUID(), file, category: "prescription" as const })),
+    ]);
+  }
+
+  function removePrescriptionAttachment(id: string) {
+    setAttachments((current) => current.filter((item) => item.id !== id));
+    const existing = existingAttachments.find((item) => item.id === id);
+    if (existing) {
+      setExistingAttachments((current) => current.filter((item) => item.id !== id));
+      setRemovedAttachments((current) => current.some((item) => item.id === id) ? current : [...current, existing]);
+    }
+  }
+
   function findVaccineStockProduct(vaccination: VaccinationDraft) {
     const linkedProduct = vaccination.product_id
       ? vaccineStockProducts.find((product) => product.id === vaccination.product_id)
@@ -1184,6 +1223,7 @@ export default function NewVisitPage() {
           reason: reason.trim() || null,
           examination: examinationWithSymptoms || null,
           diagnosis: diagnosis.trim() || null,
+          prognosis: prognosis || null,
           treatment: finalTreatment || null,
           weight: weight ? Number(weight) : null,
           temperature: temperature ? Number(temperature) : null,
@@ -1501,6 +1541,7 @@ export default function NewVisitPage() {
       setFollowUp("");
       setFollowUpDetails("");
       setDiagnosis("");
+      setPrognosis("");
       setTreatment("");
       setVisitNotes("");
       setWeight("");
@@ -1570,6 +1611,10 @@ export default function NewVisitPage() {
       name: clinicStockProducts.find((product) => product.id === item.product_id)?.name || (language === "ar" ? "دواء من درج الأدوية" : "Medication drawer item"),
     })),
   ];
+  const prescriptionAttachments = [
+    ...attachments.filter((item) => item.category === "prescription").map((item) => ({ id: item.id, file: item.file })),
+    ...existingAttachments.filter((item) => item.category === "prescription").map((item) => ({ id: item.id, fileName: item.file_name, url: item.url })),
+  ];
   const visitServiceTotal = visitServices.reduce((sum, service) => sum + Math.max(0, service.quantity) * Math.max(0, service.price), 0);
   const medicationChargeTotal = medicationBillLines.reduce((sum, line) => sum + Math.max(1, medicationChargeQuantities[line.id] ?? 1) * Math.max(0, medicationChargePrices[line.id] ?? injectionFee), 0);
   const vaccinationChargeTotal = vaccinations.reduce((sum, vaccination) => {
@@ -1595,85 +1640,38 @@ export default function NewVisitPage() {
     <main
       dir={language === "ar" ? "rtl" : "ltr"}
       data-vetra-visit-theme={darkMode ? "dark" : "light"}
-      className={pageClasses}
+      className={`${pageClasses} overflow-x-hidden`}
     >
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-3 pt-2 pb-4 sm:px-6 sm:py-6 lg:px-8">
         {/* HEADER */}
         <header
-          className={`mb-6 flex flex-col gap-4 rounded-2xl border p-4 shadow-sm transition-colors duration-200 sm:flex-row sm:items-center sm:justify-between sm:p-5 ${
+          className={`mb-4 flex items-center justify-between gap-3 rounded-xl border px-3 py-2 shadow-sm transition-colors duration-200 sm:px-4 ${
             darkMode
               ? "border-white/[0.07] bg-[#181B21]"
               : "border-slate-200 bg-white"
           }`}
         >
-          <div>
-            <div className="mb-2 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-600 text-sm font-bold text-white">
-                V
-              </div>
+          <h1
+            className={`min-w-0 truncate text-lg font-bold tracking-tight sm:text-xl ${
+              darkMode ? "text-white" : "text-slate-900"
+            }`}
+          >
+            {editVisitId ? (language === "ar" ? "تعديل الزيارة" : "Edit visit") : t.title}
+          </h1>
 
-              <div>
-                <h1
-                  className={`text-2xl font-bold tracking-tight ${
-                    darkMode ? "text-white" : "text-slate-900"
-                  }`}
-                >
-                  {editVisitId ? (language === "ar" ? "تعديل الزيارة" : "Edit visit") : t.title}
-                </h1>
-
-                <p
-                  className={`text-sm ${
-                    darkMode ? "text-slate-400" : "text-slate-500"
-                  }`}
-                >
-                  {editVisitId
-                    ? (language === "ar" ? "عدّل بيانات الكشف والعلاج والأدوية والتطعيمات والمرفقات." : "Edit the visit examination, treatment, medications, vaccinations, and attachments.")
-                    : t.subtitle}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             <Link
               href={editVisitId ? "/dashboard/visits" : "/dashboard"}
-              className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+              className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors hover:bg-slate-50 sm:text-sm ${
                 darkMode
                   ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  : "border-slate-200 bg-white text-slate-700"
               }`}
             >
               {editVisitId ? (language === "ar" ? "سجل الزيارات" : "Visit history") : t.dashboard}
             </Link>
 
-            <button
-              type="button"
-              onClick={() =>
-                setLanguage(language === "en" ? "ar" : "en")
-              }
-              className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                darkMode
-                  ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              {t.language}
-            </button>
-
-            <ClinicCacheRefreshButton ar={language === "ar"} darkMode={darkMode} loading={refreshingCache} onRefresh={() => void refreshCache()} />
-
-            <button
-              type="button"
-              onClick={() => { const next = !darkMode; setDarkMode(next); writeVetraThemeMode(next); }}
-              aria-label={darkMode ? t.light : t.dark}
-              className={`flex h-11 w-11 items-center justify-center rounded-xl border text-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                darkMode
-                  ? "border-slate-700 bg-slate-800 hover:bg-slate-700"
-                  : "border-slate-200 bg-white hover:bg-slate-50"
-              }`}
-            >
-              <span aria-hidden="true" className={`relative block h-5 w-5 rounded-full border-2 ${darkMode ? "border-amber-400" : "border-slate-500"}`}><span className={`absolute inset-0.5 rounded-full ${darkMode ? "bg-amber-400" : "bg-transparent"}`} /></span>
-            </button>
+            <ClinicCacheRefreshButton compact ar={language === "ar"} darkMode={darkMode} loading={refreshingCache} onRefresh={() => void refreshCache()} />
           </div>
         </header>
 
@@ -1783,7 +1781,7 @@ export default function NewVisitPage() {
               {editVisitId && <label className="block text-sm font-semibold lg:col-span-2">{language === "ar" ? "تاريخ ووقت الزيارة" : "Visit date and time"}
                 <input type="datetime-local" required value={visitDate} onChange={(event) => setVisitDate(event.target.value)} className={`mt-2 w-full rounded-xl border p-3 ${darkMode ? "border-slate-700 bg-slate-950" : "border-slate-300 bg-white"}`} />
               </label>}
-              <section className={`grid gap-4 rounded-2xl border p-4 sm:grid-cols-2 ${darkMode ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
+              <section className={`grid gap-4 rounded-2xl border border-s-4 border-s-cyan-400 p-4 sm:grid-cols-2 ${darkMode ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
                 <label className="text-sm font-semibold">{language === "ar" ? "سبب الزيارة" : "Visit reason"}
                   <select required className="mt-2 w-full rounded-xl border border-slate-300 bg-transparent p-3" value={reason} onChange={(event) => setReason(event.target.value)}>
                     <option value="">{language === "ar" ? "اختر السبب" : "Select reason"}</option>
@@ -1796,11 +1794,26 @@ export default function NewVisitPage() {
                     {availableDoctors.map((doctor) => <option key={doctor.id} value={doctor.full_name}>{doctor.full_name}{doctor.specialty ? ` · ${doctor.specialty}` : ""}</option>)}
                   </select>
                 </label>
+                <label className="text-sm font-semibold">{language === "ar" ? "التوقع الطبي (Prognosis)" : "Prognosis"}
+                  <select
+                    value={prognosis}
+                    onChange={(event) => setPrognosis(event.target.value as Prognosis)}
+                    className={`mt-2 w-full rounded-xl border p-3 font-semibold ${prognosisTone(prognosis, darkMode)}`}
+                  >
+                    <option value="">{language === "ar" ? "اختر التوقع الطبي" : "Select prognosis"}</option>
+                    <option value="good">{language === "ar" ? "جيد (Good)" : "Good"}</option>
+                    <option value="mild">{language === "ar" ? "بسيط (Mild)" : "Mild"}</option>
+                    <option value="moderate">{language === "ar" ? "متوسط (Moderate)" : "Moderate"}</option>
+                    <option value="sever">{language === "ar" ? "شديد (Sever)" : "Sever"}</option>
+                    <option value="fear">{language === "ar" ? "خطر (Fear)" : "Fear"}</option>
+                    <option value="bad">{language === "ar" ? "سيئ (Bad)" : "Bad"}</option>
+                  </select>
+                </label>
                 {reason === "grooming" && <label className="text-sm font-semibold sm:col-span-2">{language === "ar" ? "نوع التجميل" : "Grooming type"}
                   <input className="mt-2 w-full rounded-xl border border-slate-300 bg-transparent p-3" value={groomingType} onChange={(event) => setGroomingType(event.target.value)} placeholder={language === "ar" ? "مثال: استحمام، قص شعر، قص أظافر" : "e.g. bath, haircut, nail trim"} />
                 </label>}
               </section>
-              <section className={`space-y-4 rounded-2xl border p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
+              <section className={`space-y-4 rounded-2xl border border-s-4 border-s-amber-400 p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="font-bold">{language === "ar" ? "الأعراض" : "Symptoms"}</h3>
                   <button type="button" onClick={() => setSymptoms((current) => [...current, { id: crypto.randomUUID(), name: "", days: "" }])} className="rounded-lg border border-cyan-500/30 px-3 py-2 text-sm font-semibold text-cyan-700 dark:text-cyan-300">{language === "ar" ? "+ عرض يدوي" : "+ Manual symptom"}</button>
@@ -1888,9 +1901,12 @@ export default function NewVisitPage() {
                 setFollowUp={setFollowUp}
                 followUpDetails={followUpDetails}
                 setFollowUpDetails={setFollowUpDetails}
+                prescriptionAttachments={prescriptionAttachments}
+                onAddPrescriptionScan={addPrescriptionScans}
+                onRemovePrescriptionAttachment={removePrescriptionAttachment}
               />
               {medicationBillLines.length > 0 && (
-                <section className={`space-y-3 rounded-2xl border p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
+                <section className={`space-y-3 rounded-2xl border border-s-4 border-s-orange-400 p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
                   <div>
                     <h3 className="font-bold">{language === "ar" ? "بنود الأدوية في الفاتورة" : "Medication bill items"}</h3>
                     <p className="mt-1 text-xs text-slate-500">{language === "ar" ? `السعر الافتراضي ${injectionFee.toFixed(2)} جنيه للحقنة. يمكنك تعديل سعر كل دواء هنا.` : `Default ${injectionFee.toFixed(2)} EGP per injection. Adjust each medication price here.`}</p>
@@ -1932,7 +1948,7 @@ export default function NewVisitPage() {
                   </div>
                 </section>
               )}
-              <section className={`space-y-4 rounded-2xl border p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
+              <section className={`space-y-4 rounded-2xl border border-s-4 border-s-orange-400 p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
                 <div>
                   <h3 className="font-bold">{language === "ar" ? "خدمات الزيارة" : "Visit services"}</h3>
                   <p className="mt-1 text-xs text-slate-500">{language === "ar" ? "أضف الخدمات المنفذة مع الكمية والسعر." : "Add performed services with quantity and price."}</p>
@@ -1954,7 +1970,7 @@ export default function NewVisitPage() {
                   <div className="flex justify-between border-t pt-2 text-base font-bold text-cyan-700 dark:border-slate-700 dark:text-cyan-300"><span>{language === "ar" ? "الإجمالي" : "Total"}</span><span>{visitBillTotal.toFixed(2)} EGP</span></div>
                 </div>
               </section>
-              <section className={`space-y-3 rounded-2xl border p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
+              <section className={`space-y-3 rounded-2xl border border-s-4 border-s-violet-400 p-4 lg:col-span-2 ${darkMode ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"}`}>
                 <div><h3 className="font-bold">{language === "ar" ? "التحاليل والأشعة المرفقة" : "Analysis and X-ray attachments"}</h3><p className="mt-1 text-xs text-slate-500">{language === "ar" ? "PDF أو صور، بحد أقصى 10 ميجابايت لكل ملف." : "PDF or images, up to 10 MB per file."}</p></div>
                 <input type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => {
                   const selected = Array.from(event.target.files || []);
@@ -1963,12 +1979,12 @@ export default function NewVisitPage() {
                   setAttachments((current) => [...current, ...selected.map((file) => ({ id: crypto.randomUUID(), file, category: /x.?ray|radiograph/i.test(file.name) ? "xray" as const : "analysis" as const }))]);
                   event.target.value = "";
                 }} className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-600 file:px-4 file:py-2 file:font-semibold file:text-white" />
-                {attachments.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-2 text-sm">
+                {attachments.filter((item) => item.category !== "prescription").map((item) => <div key={item.id} className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="min-w-0 flex-1 truncate">{item.file.name}</span>
                   <select value={item.category} onChange={(event) => setAttachments((current) => current.map((row) => row.id === item.id ? { ...row, category: event.target.value as VisitAttachmentDraft["category"] } : row))} className="rounded-lg border border-slate-300 bg-transparent px-2 py-1.5 dark:border-slate-700"><option value="analysis">{language === "ar" ? "تحليل" : "Analysis"}</option><option value="xray">{language === "ar" ? "أشعة" : "X-ray"}</option></select>
                   <button type="button" onClick={() => setAttachments((current) => current.filter((row) => row.id !== item.id))} className="px-2 py-1 text-rose-500" aria-label={language === "ar" ? "إزالة المرفق" : "Remove attachment"}>×</button>
                 </div>)}
-                {existingAttachments.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-2 text-sm">
+                {existingAttachments.filter((item) => item.category !== "prescription").map((item) => <div key={item.id} className="flex flex-wrap items-center gap-2 text-sm">
                   {item.url ? <a href={item.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate font-semibold text-cyan-700 underline dark:text-cyan-300">{item.file_name}</a> : <span className="min-w-0 flex-1 truncate">{item.file_name}</span>}
                   <select value={item.category} onChange={(event) => setExistingAttachments((current) => current.map((row) => row.id === item.id ? { ...row, category: event.target.value as ExistingVisitAttachment["category"] } : row))} className="rounded-lg border border-slate-300 bg-transparent px-2 py-1.5 dark:border-slate-700"><option value="analysis">{language === "ar" ? "تحليل" : "Analysis"}</option><option value="xray">{language === "ar" ? "أشعة" : "X-ray"}</option></select>
                   <button type="button" onClick={() => { setExistingAttachments((current) => current.filter((row) => row.id !== item.id)); setRemovedAttachments((current) => [...current, item]); }} className="px-2 py-1 text-rose-500" aria-label={language === "ar" ? "إزالة المرفق" : "Remove attachment"}>×</button>

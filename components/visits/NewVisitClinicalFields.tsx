@@ -29,7 +29,7 @@ export default function NewVisitClinicalFields(props: Props) {
   } = props;
   return (<>
 
-                <div className="lg:col-span-2">
+                <div className="border-s-4 border-s-cyan-400 ps-4 lg:col-span-2">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <label
                       className={`block text-sm font-semibold ${
@@ -191,7 +191,7 @@ export default function NewVisitClinicalFields(props: Props) {
                 </div>
                 </div>
 
-                <div>
+                <div className="border-s-4 border-s-indigo-400 ps-4">
                   <label
                     className={`mb-2 block text-sm font-semibold ${
                       darkMode

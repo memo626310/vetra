@@ -166,6 +166,7 @@ body {
 [data-vetra-visit-theme] select option { background: #fff; color: #111827; }
 [data-vetra-visit-theme="dark"] select option { background: #181b21; color: #f1f4f6; }
 
+
 /* Clinic theme preference is shared across routes; page-local light/dark controls
    only switch the shared mode and preserve the selected dark palette. */
 html[data-vetra-theme="midnight"] {

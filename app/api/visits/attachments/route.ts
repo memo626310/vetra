@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const petId = String(form.get("pet_id") || "");
     const category = String(form.get("category") || "analysis");
 
-    if (!(file instanceof File) || !visitId || !clientId || !petId || !["analysis", "xray"].includes(category)) {
+    if (!(file instanceof File) || !visitId || !clientId || !petId || !["analysis", "xray", "prescription"].includes(category)) {
       return Response.json({ error: "بيانات المرفق غير مكتملة." }, { status: 400 });
     }
     if (file.size < 1 || file.size > maxBytes || !allowedTypes.has(file.type)) {
@@ -83,7 +83,9 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    const attachmentId = new URL(request.url).searchParams.get("id");
+    const requestUrl = new URL(request.url);
+    const attachmentId = requestUrl.searchParams.get("id");
+    const forSharing = requestUrl.searchParams.get("share") === "1";
     if (!attachmentId) return Response.json({ error: "معرّف المرفق مطلوب." }, { status: 400 });
     const { clinicId, clinicDb } = await requireClinicPermission(request, "medical_records", "view");
     const { data: attachment, error } = await clinicDb.from("visit_attachments")
@@ -92,7 +94,7 @@ export async function GET(request: Request) {
       .eq("clinic_id", clinicId)
       .maybeSingle();
     if (error || !attachment) return Response.json({ error: "المرفق غير موجود أو غير متاح." }, { status: 404 });
-    const { data, error: signedError } = await getCoreAdminClient().storage.from(bucket).createSignedUrl(attachment.storage_path, 300);
+    const { data, error: signedError } = await getCoreAdminClient().storage.from(bucket).createSignedUrl(attachment.storage_path, forSharing ? 86400 : 300);
     if (signedError || !data?.signedUrl) throw signedError || new Error("Could not create a secure attachment link.");
     return Response.json({ url: data.signedUrl }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {

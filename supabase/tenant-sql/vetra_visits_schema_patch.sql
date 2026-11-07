@@ -5,6 +5,7 @@ begin;
 alter table if exists public.visits
   add column if not exists examination text,
   add column if not exists diagnosis text,
+  add column if not exists prognosis text,
   add column if not exists treatment text,
   add column if not exists notes text,
   add column if not exists weight numeric(8,2),
