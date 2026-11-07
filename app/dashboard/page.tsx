@@ -333,6 +333,14 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const mobile = window.matchMedia("(max-width: 639px)");
+    const syncHeaderMode = () => setHeaderCollapsed(mobile.matches);
+    syncHeaderMode();
+    mobile.addEventListener("change", syncHeaderMode);
+    return () => mobile.removeEventListener("change", syncHeaderMode);
+  }, []);
+
+  useEffect(() => {
     if (!ready) return;
 
     let mounted = true;
@@ -796,7 +804,7 @@ export default function Home() {
 
         {/* ================= MAIN ================= */}
 
-        <section className="min-w-0 flex-1 px-3 pb-8 pt-3 transition-colors duration-500 sm:px-6 sm:py-7 xl:px-10">
+        <section className="min-w-0 flex-1 px-3 pb-8 pt-[calc(0.75rem+env(safe-area-inset-top))] transition-colors duration-500 sm:px-6 sm:py-7 xl:px-10">
           <div className="mx-auto w-full max-w-[1600px]">
 
           {/* ================= HEADER ================= */}
@@ -815,10 +823,10 @@ export default function Home() {
             tabIndex={headerCollapsed ? 0 : undefined}
             aria-label={headerCollapsed ? (isArabic ? "فتح معلومات العيادة" : "Expand clinic summary") : undefined}
             dir="ltr"
-            className={`relative mb-4 flex flex-wrap overflow-hidden rounded-2xl border shadow-sm transition-[max-height,padding,box-shadow,background-color,border-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] sm:mb-8 sm:rounded-3xl ${headerCollapsed ? "max-h-[92px] cursor-pointer items-center justify-between gap-2 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 sm:max-h-[104px] sm:gap-3 sm:p-3" : "max-h-[440px] items-start justify-between gap-2 p-3 sm:max-h-[360px] sm:grid sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-6 sm:p-7 lg:p-8"} ${palette.header}`}
+            className={`relative mb-4 flex flex-wrap overflow-hidden rounded-2xl border shadow-sm transition-[max-height,padding,box-shadow,background-color,border-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] sm:mb-8 sm:rounded-3xl ${headerCollapsed ? "max-h-[76px] cursor-pointer items-center justify-between gap-2 p-2 max-sm:flex-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 sm:max-h-[104px] sm:gap-3 sm:p-3" : "max-h-[440px] items-start justify-between gap-2 p-3 max-sm:grid max-sm:grid-cols-2 max-sm:gap-x-3 max-sm:gap-y-2 sm:max-h-[360px] sm:grid sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-6 sm:p-7 lg:p-8"} ${palette.header}`}
           >
 
-            {!headerCollapsed && <div className="order-2 min-w-0 flex-1 animate-[vetra-header-in_450ms_cubic-bezier(0.22,1,0.36,1)]" dir={isArabic ? "rtl" : "ltr"}>
+            {!headerCollapsed && <div className="order-2 min-w-0 flex-1 animate-[vetra-header-in_450ms_cubic-bezier(0.22,1,0.36,1)] max-sm:order-1 max-sm:col-span-2" dir={isArabic ? "rtl" : "ltr"}>
 
               <p className={`mb-1 text-[9px] font-bold uppercase tracking-[0.16em] ${palette.accentText} sm:mb-2 sm:text-xs sm:tracking-[0.18em]`}>{t.workspace}</p>
               <h2 className="max-w-[190px] text-base font-black leading-tight tracking-tight sm:max-w-none sm:text-4xl sm:leading-normal lg:text-[2.65rem]">
@@ -885,7 +893,7 @@ export default function Home() {
 
             {/* ================= ACTIONS ================= */}
 
-            <div className={`${isArabic ? "order-1" : "order-3"} shrink-0 self-center ${headerCollapsed ? "flex max-w-[48%] items-center gap-2 text-xs" : "text-xs"} ${isArabic ? "text-right" : "text-left"}`} dir={isArabic ? "rtl" : "ltr"}>
+            <div className={`${isArabic ? "order-1" : "order-3"} shrink-0 self-center max-sm:order-2 ${headerCollapsed ? "flex max-w-[40%] items-center gap-1 text-[10px] sm:max-w-[48%] sm:gap-2 sm:text-xs" : "text-xs"} ${isArabic ? "text-right" : "text-left"}`} dir={isArabic ? "rtl" : "ltr"}>
               {headerCollapsed ? (
                 <>
                   <span className={`truncate font-semibold ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{formattedDate}</span>
@@ -910,7 +918,7 @@ export default function Home() {
               onClick={(event) => {
                 if (headerCollapsed) event.stopPropagation();
               }}
-              className={`${isArabic ? "order-3" : "order-1"} flex shrink-0 items-center gap-1 sm:gap-2 ${headerCollapsed ? "w-auto justify-center rounded-2xl bg-black/[0.08] p-1.5 sm:gap-1.5" : "w-full justify-end sm:w-auto"}`}
+              className={`${isArabic ? "order-3" : "order-1"} flex shrink-0 items-center gap-1 max-sm:order-3 ${headerCollapsed ? "w-auto max-w-[58%] flex-nowrap justify-center rounded-2xl bg-black/[0.08] p-1 sm:gap-1.5 sm:p-1.5" : "max-sm:col-span-2 max-sm:w-full max-sm:flex-wrap max-sm:justify-start sm:w-auto sm:justify-end"} sm:gap-2`}
             >
 
               {/* Language */}
