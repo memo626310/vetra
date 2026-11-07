@@ -1079,7 +1079,8 @@ export default function ClientAppointmentsPage() {
                 }}
                 disabled={
                   !settings?.client_rescheduling_enabled ||
-                  !["pending", "confirmed"].includes(selectedAppointment.status)
+                  !["pending", "confirmed"].includes(selectedAppointment.status) ||
+                  selectedAppointment.appointment_date < today
                 }
                 className="flex-1 rounded-2xl bg-cyan-400 px-4 py-3 font-black text-slate-950 disabled:opacity-40"
               >

@@ -45,9 +45,9 @@ begin
       when 'vetra_transfer_between_accounts' then
         v_guard := 'if not public.vetra_has_clinic_staff_permission(''finance_page'', ''view'') then raise exception ''Financial transfer permission is required''; end if;';
       when 'vetra_record_invoice_payment' then
-        v_guard := 'if not public.vetra_has_clinic_staff_permission(''finance_page'', ''view'') then raise exception ''Payment creation permission is required''; end if;';
+        v_guard := 'if not (public.vetra_has_clinic_staff_permission(''finance_page'', ''view'') or public.vetra_has_clinic_staff_permission(''invoices'', ''create'')) then raise exception ''Payment creation permission is required''; end if;';
       when 'vetra_ensure_cash_register_open' then
-        v_guard := 'if not public.vetra_has_clinic_staff_permission(''finance_page'', ''view'') then raise exception ''Cash register operation permission is required''; end if;';
+        v_guard := 'if not (public.vetra_has_clinic_staff_permission(''finance_page'', ''view'') or public.vetra_has_clinic_staff_permission(''invoices'', ''create'')) then raise exception ''Cash register operation permission is required''; end if;';
       when 'vetra_create_inventory_supplier' then
         v_guard := 'if not public.vetra_has_clinic_staff_permission(''inventory'', ''create'') then raise exception ''Inventory creation permission is required''; end if;';
       when 'vetra_create_inventory_purchase' then
@@ -56,7 +56,20 @@ begin
         v_guard := 'if not public.vetra_has_clinic_staff_permission(''inventory'', ''edit'') or not public.vetra_has_clinic_staff_permission(''finance_page'', ''view'') then raise exception ''Inventory and payment edit permissions are required''; end if;';
     end case;
 
+    -- Replace the original finance-only guards when this patch is re-run on a
+    -- tenant that already applied an earlier version of this migration.
+    if v_target.proname = 'vetra_record_invoice_payment' then
+      v_definition := replace(v_definition,
+        'if not public.vetra_has_clinic_staff_permission(''finance_page'', ''view'') then raise exception ''Payment creation permission is required''; end if;',
+        v_guard);
+    elsif v_target.proname = 'vetra_ensure_cash_register_open' then
+      v_definition := replace(v_definition,
+        'if not public.vetra_has_clinic_staff_permission(''finance_page'', ''view'') then raise exception ''Cash register operation permission is required''; end if;',
+        v_guard);
+    end if;
+
     if position(v_guard in v_definition) > 0 then
+      execute v_definition;
       v_seen := v_seen + 1;
       continue;
     end if;

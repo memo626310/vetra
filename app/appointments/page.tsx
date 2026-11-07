@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getClinicDb, getClinicContext } from "@/lib/clinic-db";
@@ -317,6 +317,7 @@ export default function AppointmentsPage() {
   const [refreshingCache, setRefreshingCache] = useState(false);
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const noShowUpdatesInFlight = useRef(new Set<string>());
   const [clients, setClients] = useState<Client[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -574,19 +575,33 @@ export default function AppointmentsPage() {
     setModal("appointment");
   }
 
-  async function ensureNoShow(a: Appointment) {
-    if (!settings || (a.status !== "pending" && a.status !== "confirmed")) return;
+  useEffect(() => {
+    if (!settings) return;
 
-    const status = displayStatus(a, settings.no_show_grace_minutes);
-    if (status !== "no_show") return;
+    const overdueAppointments = appointments.filter((appointment) =>
+      (appointment.status === "pending" || appointment.status === "confirmed") &&
+      displayStatus(appointment, settings.no_show_grace_minutes) === "no_show" &&
+      !noShowUpdatesInFlight.current.has(appointment.id),
+    );
 
-    try {
-      const db = await getClinicDb();
-      await db.from("appointments").update({ status: "no_show", updated_at: new Date().toISOString() }).eq("id", a.id);
-    } catch (e) {
-      console.warn("NO-SHOW UPDATE FAILED:", e);
+    for (const appointment of overdueAppointments) {
+      noShowUpdatesInFlight.current.add(appointment.id);
+      void (async () => {
+        try {
+          const db = await getClinicDb();
+          const { error } = await db
+            .from("appointments")
+            .update({ status: "no_show", updated_at: new Date().toISOString() })
+            .eq("id", appointment.id)
+            .in("status", ["pending", "confirmed"]);
+          if (error) throw error;
+        } catch (error) {
+          noShowUpdatesInFlight.current.delete(appointment.id);
+          console.warn("NO-SHOW UPDATE FAILED:", error);
+        }
+      })();
     }
-  }
+  }, [appointments, settings]);
 
   async function updateStatus(a: Appointment, status: Status) {
     setError("");
@@ -1171,10 +1186,6 @@ export default function AppointmentsPage() {
                   const computed = displayStatus(a, settings?.no_show_grace_minutes ?? 30);
                   const actual = computed === "late" ? "late" : computed;
                   const petIcon = (a.pet?.species || "").toLowerCase().includes("dog") ? "🐶" : (a.pet?.species || "").toLowerCase().includes("cat") ? "🐱" : "🐾";
-
-                  if (computed === "no_show" && a.status !== "no_show" && a.status !== "cancelled") {
-                    void ensureNoShow(a);
-                  }
 
                   return (
                     <tr key={a.id} className={`border-b last:border-b-0 ${darkMode ? "border-white/[0.04] hover:bg-white/[0.02]" : "border-slate-100 hover:bg-slate-50"}`}>

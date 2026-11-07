@@ -634,15 +634,13 @@ export default function NewInvoicePage() {
     const categoryProducts = selectedCategoryId
       ? products.filter((product) => (product as Product & { category_id?: string | null }).category_id === selectedCategoryId)
       : products;
-    if (!query) return categoryProducts.slice(0, 12);
+    if (!query) return categoryProducts;
 
-    return categoryProducts
-      .filter(
-        (product) =>
-          product.name.toLowerCase().includes(query) ||
-          (product.barcode || "").toLowerCase().includes(query)
-      )
-      .slice(0, 12);
+    return categoryProducts.filter(
+      (product) =>
+        product.name.toLowerCase().includes(query) ||
+        (product.barcode || "").toLowerCase().includes(query)
+    );
   }, [products, productSearch, selectedCategoryId]);
 
   async function createQuickSaleClient() {
@@ -760,8 +758,6 @@ export default function NewInvoicePage() {
         },
       ]);
     }
-
-    setProductSearch("");
   }
 
   function addService() {
@@ -935,6 +931,14 @@ export default function NewInvoicePage() {
     let invoiceClientId = clientId;
     if (!invoiceClientId && visitId) {
       setMessage(language === "ar" ? "اختار العميل أولًا." : "Select a client first.");
+      return;
+    }
+
+    const usesAutomaticDailyClient = !invoiceClientId;
+    if (usesAutomaticDailyClient && (billingMode === "credit" || paid < total)) {
+      setMessage(language === "ar"
+        ? "لا يمكن إنشاء فاتورة آجلة أو غير مكتملة الدفع للعميل اليومي. اختار عميلًا أولًا أو سدّد الفاتورة بالكامل."
+        : "Credit or partially paid invoices require a selected client. Select a client or pay the invoice in full.");
       return;
     }
 
@@ -1581,37 +1585,42 @@ setSuccess(
                 {productCategories.map((category) => <button key={category.id} type="button" onClick={() => setSelectedCategoryId((current) => current === category.id ? "" : category.id)} aria-pressed={selectedCategoryId === category.id} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${selectedCategoryId === category.id ? "border-blue-500 bg-blue-600 text-white" : darkMode ? "border-white/10 text-slate-300 hover:bg-white/5" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>{category.name}</button>)}
               </div>
 
-              <div className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
-                {filteredProducts.map((product) => (
-                  <button
-                    key={product.id}
-                    type="button"
-                    onClick={() => addProduct(product)}
-                    aria-label={Number(product.quantity) <= 0
-                      ? `${product.name}: ${language === "ar" ? "نفد المخزون" : "Out of stock"}`
-                      : `${product.name}: ${money(Number(product.retail_price))} EGP`}
-                    className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 text-right transition sm:p-4 ${Number(product.quantity) <= 0 ? "cursor-not-allowed opacity-70" : "sm:hover:-translate-y-0.5"} ${
-                      darkMode
-                        ? "border-white/[0.06] bg-[#0F1115] hover:bg-[#171A20]"
-                        : "border-slate-100 bg-slate-50 hover:bg-white hover:shadow-sm"
-                    }`}
-                  >
-                    <div>
-                      <p className="font-bold">{product.name}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {product.barcode || "No barcode"} · {product.unit} ·{" "}
+              <div
+                className="max-h-[min(65vh,42rem)] overflow-y-auto overscroll-contain pe-1"
+                aria-label={language === "ar" ? "قائمة كل المنتجات" : "All products list"}
+              >
+                <div className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
+                  {filteredProducts.map((product) => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => addProduct(product)}
+                      aria-label={Number(product.quantity) <= 0
+                        ? `${product.name}: ${language === "ar" ? "نفد المخزون" : "Out of stock"}`
+                        : `${product.name}: ${money(Number(product.retail_price))} EGP`}
+                      className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 text-right transition sm:p-4 ${Number(product.quantity) <= 0 ? "cursor-not-allowed opacity-70" : "sm:hover:-translate-y-0.5"} ${
+                        darkMode
+                          ? "border-white/[0.06] bg-[#0F1115] hover:bg-[#171A20]"
+                          : "border-slate-100 bg-slate-50 hover:bg-white hover:shadow-sm"
+                      }`}
+                    >
+                      <div>
+                        <p className="font-bold">{product.name}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {product.barcode || "No barcode"} · {product.unit} ·{" "}
+                          {Number(product.quantity) <= 0
+                            ? (language === "ar" ? "نفد المخزون" : "Out of stock")
+                            : `${product.quantity} ${language === "ar" ? "متاح" : "available"}`}
+                        </p>
+                      </div>
+                      <span className={`rounded-xl px-3 py-2 text-xs font-bold ${Number(product.quantity) <= 0 ? "bg-rose-500/10 text-rose-600 dark:text-rose-300" : "bg-blue-600 text-white"}`}>
                         {Number(product.quantity) <= 0
-                          ? (language === "ar" ? "نفد المخزون" : "Out of stock")
-                          : `${product.quantity} ${language === "ar" ? "متاح" : "available"}`}
-                      </p>
-                    </div>
-                    <span className={`rounded-xl px-3 py-2 text-xs font-bold ${Number(product.quantity) <= 0 ? "bg-rose-500/10 text-rose-600 dark:text-rose-300" : "bg-blue-600 text-white"}`}>
-                      {Number(product.quantity) <= 0
-                        ? (language === "ar" ? "خلصان" : "Out of stock")
-                        : `+ ${money(Number(product.retail_price))}`}
-                    </span>
-                  </button>
-                ))}
+                          ? (language === "ar" ? "خلصان" : "Out of stock")
+                          : `+ ${money(Number(product.retail_price))}`}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </section>
 
