@@ -154,6 +154,8 @@ const T = {
 
     start: "خلّينا نكملها سوا",
 
+	    protocolUnavailable: "البروتوكول غير متاح لهذا النوع حاليًا",
+
     scoreNote: "مقياس اكتمال الرعاية داخل VETRA، مش تقييمًا طبيًا.",
 
     monthly: "زيارة العيادة الشهرية",
@@ -265,6 +267,8 @@ const T = {
     good: "You are on the right track",
 
     start: "Let's complete it together",
+
+	    protocolUnavailable: "This species protocol is not available yet",
 
     scoreNote: "A care-completeness indicator inside VETRA, not a medical score.",
 
@@ -1024,7 +1028,7 @@ export default function ClientPetProfilePage() {
 
   const statusLabel = (status: Status) => status === "current" ? t.regular : status === "grace" ? t.grace : status === "overdue" ? t.overdue : t.notDue;
 
-  const scoreTitle = careScore === 10 ? t.excellent : (careScore || 0) >= 8 ? t.almost : (careScore || 0) >= 5 ? t.good : t.start;
+  const scoreTitle = careScore === null ? t.protocolUnavailable : careScore === 10 ? t.excellent : careScore >= 8 ? t.almost : careScore >= 5 ? t.good : t.start;
 
 
 
@@ -1098,13 +1102,13 @@ export default function ClientPetProfilePage() {
 
             </div>
 
-            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+            {careScore !== null && <div className="mt-5 grid gap-2 sm:grid-cols-2">
 
               <div className={dark ? "rounded-2xl border border-white/[.05] bg-white/[.025] p-3" : "rounded-2xl border border-slate-100 bg-slate-50 p-3"}><div className="flex justify-between text-xs font-bold"><span>{t.monthly}</span><span className={visitPoints ? "text-emerald-400" : "text-rose-300"}>{visitPoints ? "✓" : "•"}</span></div><div className="mt-1 text-[10px] text-slate-500">{visitPoints ? t.regular : t.overdue}</div></div>
 
               {protocol.map(item => <div key={item.key} className={dark ? "rounded-2xl border border-white/[.05] bg-white/[.025] p-3" : "rounded-2xl border border-slate-100 bg-slate-50 p-3"}><div className="flex justify-between text-xs font-bold"><span>{lang === "ar" ? item.titleAr : item.titleEn}</span><span className={item.points > 0 ? "text-emerald-400" : "text-rose-300"}>{item.points > 0 ? "✓" : "•"}</span></div><div className="mt-1 text-[10px] text-slate-500">{statusLabel(item.status)}</div></div>)}
 
-            </div>
+            </div>}
 
           </div>
 

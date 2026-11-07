@@ -336,6 +336,7 @@ export default function EditPetPage() {
       setMessage(
         "تم حفظ بيانات الحيوان بنجاح ✓"
       );
+      router.push(`/pets/${encodeURIComponent(pet.id)}`);
     } catch (err) {
       console.error(
         "SAVE PET ERROR:",

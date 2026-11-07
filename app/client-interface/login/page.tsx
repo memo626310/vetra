@@ -95,12 +95,19 @@ export default function ClientLoginPage() {
         error,
       } = await db
         .from("clients")
-        .select("id, client_code")
-        .eq("phone", normalizedPhone)
+        // The owner access RPC compares phone numbers after removing
+        // whitespace. Query by the client code first, then apply the same
+        // normalization locally so formatting in the stored phone value does
+        // not make a valid login fail.
+        .select("id, client_code, phone")
         .eq("client_code", normalizedCode)
         .maybeSingle();
 
-      if (error || !client) {
+      const storedPhone = client?.phone
+        ?.trim()
+        .replace(/\s+/g, "");
+
+      if (error || !client || storedPhone !== normalizedPhone) {
         setMessage(
           ar
             ? "رقم التليفون أو Client ID غير صحيح."
