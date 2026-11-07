@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { vetraCore } from "@/lib/vetra-core";
 import { getClinicContext, getClinicDb, resetClinicDbConnection } from "@/lib/clinic-db";
-import { loadClinicProfile } from "@/lib/clinic-profile";
 import PushNotificationsButton from "@/components/PushNotificationsButton";
 import ReceptionCheckoutNotice from "@/components/ReceptionCheckoutNotice";
 import { writeVetraTheme } from "@/lib/theme";
@@ -381,45 +380,26 @@ export default function Home() {
       }
 
       let displayContext = context;
+      const { data: userResult } = await vetraCore.auth.getUser();
+      const accountEmail = userResult.user?.email?.trim().toLowerCase() || "";
+      const accountPhone = userResult.user?.phone?.trim() || "";
       try {
         const db = await getClinicDb();
-        const { data: userResult } = await vetraCore.auth.getUser();
-        const accountEmail = userResult.user?.email?.trim().toLowerCase() || "";
-        const [clinicProfile, { data: staffRows }] = await Promise.all([
-          loadClinicProfile(db, context.clinic_id),
-          db.from("clinic_staff")
-            .select("full_name,email,staff_type")
-            .eq("clinic_id", context.clinic_id),
-        ]);
+        const { data: staffRows } = await db.from("clinic_staff")
+          .select("full_name,email,phone,staff_type,auth_user_id")
+          .eq("clinic_id", context.clinic_id);
 
         const staffMember = (staffRows || []).find((row) =>
-          accountEmail && typeof row.email === "string" && row.email.trim().toLowerCase() === accountEmail
-        ) || (staffRows || []).find((row) => row.staff_type === "doctor") || (staffRows || [])[0];
+          (userResult.user?.id && row.auth_user_id === userResult.user.id)
+          || (accountEmail && typeof row.email === "string" && row.email.trim().toLowerCase() === accountEmail)
+        );
         const staffName = typeof staffMember?.full_name === "string"
           ? staffMember.full_name.trim()
           : "";
-        const profileName = typeof clinicProfile?.doctor_name === "string"
-          ? clinicProfile.doctor_name.trim()
-          : "";
-
-        if (profileName) {
-          displayContext = { ...context, doctor_name: profileName };
-        } else if (staffName) {
-          displayContext = { ...context, doctor_name: staffName };
-        }
+        const staffPhone = typeof staffMember?.phone === "string" ? staffMember.phone.trim() : "";
+        displayContext = { ...context, doctor_name: staffName || accountEmail || staffPhone || accountPhone };
       } catch {
-        // Fall back to the account identity below if optional clinic profile data is unavailable.
-      }
-
-      if (displayContext === context) {
-        const { data: userResult } = await vetraCore.auth.getUser();
-        const metadata = userResult.user?.user_metadata as Record<string, unknown> | undefined;
-        const accountName = [metadata?.full_name, metadata?.name, userResult.user?.email]
-          .find((value): value is string => typeof value === "string" && value.trim().length > 0)
-          ?.trim();
-        if (accountName) {
-          displayContext = { ...context, doctor_name: accountName };
-        }
+        displayContext = { ...context, doctor_name: accountEmail || accountPhone };
       }
 
       if (mounted) {
@@ -521,9 +501,7 @@ export default function Home() {
     setTheme(nextTheme);
   };
 
-  const doctorName =
-    clinicContext?.doctor_name ||
-    t.doctor;
+  const doctorName = clinicContext?.doctor_name || "";
 
   const clinicName =
     clinicContext?.clinic_name ||
@@ -844,7 +822,7 @@ export default function Home() {
 
               <p className={`mb-1 text-[9px] font-bold uppercase tracking-[0.16em] ${palette.accentText} sm:mb-2 sm:text-xs sm:tracking-[0.18em]`}>{t.workspace}</p>
               <h2 className="max-w-[190px] text-base font-black leading-tight tracking-tight sm:max-w-none sm:text-4xl sm:leading-normal lg:text-[2.65rem]">
-                {t.welcome}، {doctorName}{" "}
+                {t.welcome}{doctorName ? `، ${doctorName}` : ""}{" "}
 
                 <span className="inline-block transition-transform duration-300 hover:rotate-12">
                   👋
