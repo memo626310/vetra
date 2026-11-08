@@ -1043,6 +1043,9 @@ export default function SettingsPage() {
             <div className="mt-6 flex justify-end">
               <button type="button" onClick={() => void saveClinicProfile()} disabled={!isAdmin || savingProfile} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50">{savingProfile ? t.saving : t.saveProfile}</button>
             </div>
+            <div className="mt-3 flex justify-end">
+              <button type="button" onClick={() => router.push("/settings/clinic-hours")} className={`rounded-xl border px-5 py-3 text-sm font-bold transition ${darkMode ? "border-white/10 bg-white/5 hover:bg-white/10" : "border-slate-200 bg-white hover:bg-slate-50"}`}>{language === "ar" ? "ضبط ساعات عمل العيادة" : "Set clinic hours"}</button>
+            </div>
             {clinicProfile?.updated_at && <p className="mt-3 text-end text-xs text-slate-500">{new Intl.DateTimeFormat(language === "ar" ? "ar-EG" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(clinicProfile.updated_at))}</p>}
           </section>
 

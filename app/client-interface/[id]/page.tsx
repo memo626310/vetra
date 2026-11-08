@@ -227,6 +227,12 @@ function todayDateOnly() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function reminderSchedule(dueDate: string) {
+  const scheduledAt = new Date(`${dueDate}T09:00:00`);
+  if (scheduledAt.getTime() <= Date.now()) scheduledAt.setTime(Date.now() + 60_000);
+  return scheduledAt.toISOString();
+}
+
 function dateOnlyFromIso(value: string) {
   const d = new Date(value);
   const yyyy = d.getFullYear();
@@ -611,7 +617,7 @@ function Countdown({ days, lang, status, dark }:{days:number|null;lang:Lang;stat
 
 export default function ClientInterfaceIdPage(){
   const params=useParams<{id:string}>(); const router=useRouter(); const clientId=params.id;
-  const [lang,setLang]=useState<Lang>("ar"); const dark=true; const [paletteId,setPaletteId]=useState<PaletteId>("sage"); const [themePicker,setThemePicker]=useState(false); const [client,setClient]=useState<Client|null>(null); const [pets,setPets]=useState<Pet[]>([]); const [visits,setVisits]=useState<Visit[]>([]); const [vaccines,setVaccines]=useState<Vaccine[]>([]); const [financialSummary,setFinancialSummary]=useState<FinancialSummary>({due_amount:0,credit_amount:0}); const [selected,setSelected]=useState(""); const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [settings,setSettings]=useState(false); const [addPet,setAddPet]=useState(false); const [petForm,setPetForm]=useState({name:"",species:"",gender:"",birth_date:"",breed:"",color:""}); const [savingPet,setSavingPet]=useState(false); const [photoBusy,setPhotoBusy]=useState(false); const [photoError,setPhotoError]=useState(""); const [photoMessage,setPhotoMessage]=useState("");
+  const [lang,setLang]=useState<Lang>("ar"); const dark=true; const [paletteId,setPaletteId]=useState<PaletteId>("sage"); const [themePicker,setThemePicker]=useState(false); const [client,setClient]=useState<Client|null>(null); const [pets,setPets]=useState<Pet[]>([]); const [visits,setVisits]=useState<Visit[]>([]); const [vaccines,setVaccines]=useState<Vaccine[]>([]); const [financialSummary,setFinancialSummary]=useState<FinancialSummary|null>(null); const [selected,setSelected]=useState(""); const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [settings,setSettings]=useState(false); const [addPet,setAddPet]=useState(false); const [petForm,setPetForm]=useState({name:"",species:"",gender:"",birth_date:"",breed:"",color:""}); const [savingPet,setSavingPet]=useState(false); const [petFormError,setPetFormError]=useState(""); const [reminderSaving,setReminderSaving]=useState(false); const [reminderNotice,setReminderNotice]=useState(""); const [photoBusy,setPhotoBusy]=useState(false); const [photoError,setPhotoError]=useState(""); const [photoMessage,setPhotoMessage]=useState("");
   const lastActivityPingAt=useRef(0);
 
   useEffect(()=>{
@@ -639,7 +645,7 @@ export default function ClientInterfaceIdPage(){
 
       const financial=await db.rpc("vetra_get_owner_financial_summary",{p_client_id:clientId});
       const financialRow=Array.isArray(financial.data)?financial.data[0]:financial.data;
-      setFinancialSummary(financial.error||!financialRow?{due_amount:0,credit_amount:0}:{due_amount:Number(financialRow.due_amount||0),credit_amount:Number(financialRow.credit_amount||0)});
+      setFinancialSummary(financial.error||!financialRow?null:{due_amount:Number(financialRow.due_amount||0),credit_amount:Number(financialRow.credit_amount||0)});
 
       if (Date.now() - lastActivityPingAt.current >= 45_000) {
         lastActivityPingAt.current = Date.now();
@@ -706,19 +712,11 @@ export default function ClientInterfaceIdPage(){
     window.addEventListener("storage", onStorage);
     document.addEventListener("visibilitychange", refresh);
 
-    // Keep the owner dashboard in sync with new visits made in another tab
-    // or from the doctor interface. This runs only while the page is visible
-    // and never shows the global loading state.
-    const syncTimer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void loadDashboard(false);
-    }, 10000);
-
     return () => {
       window.removeEventListener("focus", refresh);
       window.removeEventListener("pageshow", refresh);
       window.removeEventListener("storage", onStorage);
       document.removeEventListener("visibilitychange", refresh);
-      window.clearInterval(syncTimer);
     };
   },[clientId,router]);
 
@@ -761,6 +759,7 @@ export default function ClientInterfaceIdPage(){
   ] : [];
 
   type VaccinationCandidate = {
+    key: "viral" | "rabies" | "deworm" | "parasite";
     name: string;
     due: string;
     sort: number;
@@ -769,11 +768,11 @@ export default function ClientInterfaceIdPage(){
 
   const vaccinationCandidates: VaccinationCandidate[] = catProtocol
     ? [
-        { name: catProtocol.viral.reset ? (lang === "ar" ? "إعادة الفيروسي" : "Restart viral vaccine") : t.scoreViral, due: catProtocol.viral.due || todayDateOnly(), sort: 0, status: catProtocol.viral.status },
-        { name: catProtocol.rabies.status === "overdue" ? (lang === "ar" ? "السعار — متأخر" : "Rabies — overdue") : t.scoreRabies, due: catProtocol.rabies.due || todayDateOnly(), sort: 0, status: catProtocol.rabies.status },
-        { name: catProtocol.deworm.reset ? (lang === "ar" ? "إعادة الديدان" : "Restart deworming") : t.scoreDeworm, due: catProtocol.deworm.due || todayDateOnly(), sort: 0, status: catProtocol.deworm.status },
+        { key: "viral" as const, name: catProtocol.viral.reset ? (lang === "ar" ? "إعادة الفيروسي" : "Restart viral vaccine") : t.scoreViral, due: catProtocol.viral.due || todayDateOnly(), sort: 0, status: catProtocol.viral.status },
+        { key: "rabies" as const, name: catProtocol.rabies.status === "overdue" ? (lang === "ar" ? "السعار — متأخر" : "Rabies — overdue") : t.scoreRabies, due: catProtocol.rabies.due || todayDateOnly(), sort: 0, status: catProtocol.rabies.status },
+        { key: "deworm" as const, name: catProtocol.deworm.reset ? (lang === "ar" ? "إعادة الديدان" : "Restart deworming") : t.scoreDeworm, due: catProtocol.deworm.due || todayDateOnly(), sort: 0, status: catProtocol.deworm.status },
         ...(catProtocol.parasite.due
-          ? [{ name: t.scoreParasite, due: catProtocol.parasite.due, sort: 0, status: catProtocol.parasite.status }]
+          ? [{ key: "parasite" as const, name: t.scoreParasite, due: catProtocol.parasite.due, sort: 0, status: catProtocol.parasite.status }]
           : []),
       ].sort((a,b) => {
         const rank = (status: ProtocolState) => status === "overdue" ? 0 : status === "due" ? 1 : status === "grace" ? 2 : status === "current" ? 3 : 4;
@@ -786,11 +785,43 @@ export default function ClientInterfaceIdPage(){
   const due = next ? daysUntil(next.due) : null;
   const timeline=[...pv.map(x=>({id:`v${x.id}`,date:x.visit_date,type:"visit",title:x.reason|| (lang==="ar"?"زيارة":"Visit"),sub:x.diagnosis||x.examination||x.notes||""})),...px.filter(x=>x.administered_at).map(x=>({id:`x${x.id}`,date:x.administered_at!,type:"vaccine",title:clientVaccineLabel(x,lang),sub:x.next_dose_at?`${t.next}: ${dateText(x.next_dose_at,lang)}`:t.completed}))].sort((a,b)=>+new Date(b.date)-+new Date(a.date)).slice(0,8);
 
+  async function setVaccineReminder() {
+    if (!next || !pet || reminderSaving) return;
+    setReminderSaving(true);
+    setReminderNotice("");
+    try {
+      const ownerSession = getOwnerSession();
+      if (!ownerSession.id || ownerSession.id !== clientId || !ownerSession.code || !ownerSession.phone) {
+        throw new Error(lang === "ar" ? "انتهت الجلسة. سجّل الدخول مرة أخرى." : "Your session expired. Please sign in again.");
+      }
+      const dueDate = next.due.slice(0, 10);
+      const response = await fetch("/api/push/reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientCode: ownerSession.code,
+          phone: ownerSession.phone,
+          petId: pet.id,
+          protocolKey: next.key,
+          dueDate,
+          scheduledAt: reminderSchedule(dueDate),
+          language: lang,
+        }),
+      });
+      if (!response.ok) throw new Error("Reminder request failed.");
+      setReminderNotice(lang === "ar" ? "تم حفظ تذكير الجرعة القادمة." : "Your next-dose reminder has been saved.");
+    } catch {
+      setReminderNotice(lang === "ar" ? "تعذر حفظ التذكير. حاول مرة أخرى." : "Couldn't save the reminder. Please try again.");
+    } finally {
+      setReminderSaving(false);
+    }
+  }
+
   const toggleLang=()=>{const n=lang==="ar"?"en":"ar";setLang(n);localStorage.setItem("vetra-language",n)}; const selectPalette=(id:PaletteId)=>{setPaletteId(id);localStorage.setItem("vetra-client-palette",id);setThemePicker(false)}; const logout=()=>{localStorage.removeItem("vetra-client-id");localStorage.removeItem("vetra-client-code");localStorage.removeItem("vetra-client-phone");sessionStorage.removeItem("vetra-client-id");sessionStorage.removeItem("vetra-client-code");sessionStorage.removeItem("vetra-client-phone");router.replace("/client-interface/login")};
 
   async function createPet(){
-    setError("");
-    if(!petForm.name.trim()){setError(t.required);return;}
+    setPetFormError("");
+    if(!petForm.name.trim()){setPetFormError(t.required);return;}
     setSavingPet(true);
     try{
       const ownerSession=getOwnerSession();
@@ -815,7 +846,7 @@ export default function ClientInterfaceIdPage(){
       setAddPet(false);
       window.scrollTo({top:0,behavior:"smooth"});
     }catch(e){
-      setError(e instanceof Error?e.message:"Failed to add pet.");
+      setPetFormError(e instanceof Error?e.message:"Failed to add pet.");
     }finally{
       setSavingPet(false);
     }
@@ -967,7 +998,7 @@ export default function ClientInterfaceIdPage(){
     <div className="relative z-10 mx-auto max-w-7xl px-4 pb-28 pt-4 sm:px-6 lg:px-8">
       <header className="sticky top-0 z-40 mb-6 flex items-center justify-between py-3 backdrop-blur-xl"><div className={dark?"":"rounded-xl bg-[#10251f] p-1.5 shadow-sm"}><Image src="/vetra-logo-full.png" alt="VETRA" width={992} height={830} priority className="h-14 w-[68px] object-contain sm:h-16 sm:w-[76px]"/></div><div className="flex items-center gap-2"><button onClick={toggleLang} className={dark?"rounded-full border border-white/10 bg-white/[.05] px-3 py-2 text-xs font-bold":"rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold"}>{t.language}</button><div className="relative"><button type="button" onClick={()=>setThemePicker(value=>!value)} aria-expanded={themePicker} aria-label={lang==="ar"?"ألوان الصفحة":"Page themes"} title={lang==="ar"?"ألوان الصفحة":"Page themes"} className={dark?"flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[.05] text-cyan-200":"flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-cyan-800"}><UiIcon name="palette" className="h-[18px] w-[18px]"/></button>{themePicker&&<div dir={lang==="ar"?"rtl":"ltr"} className="absolute end-0 top-12 z-[80] w-64 rounded-2xl border border-white/10 bg-white p-3 shadow-2xl" style={{color:colors.text}}><div className="mb-2 px-1 text-xs font-black text-slate-300">{lang==="ar"?"اختار ألوان الصفحة":"Choose page colors"}</div><div className="space-y-1.5">{(Object.keys(PAGE_PALETTES) as PaletteId[]).map(id=>{const option=PAGE_PALETTES[id];return <button key={id} type="button" onClick={()=>selectPalette(id)} aria-pressed={paletteId===id} className={`flex w-full items-center gap-3 rounded-xl border px-2.5 py-2 text-start transition ${paletteId===id?"border-cyan-300/60 bg-cyan-300/10":"border-slate-200 hover:bg-slate-50"}`}><span aria-hidden="true" className="h-8 w-12 shrink-0 rounded-lg border border-slate-200" style={{background:`linear-gradient(135deg,${option.swatches.join(",")})`}}/><span className="flex-1 text-xs font-bold">{lang==="ar"?option.ar:option.en}</span>{paletteId===id&&<span aria-hidden="true" className="text-cyan-300">✓</span>}</button>})}</div></div>}</div><PushNotificationsButton audience="owner" language={lang} darkMode={dark}/><button onClick={()=>setSettings(true)} aria-label={t.settings} className={dark?"flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[.05]":"flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white"}><UiIcon name="settings"/></button></div></header>
 
-      <section className="mb-5 grid gap-3 sm:grid-cols-2"><div className={dark?"rounded-2xl border border-amber-300/20 bg-amber-300/[.06] p-4":"rounded-2xl border border-amber-200 bg-amber-50 p-4"}><div className={`text-xs font-bold ${dark?"text-amber-200":"text-amber-800"}`}>{t.dueAmount}</div><div className="mt-2 text-2xl font-black">{financialSummary.due_amount.toFixed(2)} EGP</div></div><div className={dark?"rounded-2xl border border-emerald-300/20 bg-emerald-300/[.06] p-4":"rounded-2xl border border-emerald-200 bg-emerald-50 p-4"}><div className={`text-xs font-bold ${dark?"text-emerald-200":"text-emerald-800"}`}>{t.creditAmount}</div><div className="mt-2 text-2xl font-black">{financialSummary.credit_amount.toFixed(2)} EGP</div></div></section>
+      <section className="mb-5 grid gap-3 sm:grid-cols-2"><div className={dark?"rounded-2xl border border-amber-300/20 bg-amber-300/[.06] p-4":"rounded-2xl border border-amber-200 bg-amber-50 p-4"}><div className={`text-xs font-bold ${dark?"text-amber-200":"text-amber-800"}`}>{t.dueAmount}</div><div className="mt-2 text-2xl font-black">{financialSummary ? `${financialSummary.due_amount.toFixed(2)} EGP` : lang === "ar" ? "تعذر تحميل البيانات" : "Unable to load"}</div></div><div className={dark?"rounded-2xl border border-emerald-300/20 bg-emerald-300/[.06] p-4":"rounded-2xl border border-emerald-200 bg-emerald-50 p-4"}><div className={`text-xs font-bold ${dark?"text-emerald-200":"text-emerald-800"}`}>{t.creditAmount}</div><div className="mt-2 text-2xl font-black">{financialSummary ? `${financialSummary.credit_amount.toFixed(2)} EGP` : lang === "ar" ? "تعذر تحميل البيانات" : "Unable to load"}</div></div></section>
       <section className="grid gap-5 lg:grid-cols-[1fr_360px]"><div className={dark?"rounded-[2rem] border border-white/[.07] bg-gradient-to-br from-white/[.08] to-white/[.03] p-5 shadow-2xl sm:p-7":"rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl sm:p-7"}><p className={`text-sm font-bold ${dark?"text-cyan-300":"text-cyan-800"}`}>{t.welcome}</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">{client?.name||"VETRA"}</h1><p className={`mt-3 text-sm leading-7 ${dark?"text-slate-300":"text-slate-600"}`}>{t.allCare}</p>
         {pet&&<div className="mt-6 grid gap-4 md:grid-cols-[1.1fr_.9fr]"><div className="rounded-[1.7rem] bg-gradient-to-br from-[#0e2330] to-[#10142a] p-4 text-white sm:p-5"><div className="flex items-center gap-4"><PetAvatar pet={pet} className="h-24 w-24 rounded-[1.5rem]" dark={dark}/><div className="min-w-0"><div className="text-xs font-bold text-cyan-300">{t.selected}</div><div className="mt-1 truncate text-2xl font-black">{pet.name}</div><div className="mt-1 text-xs text-slate-400">{species(pet.species,lang)} • {pet.gender==="Male"?t.male:pet.gender==="Female"?t.female:pet.gender||t.unknown} • {age(pet.birth_date,lang)}</div></div></div>
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -1007,12 +1038,12 @@ export default function ClientInterfaceIdPage(){
           </div>
           {catCareScore !== null && scoreRemaining > 0 && <div className={`mt-3 text-center text-[10px] font-bold ${dark?"text-slate-400":"text-slate-600"}`}>{lang==="ar"?`إيه اللي ناقص؟ تعالى كمّل ${scoreRemaining} ${t.scoreMissing}`: `${scoreRemaining} ${t.scoreMissing} to go — can you reach 10/10?`}</div>}
         </div></div>
-        <div className={dark?"rounded-[1.7rem] border border-white/[.08] bg-white/[.05] p-5":"rounded-[1.7rem] border border-slate-200 bg-white p-5 shadow-sm"}><div className="flex items-center justify-between gap-4"><div><div className={`text-xs font-bold ${dark?"text-cyan-300":"text-cyan-800"}`}>{t.next}</div><div className="mt-2 text-lg font-black">{next?.name||t.none}</div>{next?.due&&<div className={`mt-1 text-xs ${dark?"text-slate-300":"text-slate-600"}`}>{dateText(next.due,lang)}</div>}</div><Countdown days={due} lang={lang} status={next?.status || null} dark={dark}/></div><button onClick={()=>next?.due&&alert(lang==="ar"?"التذكير هيتوصل بنظام الإشعارات في الخطوة التالية.":"Reminder notifications will be connected in the next step.")} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-xs font-black text-slate-950"><UiIcon name="bell" className="h-4 w-4"/>{t.reminder}</button></div></div>}
+        <div className={dark?"rounded-[1.7rem] border border-white/[.08] bg-white/[.05] p-5":"rounded-[1.7rem] border border-slate-200 bg-white p-5 shadow-sm"}><div className="flex items-center justify-between gap-4"><div><div className={`text-xs font-bold ${dark?"text-cyan-300":"text-cyan-800"}`}>{t.next}</div><div className="mt-2 text-lg font-black">{next?.name||t.none}</div>{next?.due&&<div className={`mt-1 text-xs ${dark?"text-slate-300":"text-slate-600"}`}>{dateText(next.due,lang)}</div>}</div><Countdown days={due} lang={lang} status={next?.status || null} dark={dark}/></div><button type="button" onClick={() => void setVaccineReminder()} disabled={!next?.due || reminderSaving} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"><UiIcon name="bell" className="h-4 w-4"/>{reminderSaving ? (lang === "ar" ? "جاري حفظ التذكير..." : "Saving reminder...") : t.reminder}</button>{reminderNotice && <p role="status" className="mt-2 text-xs text-cyan-300">{reminderNotice}</p>}</div></div>}
       </div>
       <div id="pets-section" className={dark ? "min-w-0 rounded-[2rem] border border-white/[.08] bg-white/[.04] p-4 sm:p-5" : "min-w-0 rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5"}>
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="min-w-0"><h2 className="text-lg font-black">{t.pets}</h2><p className={`mt-1 text-xs ${dark ? "text-slate-300" : "text-slate-600"}`}>{pets.length} {t.count}</p></div>
-          <button onClick={() => setAddPet(true)} className="shrink-0 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2.5 text-xs font-black text-slate-950">+ {t.add}</button>
+          <button onClick={() => { setPetFormError(""); setAddPet(true); }} className="shrink-0 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2.5 text-xs font-black text-slate-950">+ {t.add}</button>
         </div>
         <div className="mt-4 max-h-[330px] min-w-0 space-y-2 overflow-y-auto pe-1">
           {pets.map((p) => (
@@ -1025,7 +1056,7 @@ export default function ClientInterfaceIdPage(){
               <button type="button" onClick={() => router.push(`/client-interface/${clientId}/pets/${p.id}`)} aria-label={`${lang === "ar" ? "فتح ملف" : "Open profile"} ${p.name}`} title={lang === "ar" ? "فتح الملف الكامل" : "Open full profile"} className={`flex w-10 shrink-0 items-center justify-center rounded-xl border text-lg transition ${dark?"border-white/10 text-slate-300 hover:bg-white/[.08]":"border-slate-200 text-slate-600 hover:bg-white"}`}>‹</button>
             </div>
           ))}
-          <button type="button" onClick={() => setAddPet(true)} className={`w-full rounded-2xl border border-dashed p-4 text-xs font-black ${dark?"border-cyan-300/30 bg-cyan-300/[.06] text-cyan-200":"border-cyan-700/30 bg-cyan-50 text-cyan-900"}`}>+ {t.add}</button>
+          <button type="button" onClick={() => { setPetFormError(""); setAddPet(true); }} className={`w-full rounded-2xl border border-dashed p-4 text-xs font-black ${dark?"border-cyan-300/30 bg-cyan-300/[.06] text-cyan-200":"border-cyan-700/30 bg-cyan-50 text-cyan-900"}`}>+ {t.add}</button>
         </div>
       </div></section>
 
@@ -1071,11 +1102,11 @@ export default function ClientInterfaceIdPage(){
     </div></nav>
 
     {settings&&<div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center"><div className={dark?"w-full max-w-md rounded-[2rem] border border-white/10 bg-[#0b1622] p-5 text-white shadow-2xl":"w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl"}><div className="flex items-center justify-between"><h2 className="text-xl font-black">{t.settings}</h2><button onClick={()=>setSettings(false)} aria-label={t.close} className={`flex h-9 w-9 items-center justify-center rounded-full ${dark ? "bg-white/5 text-slate-300" : "bg-slate-100 text-slate-700"}`}>✕</button></div><div className="mt-5 space-y-2"><button onClick={toggleLang} className={dark?"flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[.04] p-4":"flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4"}><span className="font-black">Language / اللغة</span><span className={dark?"text-cyan-200":"text-cyan-800"}>{lang==="ar"?"عربي":"English"}</span></button><button onClick={logout} className="flex w-full items-center justify-between rounded-2xl border border-rose-400/10 bg-rose-400/[.05] p-4 text-rose-300"><span className="font-black">{t.logout}</span><span>↪</span></button></div></div></div>}
-    {addPet&&<div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center"><div dir={lang==="ar"?"rtl":"ltr"} className={dark?"w-full max-w-md max-h-[92vh] overflow-y-auto rounded-[2rem] border border-white/10 bg-[#0b1622] p-6 text-white shadow-2xl":"w-full max-w-md max-h-[92vh] overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl"}><div className="flex items-center justify-between"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300"><UiIcon name="paw" className="h-6 w-6"/></div><button onClick={()=>setAddPet(false)} aria-label={t.close} className={dark?"flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-slate-300":"flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-700"}>✕</button></div><h2 className="mt-4 text-2xl font-black">{t.addTitle}</h2><p className={`mt-2 text-sm leading-7 ${dark ? "text-slate-300" : "text-slate-600"}`}>{t.addNote}</p><div className="mt-5 space-y-3">
+    {addPet&&<div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center"><div dir={lang==="ar"?"rtl":"ltr"} className={dark?"w-full max-w-md max-h-[92vh] overflow-y-auto rounded-[2rem] border border-white/10 bg-[#0b1622] p-6 text-white shadow-2xl":"w-full max-w-md max-h-[92vh] overflow-y-auto rounded-[2rem] border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl"}><div className="flex items-center justify-between"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300"><UiIcon name="paw" className="h-6 w-6"/></div><button onClick={()=>{setPetFormError("");setAddPet(false);}} aria-label={t.close} className={dark?"flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-slate-300":"flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-700"}>✕</button></div><h2 className="mt-4 text-2xl font-black">{t.addTitle}</h2><p className={`mt-2 text-sm leading-7 ${dark ? "text-slate-300" : "text-slate-600"}`}>{t.addNote}</p>{petFormError&&<p role="alert" className="mt-3 rounded-xl border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-300">{petFormError}</p>}<div className="mt-5 space-y-3">
         <div><label className={`mb-1.5 block text-xs font-bold ${dark?"text-slate-300":"text-slate-700"}`}>{t.name} *</label><input value={petForm.name} onChange={e=>setPetForm(v=>({...v,name:e.target.value}))} placeholder={t.name} className={dark?"w-full rounded-2xl border border-white/10 bg-white/[.04] px-4 py-3 outline-none focus:border-cyan-400":"w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-cyan-400"}/></div>
         <div><label className={`mb-1.5 block text-xs font-bold ${dark?"text-slate-300":"text-slate-700"}`}>{t.species}</label><div className="grid grid-cols-4 gap-2"><button type="button" onClick={()=>setPetForm(x=>({...x,species:""}))} className={!petForm.species?"rounded-2xl border border-cyan-400 bg-cyan-400/10 px-3 py-3 text-sm font-black":"rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3 text-sm font-bold"}>{lang==="ar"?"غير محدد":"Not specified"}</button>{[["cat",t.cat],["dog",t.dog],["other",t.other]].map(([v,label])=><button type="button" key={v} onClick={()=>setPetForm(x=>({...x,species:v}))} className={petForm.species===v?"rounded-2xl border border-cyan-400 bg-cyan-400/10 px-3 py-3 text-sm font-black":"rounded-2xl border border-white/10 bg-white/[.03] px-3 py-3 text-sm font-bold"}>{label}</button>)}</div></div>
         <div className="grid grid-cols-2 gap-3"><div><label className={`mb-1.5 block text-xs font-bold ${dark?"text-slate-300":"text-slate-700"}`}>{t.gender}</label><select value={petForm.gender} onChange={e=>setPetForm(v=>({...v,gender:e.target.value}))} className={dark?"w-full rounded-2xl border border-white/10 bg-[#101c28] px-4 py-3 outline-none":"w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none"}><option value="">{lang==="ar"?"غير محدد":"Not specified"}</option><option value="Female">{t.female}</option><option value="Male">{t.male}</option></select></div><div><label className={`mb-1.5 block text-xs font-bold ${dark?"text-slate-300":"text-slate-700"}`}>{t.birth}</label><input type="date" value={petForm.birth_date} onChange={e=>setPetForm(v=>({...v,birth_date:e.target.value}))} className={dark?"w-full rounded-2xl border border-white/[.04] bg-white/[.04] px-4 py-3 outline-none":"w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none"}/></div></div>
         <div className="grid grid-cols-2 gap-3"><div><label className={`mb-1.5 block text-xs font-bold ${dark?"text-slate-300":"text-slate-700"}`}>{t.breed}</label><input value={petForm.breed} onChange={e=>setPetForm(v=>({...v,breed:e.target.value}))} className={dark?"w-full rounded-2xl border border-white/10 bg-white/[.04] px-4 py-3 outline-none":"w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none"}/></div><div><label className={`mb-1.5 block text-xs font-bold ${dark?"text-slate-300":"text-slate-700"}`}>{t.color}</label><input value={petForm.color} onChange={e=>setPetForm(v=>({...v,color:e.target.value}))} className={dark?"w-full rounded-2xl border border-white/10 bg-white/[.04] px-4 py-3 outline-none":"w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none"}/></div></div>
-      </div><div className="mt-5 grid grid-cols-2 gap-2"><button disabled={savingPet} onClick={()=>setAddPet(false)} className={dark?"rounded-2xl border border-white/10 px-4 py-3 font-bold text-slate-400":"rounded-2xl border border-slate-200 px-4 py-3 font-bold text-slate-500"}>{t.cancel}</button><button disabled={savingPet} onClick={createPet} className="rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 font-black text-slate-950 disabled:opacity-60">{savingPet?t.saving:t.save}</button></div></div></div>}
+      </div><div className="mt-5 grid grid-cols-2 gap-2"><button disabled={savingPet} onClick={()=>{setPetFormError("");setAddPet(false);}} className={dark?"rounded-2xl border border-white/10 px-4 py-3 font-bold text-slate-400":"rounded-2xl border border-slate-200 px-4 py-3 font-bold text-slate-500"}>{t.cancel}</button><button disabled={savingPet} onClick={createPet} className="rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 font-black text-slate-950 disabled:opacity-60">{savingPet?t.saving:t.save}</button></div></div></div>}
   </main>;
 }

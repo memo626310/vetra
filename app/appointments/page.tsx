@@ -1060,6 +1060,7 @@ export default function AppointmentsPage() {
             <button onClick={() => setLanguage(language === "ar" ? "en" : "ar")} className={`rounded-2xl border px-4 py-3 text-sm font-bold ${darkMode ? "border-white/10 bg-[#171A20]" : "border-slate-200 bg-white"}`}>🌐 {t.language}</button>
             <button onClick={() => setDarkMode((v) => !v)} className={`rounded-2xl border px-4 py-3 text-sm font-bold ${darkMode ? "border-white/10 bg-[#171A20]" : "border-slate-200 bg-white"}`}>{darkMode ? "☀️" : "🌙"}</button>
             <ClinicCacheRefreshButton ar={language === "ar"} darkMode={darkMode} loading={refreshingCache} onRefresh={() => void refreshCache()} />
+            <Link href="/settings/clinic-hours" className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${darkMode ? "border-white/10 bg-[#171A20] hover:bg-[#1D2129]" : "border-slate-200 bg-white hover:bg-slate-50"}`}>{language === "ar" ? "ساعات عمل العيادة" : "Clinic hours"}</Link>
             <button onClick={openNewAppointment} className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-blue-700">+ {t.newAppointment}</button>
           </div>
         </header>
