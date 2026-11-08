@@ -42,6 +42,7 @@ type MedicationBillLine = { id: string; name: string };
 type VisitAttachmentCategory = "analysis" | "xray" | "prescription";
 type VisitAttachmentDraft = { id: string; file: File; category: VisitAttachmentCategory };
 type ExistingVisitAttachment = { id: string; file_name: string; storage_path: string; category: VisitAttachmentCategory; url: string };
+type PetLabHistoryItem = { id: string; title: string; status: string | null; performed_at: string | null; created_at: string; attachment: { id: string; file_name: string; mime_type: string } | null };
 type VaccineStockProduct = { id: string; name: string; active_ingredient: string | null; quantity: number; unit: string | null; retail_price: number; barcode?: string | null; category_id?: string | null };
 
 const NEW_VISIT_DRAFT_MAX_AGE_MS = 5 * 60 * 1000;
@@ -92,6 +93,7 @@ export default function NewVisitPage() {
 
   const [petDetails, setPetDetails] = useState<PetDetails | null>(null);
   const [visits, setVisits] = useState<Visit[]>([]);
+  const [petLabHistory, setPetLabHistory] = useState<PetLabHistoryItem[]>([]);
 
   const [loadingClients, setLoadingClients] = useState(true);
   const [loadingPets, setLoadingPets] = useState(false);
@@ -291,6 +293,39 @@ export default function NewVisitPage() {
   }, [selectedClientId, editVisitId, draftRestored, permissionsLoaded, can]);
 
   useEffect(() => {
+    if (!permissionsLoaded || !can("medical_records", "view") || !selectedPetId) {
+      setPetLabHistory([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const db = await getClinicDb();
+        const { data: records, error: recordsError } = await db.from("pet_medical_records")
+          .select("id,title,status,performed_at,created_at")
+          .eq("pet_id", selectedPetId).eq("record_type", "lab")
+          .order("created_at", { ascending: false }).limit(20);
+        if (recordsError) throw recordsError;
+        const rows = records || [];
+        const ids = rows.map((record) => record.id);
+        const attachmentsResult = ids.length
+          ? await db.from("pet_medical_record_attachments").select("id,record_id,file_name,mime_type").in("record_id", ids)
+          : { data: [], error: null };
+        if (attachmentsResult.error) throw attachmentsResult.error;
+        if (cancelled) return;
+        const attachmentMap = new Map((attachmentsResult.data || []).map((attachment) => [attachment.record_id, attachment]));
+        setPetLabHistory(rows.map((record) => ({ ...record, attachment: attachmentMap.get(record.id) || null })) as PetLabHistoryItem[]);
+      } catch (historyError) {
+        if (!cancelled) {
+          console.warn("NEW VISIT LAB HISTORY LOAD ERROR:", historyError);
+          setPetLabHistory([]);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [permissionsLoaded, can, selectedPetId]);
+
+  useEffect(() => {
     if (!permissionsLoaded || !can("medical_records", "create")) return;
     if (editVisitId || !draftRestored || !started || petDetails) return;
 
@@ -340,6 +375,21 @@ export default function NewVisitPage() {
     if (!permissionsLoaded || !can("medical_records", "edit")) return;
     if (editVisitId) void loadVisitForEdit(editVisitId);
   }, [editVisitId, permissionsLoaded, can]);
+
+  async function openPetLabReport(attachmentId: string) {
+    if (!selectedPetId) return;
+    try {
+      const { data } = await vetraCore.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error(language === "ar" ? "انتهت الجلسة. سجل الدخول مرة أخرى." : "Your session expired. Please sign in again.");
+      const response = await fetch(`/api/pets/${encodeURIComponent(selectedPetId)}/lab-results?attachment_id=${encodeURIComponent(attachmentId)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const payload = await response.json() as { url?: string; error?: string };
+      if (!response.ok || !payload.url) throw new Error(payload.error || (language === "ar" ? "تعذر فتح التقرير." : "Could not open report."));
+      window.open(payload.url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : (language === "ar" ? "تعذر فتح التقرير." : "Could not open report."));
+    }
+  }
 
   async function loadClients(forceRefresh = false) {
     setLoadingClients(true);
@@ -1996,6 +2046,8 @@ export default function NewVisitPage() {
                 language={language}
                 darkMode={darkMode}
                 visitReason={reason}
+                labHistory={petLabHistory}
+                onOpenLabReport={(attachmentId) => void openPetLabReport(attachmentId)}
               />
             </NewVisitEditorSection>
 

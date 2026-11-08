@@ -1,0 +1,1826 @@
+[
+  {
+    "id": "7036",
+    "name": "Complete Blood Picture (CBC)(VET)",
+    "category": "Haematology",
+    "clinicPrice": "88",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7444",
+    "name": "Complete Blood Picture (Avian CBC) (VET)",
+    "category": "Haematology",
+    "clinicPrice": "149.5",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7028",
+    "name": "Reticulocyte Hemoglobin (RET-HE)(VET)",
+    "category": "Haematology",
+    "clinicPrice": "279.4",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7033",
+    "name": "Urine Analysis(VET)",
+    "category": "fluid examination",
+    "clinicPrice": "55.2",
+    "sampleType": "Urine",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7035",
+    "name": "Semen Analysis(VET)",
+    "category": "fluid examination",
+    "clinicPrice": "149.5",
+    "sampleType": "Semen",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7475",
+    "name": "Body Fluid Examination (VET)",
+    "category": "fluid examination",
+    "clinicPrice": "181.5",
+    "sampleType": "Body fluid",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7490",
+    "name": "Body Fluid Analysis (VET)",
+    "category": "fluid examination",
+    "clinicPrice": "167.2",
+    "sampleType": "Body fluid",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7034",
+    "name": "Stool Analysis(VET)",
+    "category": "Parasitology examination",
+    "clinicPrice": "52.9",
+    "sampleType": "Stool",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7107",
+    "name": "Blood Parasite(VET)",
+    "category": "Parasitology examination",
+    "clinicPrice": "119.6",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7436",
+    "name": "Skin scraping (VET)",
+    "category": "Parasitology examination",
+    "clinicPrice": "119.6",
+    "sampleType": "Slide",
+    "turnaround": "w~ 48hrs"
+  },
+  {
+    "id": "7437",
+    "name": "Vaginal Cytology (VET)",
+    "category": "Parasitology examination",
+    "clinicPrice": "149.5",
+    "sampleType": "swap",
+    "turnaround": "w~ 48hrs"
+  },
+  {
+    "id": "7499",
+    "name": "Occult Blood In Stool (VET)",
+    "category": "Parasitology examination",
+    "clinicPrice": "202.4",
+    "sampleType": "Stool",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7500",
+    "name": "Occult blood in nipple discharge (Benzidine Test) (VET)",
+    "category": "Parasitology examination",
+    "clinicPrice": "172.5",
+    "sampleType": "Nipple discharge",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7018",
+    "name": "Blood Urea(VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "42.55",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6947",
+    "name": "Creatinine, Serum(VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "36.8",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7125",
+    "name": "BUN (VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "42.9",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6948",
+    "name": "Uric acid(VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "50.6",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7023",
+    "name": "Albumin in 24 hrs urine(VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "74.75",
+    "sampleType": "24hrs Urine",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7019",
+    "name": "Microalbuminurea (Random)(VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "93.5",
+    "sampleType": "Urine",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7438",
+    "name": "BUN/Creatinine Ratio (VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "97.75",
+    "sampleType": "Urine",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7462",
+    "name": "A/G ratio (VET)",
+    "category": "Liver Functions",
+    "clinicPrice": "112.7",
+    "sampleType": "",
+    "turnaround": ""
+  },
+  {
+    "id": "7491",
+    "name": "Creatinine in urine, random (VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "114.4",
+    "sampleType": "Urine",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7020",
+    "name": "Creatinine Clearance(VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "149.5",
+    "sampleType": "",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7901",
+    "name": "Cortisol / Creatinine Ratio In Urine (VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "313.95",
+    "sampleType": "",
+    "turnaround": ""
+  },
+  {
+    "id": "6949",
+    "name": "Ammonia(VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "138",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7021",
+    "name": "Microalbuminurea (24hrs)(VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "187.45",
+    "sampleType": "24hrs Urine",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7022",
+    "name": "Albumin/ creatinine ratio, Urine(VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "214.5",
+    "sampleType": "Urine",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "8059",
+    "name": "Cystatin C, (VET)",
+    "category": "Kidney Functions",
+    "clinicPrice": "1476.2",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 48hrs"
+  },
+  {
+    "id": "6951",
+    "name": "SGOT (AST)(VET)",
+    "category": "Liver Functions",
+    "clinicPrice": "36.8",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6950",
+    "name": "SGPT (ALT)(VET)",
+    "category": "Liver Functions",
+    "clinicPrice": "36.8",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7126",
+    "name": "Protein - total(VET)",
+    "category": "Liver Functions",
+    "clinicPrice": "42.9",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6955",
+    "name": "Albumin(VET)",
+    "category": "Liver Functions",
+    "clinicPrice": "52.9",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6953",
+    "name": "Alk.phosphatase(VET)",
+    "category": "Liver Functions",
+    "clinicPrice": "52.9",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6956",
+    "name": "Gamma GT(VET)",
+    "category": "Liver Functions",
+    "clinicPrice": "79.2",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6952",
+    "name": "Bilirubin ( T&D )(VET)",
+    "category": "Liver Functions",
+    "clinicPrice": "92",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7466",
+    "name": "Globulin (VET)",
+    "category": "Liver Functions",
+    "clinicPrice": "107.8",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7464",
+    "name": "Bile acids total (VET)",
+    "category": "Liver Functions",
+    "clinicPrice": "792",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 48hrs"
+  },
+  {
+    "id": "6958",
+    "name": "Cholesterol - Total(VET)",
+    "category": "Lipid profile",
+    "clinicPrice": "52.9",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6960",
+    "name": "HDL-C(VET)",
+    "category": "Lipid profile",
+    "clinicPrice": "97.75",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6959",
+    "name": "Triglyceride(VET)",
+    "category": "Lipid profile",
+    "clinicPrice": "52.9",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6961",
+    "name": "LDL - C(VET)",
+    "category": "Lipid profile",
+    "clinicPrice": "67.85",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6962",
+    "name": "VLDL(VET)",
+    "category": "Lipid profile",
+    "clinicPrice": "202.4",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6957",
+    "name": "Lipid Profile(Chol,Tri,HDL,LDL)(VET)",
+    "category": "Lipid profile",
+    "clinicPrice": "269.1",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6943",
+    "name": "Fasting Blood Glucose(VET)",
+    "category": "Blood Sugar",
+    "clinicPrice": "41.4",
+    "sampleType": "Flouride Tube",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6944",
+    "name": "Glucose After 2 Hours(VET)",
+    "category": "Blood Sugar",
+    "clinicPrice": "41.4",
+    "sampleType": "Flouride Tube",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7469",
+    "name": "Random Blood Glucose (VET)",
+    "category": "Blood Sugar",
+    "clinicPrice": "41.4",
+    "sampleType": "Flouride Tube",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6946",
+    "name": "Fructosamine in Serum (VET)",
+    "category": "Blood Sugar",
+    "clinicPrice": "142.6",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "Run"
+  },
+  {
+    "id": "6945",
+    "name": "Haemoglobin A1C(VET)",
+    "category": "Blood Sugar",
+    "clinicPrice": "149.5",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7468",
+    "name": "Insulin level (Random) in Serum (VET)",
+    "category": "Blood Sugar",
+    "clinicPrice": "174.8",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6985",
+    "name": "Insulin (Fasting) in Serum (VET)",
+    "category": "Blood Sugar",
+    "clinicPrice": "164.45",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6976",
+    "name": "Progesterone in Serum(VET)",
+    "category": "Reproductive Hormones",
+    "clinicPrice": "172.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6969",
+    "name": "Estradiol E2 in Serum(VET)",
+    "category": "Reproductive Hormones",
+    "clinicPrice": "172.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6966",
+    "name": "LH(Luteinizing Hormone) in Serum(VET)",
+    "category": "Reproductive Hormones",
+    "clinicPrice": "172.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6967",
+    "name": "FSH(Follicle Stimulating Hormone) in Serum(VET)",
+    "category": "Reproductive Hormones",
+    "clinicPrice": "172.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6979",
+    "name": "Prolactin in Serum(VET)",
+    "category": "Reproductive Hormones",
+    "clinicPrice": "172.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6971",
+    "name": "Testosterone Free in Serum(VET)",
+    "category": "Reproductive Hormones",
+    "clinicPrice": "172.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6970",
+    "name": "Testosterone in Serum(VET)",
+    "category": "Reproductive Hormones",
+    "clinicPrice": "172.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6968",
+    "name": "Anti Mullerian Hormone-Adult(AMH) in Serum(VET)",
+    "category": "Reproductive Hormones",
+    "clinicPrice": "832.7",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6977",
+    "name": "Cortisol-Am in Serum(VET)",
+    "category": "Endocrine Hormones",
+    "clinicPrice": "218.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6978",
+    "name": "Cortisol-Pm in Serum(VET)",
+    "category": "Endocrine Hormones",
+    "clinicPrice": "218.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7465",
+    "name": "Cortisol (Random ) in Serum (VET)",
+    "category": "Endocrine Hormones",
+    "clinicPrice": "218.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6972",
+    "name": "ACTH am in plasma(VET)",
+    "category": "Endocrine Hormones",
+    "clinicPrice": "262.2",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6973",
+    "name": "ACTH pm in plasma(VET)",
+    "category": "Endocrine Hormones",
+    "clinicPrice": "262.2",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7463",
+    "name": "ACTH ( Random ) (VET)",
+    "category": "Endocrine Hormones",
+    "clinicPrice": "262.2",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6975",
+    "name": "GH Growth Hormone in Serum ( Basal )(VET)",
+    "category": "Endocrine Hormones",
+    "clinicPrice": "194.35",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6974",
+    "name": "Parathyroid Hormone (PTH)(VET)",
+    "category": "Endocrine Hormones",
+    "clinicPrice": "299",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7025",
+    "name": "Aldosterone in Serum (VET)",
+    "category": "Endocrine Hormones",
+    "clinicPrice": "345",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6980",
+    "name": "Free T3 in Serum(VET)",
+    "category": "Thyroid profile",
+    "clinicPrice": "142.6",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6982",
+    "name": "Free T4 in Serum(VET)",
+    "category": "Thyroid profile",
+    "clinicPrice": "142.6",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6981",
+    "name": "T3 Total in Serum(VET)",
+    "category": "Thyroid profile",
+    "clinicPrice": "142.6",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6983",
+    "name": "T4 Total in Serum(VET)",
+    "category": "Thyroid profile",
+    "clinicPrice": "142.6",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6984",
+    "name": "TSH in Serum(VET)",
+    "category": "Thyroid profile",
+    "clinicPrice": "142.6",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6989",
+    "name": "Anti- Thyroid Antibodies(VET)",
+    "category": "Thyroid profile",
+    "clinicPrice": "328.9",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7007",
+    "name": "Amylase(VET)",
+    "category": "Pancreatic enzymes",
+    "clinicPrice": "194.35",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7008",
+    "name": "Lipase(VET)",
+    "category": "Pancreatic enzymes",
+    "clinicPrice": "194.35",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6993",
+    "name": "CEA(VET) - general tumor marker",
+    "category": "Tumer Markers",
+    "clinicPrice": "202.4",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6995",
+    "name": "CA 19-9(VET) - GIT, pancreas tumor marker",
+    "category": "Tumer Markers",
+    "clinicPrice": "258.75",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6996",
+    "name": "CA125(VET) - ovarian tumor marker",
+    "category": "Tumer Markers",
+    "clinicPrice": "230",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6994",
+    "name": "CA15-3(VET) - mammary gland tumor marker",
+    "category": "Tumer Markers",
+    "clinicPrice": "230",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6991",
+    "name": "AFP(VET) - liver tumor marker",
+    "category": "Tumer Markers",
+    "clinicPrice": "247.25",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6992",
+    "name": "PSA (Total & Free)(VET) -Prostate-specific antigen",
+    "category": "Tumer Markers",
+    "clinicPrice": "415.8",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7010",
+    "name": "Troponin I(VET)",
+    "category": "Cardiac enzymes",
+    "clinicPrice": "253",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6964",
+    "name": "CK-MB(VET)",
+    "category": "Cardiac enzymes",
+    "clinicPrice": "194.35",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6963",
+    "name": "CPK - Total(VET)",
+    "category": "Cardiac enzymes",
+    "clinicPrice": "142.6",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6965",
+    "name": "LDH(VET)",
+    "category": "Cardiac enzymes",
+    "clinicPrice": "142.6",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7031",
+    "name": "Activated Partial Thromboplastine Time APTT(VET)",
+    "category": "Coagulation profile",
+    "clinicPrice": "142.6",
+    "sampleType": "Citrate Tube/ Blue",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7030",
+    "name": "Prothrombin Time (PT)(VET)",
+    "category": "Coagulation profile",
+    "clinicPrice": "142.6",
+    "sampleType": "Citrate Tube/ Blue",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7501",
+    "name": "D-dimer (VET)",
+    "category": "Coagulation profile",
+    "clinicPrice": "297",
+    "sampleType": "Citrate Tube/ Blue",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7032",
+    "name": "CRP (Qualitative)(VET)",
+    "category": "Inflammatory markers",
+    "clinicPrice": "44.85",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6990",
+    "name": "CRP (Quantitative)(VET)",
+    "category": "Inflammatory markers",
+    "clinicPrice": "103.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7029",
+    "name": "ESR(VET)",
+    "category": "Inflammatory markers",
+    "clinicPrice": "57.2",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "8060",
+    "name": "B2 Microglobulin in Serum, (VET)",
+    "category": "Inflammatory markers",
+    "clinicPrice": "218.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 48hrs"
+  },
+  {
+    "id": "8080",
+    "name": "Fibrinogen Level (VET)",
+    "category": "Other",
+    "clinicPrice": "253",
+    "sampleType": "Citrate Plasma/ Blue",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "8081",
+    "name": "SAA (Amyloid A) (VET)",
+    "category": "Other",
+    "clinicPrice": "550",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7005",
+    "name": "MG(VET)",
+    "category": "Minerals/ Electrolytes",
+    "clinicPrice": "82.8",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6997",
+    "name": "Calcium(VET)",
+    "category": "Minerals/ Electrolytes",
+    "clinicPrice": "82.8",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6999",
+    "name": "Phosphorous(VET)",
+    "category": "Minerals/ Electrolytes",
+    "clinicPrice": "89.7",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7000",
+    "name": "K+(VET)",
+    "category": "Minerals/ Electrolytes",
+    "clinicPrice": "112.7",
+    "sampleType": "Serum Gel - Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7001",
+    "name": "Na(VET)",
+    "category": "Minerals/ Electrolytes",
+    "clinicPrice": "112.7",
+    "sampleType": "Serum Gel - Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7006",
+    "name": "Chloride(VET)",
+    "category": "Minerals/ Electrolytes",
+    "clinicPrice": "127.65",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6998",
+    "name": "ionized Ca++(VET)",
+    "category": "Minerals/ Electrolytes",
+    "clinicPrice": "136.4",
+    "sampleType": "Serum Gel - Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7024",
+    "name": "Zinc in Blood(VET)",
+    "category": "Minerals/ Electrolytes",
+    "clinicPrice": "165",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7185",
+    "name": "Copper",
+    "category": "Minerals/ Electrolytes",
+    "clinicPrice": "355.95",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7002",
+    "name": "Serum Iron(VET)",
+    "category": "Iorn profile",
+    "clinicPrice": "74.75",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7004",
+    "name": "TIBC(VET)",
+    "category": "Iorn profile",
+    "clinicPrice": "86.25",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7003",
+    "name": "Ferritin(VET)",
+    "category": "Iorn profile",
+    "clinicPrice": "157.3",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7009",
+    "name": "Transferrin saturation(VET)",
+    "category": "Iorn profile",
+    "clinicPrice": "345",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7472",
+    "name": "Vit D 25 Hydroxy Cholecalciferol (VET)",
+    "category": "Yellow(VET)",
+    "clinicPrice": "672.75",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7187",
+    "name": "VIT C (Ascorbic Acid VET)",
+    "category": "Yellow(VET)",
+    "clinicPrice": "4266.5",
+    "sampleType": "Hepain Plasma",
+    "turnaround": "2 weeks"
+  },
+  {
+    "id": "7186",
+    "name": "VIT B1(VET)",
+    "category": "Yellow(VET)",
+    "clinicPrice": "4609.2",
+    "sampleType": "Edta blood",
+    "turnaround": "2 weeks"
+  },
+  {
+    "id": "7017",
+    "name": "Stone Analysis(VET)",
+    "category": "Other tests",
+    "clinicPrice": "149.5",
+    "sampleType": "Stone",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7442",
+    "name": "Histopathology examination large (VET)",
+    "category": "Other tests",
+    "clinicPrice": "472.5",
+    "sampleType": "Tissues",
+    "turnaround": "15 days"
+  },
+  {
+    "id": "7443",
+    "name": "Histopathology examination Medium (VET)",
+    "category": "Other tests",
+    "clinicPrice": "399",
+    "sampleType": "Tissues",
+    "turnaround": "15 days"
+  },
+  {
+    "id": "7012",
+    "name": "Urine Culture and Sensitivity (VET)",
+    "category": "Culture and Sensitivity",
+    "clinicPrice": "148.5",
+    "sampleType": "Urine",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7165",
+    "name": "Nasal Discharge Culture and Sensitivity (VET)",
+    "category": "Culture and Sensitivity",
+    "clinicPrice": "165",
+    "sampleType": "Swap + Discharge",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7489",
+    "name": "Wound Culture and Sensitivity (VET)",
+    "category": "Culture and Sensitivity",
+    "clinicPrice": "236.5",
+    "sampleType": "Swap",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7149",
+    "name": "Vaginal Discharge Culture and sensitivity (VET)",
+    "category": "Culture and Sensitivity",
+    "clinicPrice": "165",
+    "sampleType": "Swap + Discharge",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7150",
+    "name": "Vulval Discharge Culture and Sensitivity (VET)",
+    "category": "Culture and Sensitivity",
+    "clinicPrice": "165",
+    "sampleType": "Swap + Discharge",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7011",
+    "name": "Stool Culture and Sensitivity (VET)",
+    "category": "Culture and Sensitivity",
+    "clinicPrice": "150.7",
+    "sampleType": "Stool",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7478",
+    "name": "Eye Culture and Sensitivity (VET)",
+    "category": "Culture and Sensitivity",
+    "clinicPrice": "156.2",
+    "sampleType": "Swap",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7482",
+    "name": "Ear Discharge Culture and Sensitivity (VET)",
+    "category": "Culture and Sensitivity",
+    "clinicPrice": "176",
+    "sampleType": "Swap + Discharge",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7481",
+    "name": "Nipple Discharge Culture and Sensitivity (VET)",
+    "category": "Culture and Sensitivity",
+    "clinicPrice": "176",
+    "sampleType": "Swap + Discharge",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7402",
+    "name": "Pus culture & senstivity (VET)",
+    "category": "Culture and Sensitivity",
+    "clinicPrice": "275",
+    "sampleType": "Swap",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7473",
+    "name": "Blood Culture and Sensitivity (VET)",
+    "category": "Culture and Sensitivity",
+    "clinicPrice": "301.3",
+    "sampleType": "",
+    "turnaround": "10 Days"
+  },
+  {
+    "id": "7014",
+    "name": "Fungus Examination(VET)",
+    "category": "Fungal Examination",
+    "clinicPrice": "157.3",
+    "sampleType": "Tissue",
+    "turnaround": "2 Days"
+  },
+  {
+    "id": "7477",
+    "name": "Candida Culture (VET)",
+    "category": "Fungal Examination",
+    "clinicPrice": "179.3",
+    "sampleType": "Tissue",
+    "turnaround": "10 Days"
+  },
+  {
+    "id": "7013",
+    "name": "Fungus Culture (VET)",
+    "category": "Fungal Examination",
+    "clinicPrice": "193.6",
+    "sampleType": "Tissue",
+    "turnaround": "3 weeks"
+  },
+  {
+    "id": "7015",
+    "name": "Blood Culture For Fungi(VET)",
+    "category": "Fungal Examination",
+    "clinicPrice": "506",
+    "sampleType": "Blood",
+    "turnaround": "3 weeks"
+  },
+  {
+    "id": "7479",
+    "name": "Gonorrhea Culture (VET)",
+    "category": "Special Culture and Sensitivity",
+    "clinicPrice": "182.6",
+    "sampleType": "N A",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7480",
+    "name": "Mycobactrium TB Culture (VET)",
+    "category": "Special Culture and Sensitivity",
+    "clinicPrice": "209",
+    "sampleType": "N A",
+    "turnaround": "45 Days"
+  },
+  {
+    "id": "7485",
+    "name": "Specific Culture : MRSA (VET)",
+    "category": "Special Culture and Sensitivity",
+    "clinicPrice": "184.8",
+    "sampleType": "N A",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7487",
+    "name": "T.B Culture (VET)",
+    "category": "Special Culture and Sensitivity",
+    "clinicPrice": "271.7",
+    "sampleType": "N A",
+    "turnaround": "45 Days"
+  },
+  {
+    "id": "7483",
+    "name": "Salmonella Culture ( Stool) (VET)",
+    "category": "Special Culture and Sensitivity",
+    "clinicPrice": "370.7",
+    "sampleType": "Stool",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7484",
+    "name": "Shigella Culture ( Stool ) (VET)",
+    "category": "Special Culture and Sensitivity",
+    "clinicPrice": "300.3",
+    "sampleType": "Stool",
+    "turnaround": "3-5 Days"
+  },
+  {
+    "id": "7486",
+    "name": "Specific Cultures: Vibrio Spp. (Stool) (VET)",
+    "category": "Special Culture and Sensitivity",
+    "clinicPrice": "300.3",
+    "sampleType": "Stool",
+    "turnaround": "5-7 Days"
+  },
+  {
+    "id": "7474",
+    "name": "Blood Culture and Sensitivity [Salmonella] (VET)",
+    "category": "Special Culture and Sensitivity",
+    "clinicPrice": "643.5",
+    "sampleType": "",
+    "turnaround": "10 Days"
+  },
+  {
+    "id": "7016",
+    "name": "Bacterial Count (VET)",
+    "category": "MicroBiology Examination",
+    "clinicPrice": "112.7",
+    "sampleType": "Slide",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7488",
+    "name": "WIDAL Test (VET)",
+    "category": "MicroBiology Examination",
+    "clinicPrice": "207.9",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7561",
+    "name": "Bacterial Identification (VET)",
+    "category": "MicroBiology Examination",
+    "clinicPrice": "231",
+    "sampleType": "",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7562",
+    "name": "Bacterial Identification by VITEK (VET)",
+    "category": "MicroBiology Examination",
+    "clinicPrice": "660",
+    "sampleType": "",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7492",
+    "name": "Helicobacter Pylori Antigen In Stool (Quantitative) (VET)",
+    "category": "MicroBiology Examination",
+    "clinicPrice": "254.15",
+    "sampleType": "Stool",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7467",
+    "name": "Helicobacter pylori antibody Titre (VET)",
+    "category": "Other",
+    "clinicPrice": "284.05",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6988",
+    "name": "IgE \"Total\"(VET)",
+    "category": "Immunology",
+    "clinicPrice": "172.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6986",
+    "name": "IgG(VET)",
+    "category": "Immunology",
+    "clinicPrice": "197.8",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "6987",
+    "name": "IgM(VET)",
+    "category": "Immunology",
+    "clinicPrice": "197.8",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7495",
+    "name": "IgE Specific ( Inhalant allergens ) (VET)",
+    "category": "Immunology",
+    "clinicPrice": "1552.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7496",
+    "name": "IgE Specific Food Allergy (20 allergens) (VET)",
+    "category": "Immunology",
+    "clinicPrice": "3049.8",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7497",
+    "name": "IgE Specific Food Allergy (30 allergens) (VET)",
+    "category": "Immunology",
+    "clinicPrice": "1380",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7493",
+    "name": "Coomb's Test \"Direct\" (VET)",
+    "category": "Immunology",
+    "clinicPrice": "187.45",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7494",
+    "name": "Coomb's Test \"Indirect\" (VET)",
+    "category": "Immunology",
+    "clinicPrice": "247.25",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7439",
+    "name": "Rabies Ab titre (VET)",
+    "category": "Immunology",
+    "clinicPrice": "1050",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": ""
+  },
+  {
+    "id": "7027",
+    "name": "Immunophenotyping :CD20(VET)",
+    "category": "Immunology",
+    "clinicPrice": "1342.05",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "5 Days"
+  },
+  {
+    "id": "7026",
+    "name": "Immunophenotyping :CD3(VET)",
+    "category": "Immunology",
+    "clinicPrice": "1606.55",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "5 Days"
+  },
+  {
+    "id": "7132",
+    "name": "Brucella IgG(VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "176",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "2 Days"
+  },
+  {
+    "id": "7133",
+    "name": "Brucella IgM(VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "176",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "2 Days"
+  },
+  {
+    "id": "7476",
+    "name": "Brucella (Ab) spp Test (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "179.4",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "2 Days"
+  },
+  {
+    "id": "7556",
+    "name": "Helicobacter spp. by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Stool",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7557",
+    "name": "Brucella detection by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7558",
+    "name": "Ehrlichia by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7566",
+    "name": "Mycoplasma by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Nasal / genital swab",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7567",
+    "name": "Babesia by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7568",
+    "name": "Theileria by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7569",
+    "name": "Anisakis by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Stool",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7570",
+    "name": "Anaplasma by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7571",
+    "name": "Mites by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Mite/ skin scrap",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7572",
+    "name": "Ticks by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Mite/ skin scrap",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7573",
+    "name": "Neosporum caninum by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Stool",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7574",
+    "name": "Leishmania by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7577",
+    "name": "Eimeria (Coccidiosis by pcr) (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Feces",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7580",
+    "name": "Aspergillus by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "8019",
+    "name": "Trypanosoma Evansi detection by PCR (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "750.75",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "8267",
+    "name": "Chlamydia by PCR (VET)",
+    "category": "SEROLOGY/ Molecular biology",
+    "clinicPrice": "556.5",
+    "sampleType": "Tracheal swab",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7470",
+    "name": "Toxoplasmosis IgG (VET)",
+    "category": "SEROLOGY/ Molecular biology (Pets animal)",
+    "clinicPrice": "218.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7471",
+    "name": "Toxoplasmosis IgM (VET)",
+    "category": "SEROLOGY/ Molecular biology (Pets animal)",
+    "clinicPrice": "218.5",
+    "sampleType": "Serum - Red/ Yellow",
+    "turnaround": "w~ 24hrs"
+  },
+  {
+    "id": "7525",
+    "name": "Toxoplasma By pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology (Pets animal)",
+    "clinicPrice": "577.5",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7551",
+    "name": "Canine parvo by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology (Pets animal)",
+    "clinicPrice": "577.5",
+    "sampleType": "Anal/ rectal swab",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7553",
+    "name": "Canine distemper by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology (Pets animal)",
+    "clinicPrice": "577.5",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7554",
+    "name": "Canine adeno by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology (Pets animal)",
+    "clinicPrice": "577.5",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7555",
+    "name": "Canine/ feline coronavirus by pcr (VET)",
+    "category": "SEROLOGY/ Molecular biology (Pets animal)",
+    "clinicPrice": "577.5",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "8071",
+    "name": "Canine herpesvirus (CHV) (CaHV-1) (VET)",
+    "category": "SEROLOGY/ Molecular biology (Pets animal)",
+    "clinicPrice": "577.5",
+    "sampleType": "",
+    "turnaround": ""
+  },
+  {
+    "id": "7552",
+    "name": "Feline panleukopenia (Feline parvovirus) by pcr (VET)",
+    "category": "Canine Parainfluenza (VET)",
+    "clinicPrice": "577.5",
+    "sampleType": "Anal/ rectal swab",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7842",
+    "name": "Feline immunodeficiency virus (FIV) (VET)",
+    "category": "Canine Parainfluenza (VET)",
+    "clinicPrice": "556.5",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "8036",
+    "name": "Feline Hepatitis B virus (HBV) (VET)",
+    "category": "Canine Parainfluenza (VET)",
+    "clinicPrice": "556.5",
+    "sampleType": "Edta blood",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "8072",
+    "name": "Feline calicivirus (FCV) (VET)",
+    "category": "Canine Parainfluenza (VET)",
+    "clinicPrice": "577.5",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "8074",
+    "name": "Feline leukemia virus (FeLV) (VET)",
+    "category": "Canine Parainfluenza (VET)",
+    "clinicPrice": "577.5",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7575",
+    "name": "Pets’ hydatidosis by pcr (VET)",
+    "category": "Feline Herpesvirus (VET)",
+    "clinicPrice": "556.5",
+    "sampleType": "Cyst",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7576",
+    "name": "Pets’ Giardiosis (Giardia duodenalis) by pcr (VET)",
+    "category": "Feline Herpesvirus (VET)",
+    "clinicPrice": "556.5",
+    "sampleType": "Stool",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7578",
+    "name": "Equine and pets’ ringworm (Dermatophytes) by pcr (VET)",
+    "category": "(VET)",
+    "clinicPrice": "556.5",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7541",
+    "name": "Equine herpesvirus 1 by pcr (VET)",
+    "category": "Molecular biology (Equine)",
+    "clinicPrice": "609",
+    "sampleType": "Nasal swab",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7542",
+    "name": "Equine herpesvirus 2 by pcr (VET)",
+    "category": "Molecular biology (Equine)",
+    "clinicPrice": "609",
+    "sampleType": "Nasal swab",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7543",
+    "name": "Equine herpesvirus 4 by pcr (VET)",
+    "category": "Molecular biology (Equine)",
+    "clinicPrice": "609",
+    "sampleType": "Nasal swab",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7544",
+    "name": "Equine Rota by pcr (VET)",
+    "category": "Molecular biology (Equine)",
+    "clinicPrice": "609",
+    "sampleType": "Feces",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7545",
+    "name": "Equine arteritis virus by pcr (VET)",
+    "category": "Molecular biology (Equine)",
+    "clinicPrice": "609",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7546",
+    "name": "African horse sickness by pcr (VET)",
+    "category": "Molecular biology (Equine)",
+    "clinicPrice": "609",
+    "sampleType": "Edta Blood/ violet",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7547",
+    "name": "Equine infectious anaemia by pcr (VET)",
+    "category": "Molecular biology (Equine)",
+    "clinicPrice": "609",
+    "sampleType": "Plasma",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7548",
+    "name": "Equine Influenza by pcr (VET)",
+    "category": "Molecular biology (Equine)",
+    "clinicPrice": "609",
+    "sampleType": "Nasal swab",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7549",
+    "name": "Equine Vesicular stomatitis by pcr (VET)",
+    "category": "Molecular biology (Equine)",
+    "clinicPrice": "609",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7550",
+    "name": "Equine coronavirus by pcr (VET)",
+    "category": "Molecular biology (Equine)",
+    "clinicPrice": "609",
+    "sampleType": "Rectal swab/ fluid",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7559",
+    "name": "Strept equi (Strangles) by pcr (VET)",
+    "category": "Molecular biology (Equine)",
+    "clinicPrice": "609",
+    "sampleType": "Nasal swab/ pus",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7563",
+    "name": "Equine Corynebacterium pseudotuberculosis by pcr (VET)",
+    "category": "(VET)",
+    "clinicPrice": "609",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7564",
+    "name": "Equine leptospirosis by pcr (VET)",
+    "category": "(VET)",
+    "clinicPrice": "609",
+    "sampleType": "Blood and urine",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7565",
+    "name": "Rhodococcus equi by pcr (VET)",
+    "category": "(VET)",
+    "clinicPrice": "609",
+    "sampleType": "Nasal/ rectal swab",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7579",
+    "name": "Equine candida albicans by pcr (VET)",
+    "category": "(VET)",
+    "clinicPrice": "556.5",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7440",
+    "name": "Sexing in birds (DNA sequencing)(VET)",
+    "category": "Other Molecular biology",
+    "clinicPrice": "367.5",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7441",
+    "name": "DNA testing for parentage verification (VET)",
+    "category": "Other Molecular biology",
+    "clinicPrice": "945",
+    "sampleType": "",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7803",
+    "name": "Identification by COI gene sequencing (VET)",
+    "category": "Other Molecular biology",
+    "clinicPrice": "892.5",
+    "sampleType": "",
+    "turnaround": ""
+  },
+  {
+    "id": "7843",
+    "name": "Johne's Disease PCR test (VET)",
+    "category": "Other Molecular biology",
+    "clinicPrice": "892.5",
+    "sampleType": "",
+    "turnaround": ""
+  },
+  {
+    "id": "7448",
+    "name": "protein (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "315",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7449",
+    "name": "Fats (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "315",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7450",
+    "name": "Fiber (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "315",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7451",
+    "name": "Ashes (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "210",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7452",
+    "name": "Humidity (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "210",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7453",
+    "name": "Calcium (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "210",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7454",
+    "name": "Phosphorous (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "210",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7455",
+    "name": "Magnesium (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "157.5",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7456",
+    "name": "Potassium (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "157.5",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7457",
+    "name": "Carbohydrates and their inclusions (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "945",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7458",
+    "name": "Energy (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "315",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "8030",
+    "name": "TDN (Feed) (VET)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "315",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7459",
+    "name": "Undigested protein (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "210",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7460",
+    "name": "Digested protein (VET) (Feed)",
+    "category": "feed & ratio analysis",
+    "clinicPrice": "210",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7445",
+    "name": "Aflatoxin (VET) (Feed)",
+    "category": "feed & Food microbiology",
+    "clinicPrice": "525",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7446",
+    "name": "Ochratoxin (VET) (Feed)",
+    "category": "feed & Food microbiology",
+    "clinicPrice": "525",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7447",
+    "name": "Zeralians (VET) (Feed)",
+    "category": "feed & Food microbiology",
+    "clinicPrice": "525",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "6727",
+    "name": "Detection of B-glucuronidase positive E.coli In Food",
+    "category": "feed & Food microbiology",
+    "clinicPrice": "172.5",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7928",
+    "name": "E.Coli isolation/ Detection (Feed) VET",
+    "category": "feed & Food microbiology",
+    "clinicPrice": "172.5",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "6833",
+    "name": "Salmonella detection in food / 10 gm",
+    "category": "feed & Food microbiology",
+    "clinicPrice": "230",
+    "sampleType": "Feed",
+    "turnaround": "3 days"
+  },
+  {
+    "id": "7927",
+    "name": "Salmonella isolation/ Detection (Feed) VET",
+    "category": "feed & Food microbiology",
+    "clinicPrice": "",
+    "sampleType": "",
+    "turnaround": ""
+  }
+]

@@ -78,6 +78,7 @@ export function permissionForPath(pathname: string, search = ""): { key: string;
   if (pathname.startsWith("/pets/") && pathname.endsWith("/edit")) return { key: "patients", action: "edit" };
   if (pathname.startsWith("/pets")) return { key: "patients", action: "view" };
   if (pathname.startsWith("/appointments")) return { key: "appointments", action: "view" };
+  if (pathname.startsWith("/dashboard/labs")) return { key: "medical_records", action: "view" };
   if (pathname.startsWith("/visits") || pathname.startsWith("/dashboard/visits")) return { key: "medical_records", action: "view" };
   if (pathname.startsWith("/vaccinations")) return { key: "vaccinations", action: "view" };
   if (pathname.startsWith("/reports")) return { key: "reports", action: "view" };

@@ -111,11 +111,43 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const actor = await resolveClinicPushContext(request);
     const permissions = await getClinicStaffPermissions(actor);
     if (!permissions.medical_records?.edit) throw new PushSetupError("لا تملك صلاحية تعديل نتائج التحاليل.", 403);
+    if ((request.headers.get("content-type") || "").includes("application/json")) {
+      const body = await request.json() as { action?: unknown; record_id?: unknown; record_ids?: unknown; status?: unknown };
+      const recordId = String(body.record_id || "");
+      const status = String(body.status || "");
+      if (body.action === "status-bulk") {
+        const recordIds = Array.isArray(body.record_ids) ? [...new Set(body.record_ids.map(String).filter(Boolean))] : [];
+        if (!recordIds.length || recordIds.length > 100 || !["ordered", "in_progress", "completed", "cancelled"].includes(status)) {
+          throw new PushSetupError("بيانات تحديث حالة الطلب غير صالحة.", 400);
+        }
+        const { data: matches, error: lookupError } = await actor.clinicDb.from("pet_medical_records")
+          .select("id").in("id", recordIds).eq("pet_id", petId).eq("clinic_id", actor.clinicId).eq("record_type", "lab");
+        if (lookupError) throw lookupError;
+        if ((matches || []).length !== recordIds.length) throw new PushSetupError("بعض التحاليل غير موجودة أو غير متاحة.", 404);
+        const { data, error } = await actor.clinicDb.from("pet_medical_records")
+          .update({ status })
+          .in("id", recordIds).eq("pet_id", petId).eq("clinic_id", actor.clinicId).eq("record_type", "lab")
+          .select("id,pet_id,client_id,visit_id,record_type,title,status,result,notes,performed_at,created_at");
+        if (error) throw error;
+        return Response.json({ records: data || [] });
+      }
+      if (body.action !== "status" || !recordId || !["ordered", "in_progress", "completed", "cancelled"].includes(status)) {
+        throw new PushSetupError("حالة التحليل غير صالحة.", 400);
+      }
+      const { data, error } = await actor.clinicDb.from("pet_medical_records")
+        .update({ status })
+        .eq("id", recordId).eq("pet_id", petId).eq("clinic_id", actor.clinicId).eq("record_type", "lab")
+        .select("id,pet_id,client_id,visit_id,record_type,title,status,result,notes,performed_at,created_at").maybeSingle();
+      if (error) throw error;
+      if (!data) throw new PushSetupError("التحليل غير موجود أو غير متاح.", 404);
+      return Response.json({ record: data });
+    }
     const form = await request.formData();
     const recordId = String(form.get("record_id") || "");
     const title = String(form.get("title") || "").trim();
     const notes = String(form.get("notes") || "").trim();
     const performedAt = String(form.get("performed_at") || "").trim();
+    const requestedStatus = String(form.get("status") || "").trim();
     const resultRows = String(form.get("result_rows") || "[]");
     const file = form.get("file");
     if (!recordId || !title) throw new PushSetupError("بيانات التقرير غير مكتملة.", 400);
@@ -124,6 +156,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     const { data: existing, error: existingError } = await actor.clinicDb.from("pet_medical_records").select("id,pet_id,client_id").eq("id", recordId).eq("pet_id", petId).eq("clinic_id", actor.clinicId).eq("record_type", "lab").maybeSingle();
     if (existingError || !existing) throw new PushSetupError("التقرير غير موجود أو غير متاح.", 404);
+    if (requestedStatus && !["ordered", "in_progress", "completed", "cancelled"].includes(requestedStatus)) throw new PushSetupError("حالة التحليل غير صالحة.", 400);
     const { error: updateError } = await actor.clinicDb.from("pet_medical_records").update({ title, notes: notes || null, result: resultRows === "[]" ? null : resultRows, performed_at: performedAt ? new Date(performedAt).toISOString() : new Date().toISOString() }).eq("id", recordId).eq("pet_id", petId).eq("clinic_id", actor.clinicId);
     if (updateError) throw updateError;
 
@@ -149,7 +182,17 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         });
         if (attachmentInsertError) throw attachmentInsertError;
       }
+      // Once the attachment row points to the new object, keep that object even
+      // if a later status update fails; otherwise the row would reference a file
+      // removed by the catch cleanup below.
+      replacementPath = "";
       if (oldAttachment?.storage_path) await admin.storage.from(bucket).remove([oldAttachment.storage_path]);
+    }
+    if (requestedStatus || file instanceof File) {
+      const { error: statusError } = await actor.clinicDb.from("pet_medical_records")
+        .update({ status: requestedStatus || "completed" })
+        .eq("id", recordId).eq("pet_id", petId).eq("clinic_id", actor.clinicId);
+      if (statusError) throw statusError;
     }
     const { data: record, error: recordError } = await actor.clinicDb.from("pet_medical_records").select("id,pet_id,client_id,visit_id,record_type,title,status,result,notes,performed_at,created_at").eq("id", recordId).single();
     if (recordError || !record) throw recordError || new Error("تعذر تحميل التقرير بعد التعديل.");

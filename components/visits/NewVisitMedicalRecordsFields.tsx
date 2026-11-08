@@ -30,12 +30,16 @@ export default function NewVisitMedicalRecordsFields({
   language,
   darkMode,
   visitReason,
+  labHistory = [],
+  onOpenLabReport,
 }: {
   value: MedicalRecordDraft;
   onChange: (value: MedicalRecordDraft) => void;
   language: "ar" | "en";
   darkMode: boolean;
   visitReason: string;
+  labHistory?: Array<{ id: string; title: string; status: string | null; performed_at: string | null; created_at: string; attachment: { id: string; file_name: string; mime_type: string } | null }>;
+  onOpenLabReport?: (attachmentId: string) => void;
 }) {
   const ar = language === "ar";
   const field = `w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:border-cyan-500 ${darkMode ? "border-slate-700 bg-slate-950 text-white placeholder:text-slate-500" : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"}`;
@@ -48,6 +52,13 @@ export default function NewVisitMedicalRecordsFields({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className={card}>
           <label className="mb-2 block text-sm font-semibold">{ar ? "طلب تحاليل" : "Order lab tests"}</label>
+          {labHistory.some((record) => record.attachment) && <div className="mb-3 rounded-xl border border-cyan-500/20 bg-cyan-500/[.06] p-3">
+            <p className="mb-2 text-xs font-black text-cyan-700 dark:text-cyan-300">{ar ? "تقارير التحاليل السابقة لهذا الحيوان" : "Previous reports for this pet"}</p>
+            <div className="space-y-2">{labHistory.filter((record) => record.attachment).map((record) => <div key={record.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-black/[.03] px-2.5 py-2 dark:bg-white/[.03]">
+              <span className="min-w-0"><span className={`block truncate text-xs font-bold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>{record.title}</span><span className="mt-0.5 block text-[10px] text-slate-500">{new Date(record.performed_at || record.created_at).toLocaleDateString(ar ? "ar-EG" : "en-GB")} · {record.attachment?.file_name}</span></span>
+              <button type="button" onClick={() => record.attachment && onOpenLabReport?.(record.attachment.id)} className="shrink-0 rounded-lg bg-cyan-500/10 px-3 py-2 text-[11px] font-black text-cyan-700 dark:text-cyan-300">{ar ? "فتح التقرير" : "Open report"}</button>
+            </div>)}</div>
+          </div>}
           <div className="space-y-2">
             {value.labTests.map((test, index) => <div key={test.id || `new-lab-${index}`} className="flex items-center gap-2">
               <input

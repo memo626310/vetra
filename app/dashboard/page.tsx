@@ -95,6 +95,7 @@ const translations = {
       pets: "الحيوانات",
       appointments: "المواعيد",
       visits: "سجل الزيارات",
+      labs: "التحاليل",
       vaccines: "التطعيمات",
       inventory: "المخزون",
       finance: "المالية",
@@ -120,6 +121,7 @@ const translations = {
       ["فريق العيادة", "الأطباء والمساعدون والاستقبال", "👩‍⚕️"],
       ["فاتورة شراء", "إضافة مشتريات من مورد", "🧾"],
       ["الفواتير", "عرض وإدارة الفواتير", "📄"],
+      ["التحاليل", "طلبات ونتائج التحاليل", "🧪"],
     ],
 
     open: "فتح",
@@ -160,6 +162,7 @@ const translations = {
       pets: "Pets",
       appointments: "Appointments",
       visits: "Visit History",
+      labs: "Laboratory",
       vaccines: "Vaccines",
       inventory: "Inventory",
       finance: "Finance",
@@ -185,6 +188,7 @@ const translations = {
       ["Clinic Staff", "Doctors, assistants, and front desk", "👩‍⚕️"],
       ["Purchase invoice", "Add stock from a supplier", "🧾"],
       ["Invoices", "View and manage invoices", "📄"],
+      ["Laboratory", "Lab orders and results", "🧪"],
     ],
 
     open: "Open",
@@ -587,6 +591,7 @@ export default function Home() {
   ["🐾", t.nav.pets, "/pets"],
   ["📅", t.nav.appointments, "/appointments"],
   ["🩺", t.nav.visits, "/dashboard/visits"],
+  ["🧪", t.nav.labs, "/dashboard/labs"],
   ["💉", t.nav.vaccines, "/vaccinations"],
   ["💬", t.nav.messages, "/messages"],
   ["👩‍⚕️", t.nav.staff, "/staff"],
@@ -613,8 +618,8 @@ export default function Home() {
 
     return hasPermission;
   });
+  const cardPaths = ["/visits/new", "/invoices/new?mode=quick-sale", "/clients", "/pets", "/appointments", "/vaccinations", "/inventory/products", "/barcode-test", "/finance", "/reports", "/dashboard/visits", "/messages", "/staff", "/inventory/purchases", "/invoices", "/dashboard/labs"];
   const visibleCards = t.cards.map((card, index) => ({ card, index })).filter(({ index }) => {
-    const cardPaths = ["/visits/new", "/invoices/new", "/clients", "/pets", "/appointments", "/vaccinations", "/inventory/products", "/barcode-test", "/finance", "/reports", "/dashboard/visits", "/messages", "/staff", "/inventory/purchases", "/invoices"];
     const required = permissionForPath(cardPaths[index]);
     return !required || (permissionsLoaded && can(required.key, required.action) && (cardPaths[index] !== "/inventory/purchases" || (can("inventory", "view") && can("finance_page", "view"))));
   });
@@ -1085,57 +1090,7 @@ export default function Home() {
               return (
                 <button
                   key={title}
-                  onClick={() => {
-                    switch (index) {
-                      case 0:
-                        goTo("/visits/new");
-                        break;
-                      case 1:
-                        goTo("/invoices/new?mode=quick-sale");
-                        break;
-                      case 2:
-                        goTo("/clients");
-                        break;
-                      case 3:
-                        goTo("/pets");
-                        break;
-                      case 4:
-                        goTo("/appointments");
-                        break;
-                      case 5:
-                        goTo("/vaccinations");
-                        break;
-                      case 6:
-                        goTo("/inventory/products");
-                        break;
-                      case 7:
-                        goTo("/barcode-test");
-                        break;
-                      case 8:
-                        goTo("/finance");
-                        break;
-                      case 9:
-                        goTo("/reports");
-                        break;
-                      case 10:
-                        goTo("/dashboard/visits");
-                        break;
-                      case 11:
-                        goTo("/messages");
-                        break;
-                      case 12:
-                        goTo("/staff");
-                        break;
-                      case 13:
-                        goTo("/inventory/purchases");
-                        break;
-                      case 14:
-                        goTo("/invoices");
-                        break;
-                      default:
-                        goTo("/dashboard");
-                    }
-                  }}
+                  onClick={() => goTo(cardPaths[index] || "/dashboard")}
                   className={`group relative flex aspect-square min-h-0 flex-col items-start justify-between gap-2 overflow-hidden rounded-xl p-2.5 text-start transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 ${palette.focus} focus-visible:ring-offset-2 active:scale-[0.98] sm:aspect-auto sm:min-h-[152px] sm:flex-row sm:items-center sm:justify-start sm:gap-5 sm:rounded-3xl sm:p-5 sm:hover:-translate-y-1 lg:min-h-[166px] lg:p-6 ${
                     isArabic
                       ? "text-right"
