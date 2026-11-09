@@ -108,12 +108,21 @@ function AuthGuardContent({
       const staffState = await staffStateResponse.json().catch(() => null) as { mustChangePassword?: boolean } | null;
       if (!mounted) return;
       if (!staffStateResponse.ok || !staffState) {
-        verifiedState.current = null;
-        await Promise.all([
-          vetraCore.auth.signOut(),
-          import("@/lib/supabase").then(({ supabase }) => supabase.auth.signOut()),
-        ]);
-        if (mounted) router.replace("/login");
+        // A temporary server/network failure must not erase a valid remembered
+        // session. Only an explicit auth/authorization rejection invalidates it.
+        if (staffStateResponse.status === 401 || staffStateResponse.status === 403) {
+          verifiedState.current = null;
+          await Promise.all([
+            vetraCore.auth.signOut(),
+            import("@/lib/supabase").then(({ supabase }) => supabase.auth.signOut()),
+          ]);
+          if (mounted) router.replace("/login");
+          return;
+        }
+        if (mounted) {
+          setCheckError(true);
+          setCheckedPath(pathname);
+        }
         return;
       }
       if (staffState.mustChangePassword && pathname !== "/change-password") {
